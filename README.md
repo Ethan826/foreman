@@ -1,0 +1,52 @@
+# foreman
+
+Foreman is a small personal supervisor for coding agents. It will drive unmodified Claude Code and Codex CLIs through tranches of work on one repository. Within a tranche, one agent implements, a fresh and independent process reviews, and the implementer corrects if the review asks for changes. Then the user approves before the next tranche starts. By default Claude implements and corrects and Codex reviews; the client for each role is configurable.
+
+Foreman is meant to pace its launches against the user's subscription usage windows, start every step with fresh context, and keep durable checkpoints so a crash or restart does not lose its place.
+
+## Status
+
+The design is under adversarial review and is not approved. Only a first code slice exists: project setup, Domain types, Format decoders for Claude and Codex output, a pure pacing function (provisional until the design is approved), and tests for them. Nothing runs agents yet. Process control, git handling, storage, permissions and recovery code are not approved and not written.
+
+Four live tests (L1 to L4) have not been run. They cover Claude usage reading, Codex usage windows, permissions, and crash and restart. Until L2 runs, the default policy lists no Codex windows, so every Codex launch would need a waiver.
+
+## Design principles
+
+- Decision-core architecture: a pure, total core of decisions with a thin shell around it. The CLI will convert input and make no decisions.
+- TypeScript with Effect v4.
+- Holds for quota, approval, uncertain operations and failures stay separate, and each is released only by its own event. Timers and notification timeouts never grant approval.
+- No permission-bypass flags for either client.
+- Agents may not edit protected instruction and git files unless the approval that started the tranche allows it.
+
+## Why not Ralph
+
+A disposable trial of Ralph 2.12.0 preceded this design. Its cooperative review routing worked, but the trial could not establish supported resume of a suspended primary loop or recovery of an interrupted operation. Its default calls also pass each client's permission-bypass flags, and it is far larger than a sequential workflow needs (254 Rust files). Ralph was studied, not copied. Details are in `docs/plans/2026-11-14-ralph-trial-results.md`.
+
+## Layout
+
+- `src/domain`: identifiers, roles, outcomes, observations, usage windows and policy. Hold types wait for the approved design.
+- `src/features`: pure decision functions. Only pacing exists so far.
+- `src/format`: decoders for Claude and Codex output.
+- `src/runtime`, `src/program`, `src/facade`: placeholders for the Effect shell, the wiring and the CLI. They hold no code.
+- `test`: tests for Domain, Features and Format.
+- `docs/plans`: the decision record, the design, the Ralph trial and the reviews.
+- `research/model`: a bounded model check of the design's hold and recovery rules (`check.py`).
+
+## Development
+
+Install dependencies with `bun install`. Then:
+
+```sh
+bun run check   # tsc --noEmit
+bun run test    # vitest run
+```
+
+Both must pass before a commit.
+
+## Design and reviews
+
+Start with `docs/plans/2026-11-14-agent-supervisor-design.md`. Its decision record and the Ralph trial results are in the same directory, along with prose reviews.
+
+## License
+
+Not yet chosen.
