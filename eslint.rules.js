@@ -29,6 +29,19 @@
 // `undefined` and `typeof x === "undefined"`; a comparison against a
 // variable that holds undefined escapes.
 //
+// Added for closed vocabularies (AGENTS.md, "Closed vocabularies"): (1)
+// Schema.Literals / Schema.Literal in src/ may not take inline literals,
+// so a vocabulary is a named `as const` constant; (2) the strings of the
+// vocabularies in `closedNames` may not appear as string literals in src/
+// or test/ outside their canonical modules. Blind spots: (1) matches the
+// callee spelled `Schema.` or `S.` only (a destructured `Literals(...)`
+// or another alias escapes), covers Literal elements of a direct array
+// argument but not literals built elsewhere and passed in by call or
+// spread of a call, and does not cover Schema.TaggedStruct, TaggedClass,
+// tag or Enum; (2) matches string Literal nodes (including in type
+// position) but not identifier keys (`{ claude: 1 }`), template literals,
+// or strings assembled at run time, and covers only the names listed.
+//
 // Exported as a factory so the gate-integrity fixtures (lint-fixtures/) run
 // the same rules under their own tsconfig. No rule here may be switched off
 // by a comment; AGENTS.md forbids lint-disable comments.
@@ -142,6 +155,28 @@ const nativeCollections = [
   ),
 ]
 
+const schemaCallee = "CallExpression[callee.object.name=/^(Schema|S)$/]"
+const literalSchemas = [
+  message(
+    `${schemaCallee}[callee.property.name='Literals'] > ArrayExpression.arguments > :matches(Literal, TemplateLiteral).elements`,
+    "Schema.Literals takes a named `as const` constant (a closed vocabulary defined once), not inline literals.",
+  ),
+  message(
+    `${schemaCallee}[callee.property.name='Literal'] > :matches(Literal, TemplateLiteral).arguments`,
+    "Schema.Literal takes a named `as const` constant, not an inline literal.",
+  ),
+]
+
+// Closed vocabularies whose canonical modules are listed in canonicalModules.
+const closedNames = ["claude", "codex", "implementer", "reviewer", "corrector"]
+const canonicalModules = ["src/domain/clients.ts", "src/domain/roles.ts"]
+const bareNames = [
+  message(
+    `Literal[value=/^(${closedNames.join("|")})$/]`,
+    "Bare closed vocabulary string: refer to the named constant (Clients, Roles) from src/domain/clients.ts or roles.ts.",
+  ),
+]
+
 const noRestrictedSyntax = (...groups) => ["error", ...groups.flat()]
 
 // Every namespace the effect package exports, plus the aliases this code
@@ -205,8 +240,8 @@ const nativeMethods = [
   },
 ]
 
-const coreGroups = [loops, collections, failures, asynchrony, effectBans, parsing]
-const testGroups = [failures, asynchrony, effectBans]
+const coreGroups = [loops, collections, failures, asynchrony, effectBans, parsing, literalSchemas, bareNames]
+const testGroups = [failures, asynchrony, effectBans, bareNames]
 
 const throwingImports = {
   name: "effect/Schema",
@@ -281,6 +316,16 @@ export const buildConfig = ({ tsconfigRootDir, ignores = [] }) => defineConfig([
     rules: {
       "no-restricted-syntax": noRestrictedSyntax(...coreGroups, nullish, nativeCollections),
       "no-restricted-properties": ["error", ...nativeMethods],
+    },
+  },
+  {
+    // The canonical modules may spell the names, once.
+    files: canonicalModules,
+    rules: {
+      "no-restricted-syntax": noRestrictedSyntax(
+        loops, collections, failures, asynchrony, effectBans, parsing, literalSchemas,
+        nullish, nativeCollections,
+      ),
     },
   },
   {

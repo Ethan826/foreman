@@ -7,7 +7,7 @@
 //
 // Guess to confirm: RateLimited carries the windows the rate-limit event
 // names; an empty list means "window not named" (design "Holds", Quota row).
-import { Schema } from "effect"
+import { Record, Schema } from "effect"
 import { Revision } from "./ids.ts"
 import { Window } from "./window.ts"
 
@@ -59,9 +59,16 @@ export class NothingToCommit extends Schema.TaggedClass<NothingToCommit>()(
   "NothingToCommit",
   {},
 ) {}
+export const CommitRefusals = {
+  ProtectedPath: "protectedPath",
+  HeadMoved: "headMoved",
+} as const
+export const CommitRefusal = Schema.Literals(Record.values(CommitRefusals))
+export type CommitRefusal = typeof CommitRefusal.Type
+
 export class CommitRefused extends Schema.TaggedClass<CommitRefused>()(
   "CommitRefused",
-  { reason: Schema.Literals(["protectedPath", "headMoved"]) },
+  { reason: CommitRefusal },
 ) {}
 export class CommitFailed extends Schema.TaggedClass<CommitFailed>()(
   "CommitFailed",

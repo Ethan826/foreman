@@ -7,16 +7,18 @@
 // The design also lists `ingestedSeq`; it matters to quota-hold release
 // (a runtime and event-log concern), not to pace, so it is left out here.
 // TODO(design "Pacing", "Clock basis"): add it with the event log.
-import { Schema } from "effect"
-import { Client } from "./roles.ts"
+import { Record, Schema } from "effect"
+import { Client } from "./clients.ts"
 import { Window } from "./window.ts"
 
-export const ObservationSource = Schema.Literals([
-  "claudeRateLimitEvent",
-  "claudeStatusline",
-  "claudeUsagePrompt",
-  "codexAppServer",
-])
+export const ObservationSources = {
+  ClaudeRateLimitEvent: "claudeRateLimitEvent",
+  ClaudeStatusline: "claudeStatusline",
+  ClaudeUsagePrompt: "claudeUsagePrompt",
+  CodexAppServer: "codexAppServer",
+} as const
+
+export const ObservationSource = Schema.Literals(Record.values(ObservationSources))
 export type ObservationSource = typeof ObservationSource.Type
 
 const epochMillis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))

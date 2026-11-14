@@ -1,5 +1,6 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Option } from "effect"
+import { Clients } from "../../src/domain/clients.ts"
 import type { Observation } from "../../src/domain/observation.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import type { Window } from "../../src/domain/window.ts"
@@ -13,7 +14,7 @@ const flat =
     points
 
 const reading = (patch: Partial<Observation> = {}): Observation => ({
-  provider: "claude",
+  provider: Clients.Claude,
   window: "fiveHour",
   usedPercent: 10,
   resetsAt: Option.some(now + 60 * minute),
@@ -28,7 +29,7 @@ const both = (fiveHour: number, weekly: number): Array<Observation> => [
 ]
 
 const run = (observations: ReadonlyArray<Observation>, estimate = flat(15)) =>
-  pace(observations, now, defaultPolicy, "claude", estimate)
+  pace(observations, now, defaultPolicy, Clients.Claude, estimate)
 
 describe("pace", () => {
   it("no observations: Unknown, naming every policy window", () => {
@@ -41,12 +42,12 @@ describe("pace", () => {
   })
 
   it("ignores readings of another provider", () => {
-    const codex = both(1, 1).map((o) => ({ ...o, provider: "codex" as const }))
+    const codex = both(1, 1).map((o) => ({ ...o, provider: Clients.Codex }))
     expect(run(codex)).toEqual(new Unknown({ windows: ["fiveHour", "weekly"] }))
   })
 
   it("a provider with no policy windows is Unknown, never Allow", () => {
-    const result = pace(both(1, 1), now, defaultPolicy, "codex", flat(0))
+    const result = pace(both(1, 1), now, defaultPolicy, Clients.Codex, flat(0))
     expect(result).toEqual(new Unknown({ windows: [] }))
   })
 

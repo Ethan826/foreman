@@ -18,24 +18,33 @@
 // Unknown extra fields are ignored; other event types fail to decode.
 import { Schema } from "effect"
 
+// The wire tags of the events decoded here.
+export const CodexEventTypes = {
+  ThreadStarted: "thread.started",
+  TurnStarted: "turn.started",
+  TurnCompleted: "turn.completed",
+  TurnFailed: "turn.failed",
+  Error: "error",
+} as const
+
 const opaqueObject = Schema.Record(Schema.String, Schema.Unknown)
 
 export const CodexThreadStarted = Schema.Struct({
-  type: Schema.Literal("thread.started"),
+  type: Schema.Literal(CodexEventTypes.ThreadStarted),
 })
 export const CodexTurnStarted = Schema.Struct({
-  type: Schema.Literal("turn.started"),
+  type: Schema.Literal(CodexEventTypes.TurnStarted),
 })
 export const CodexTurnCompleted = Schema.Struct({
-  type: Schema.Literal("turn.completed"),
+  type: Schema.Literal(CodexEventTypes.TurnCompleted),
   usage: Schema.optionalKey(opaqueObject),
 })
 export const CodexTurnFailed = Schema.Struct({
-  type: Schema.Literal("turn.failed"),
+  type: Schema.Literal(CodexEventTypes.TurnFailed),
   error: Schema.optionalKey(opaqueObject),
 })
 export const CodexError = Schema.Struct({
-  type: Schema.Literal("error"),
+  type: Schema.Literal(CodexEventTypes.Error),
   message: Schema.optionalKey(Schema.String),
 })
 

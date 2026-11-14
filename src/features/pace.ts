@@ -45,7 +45,7 @@ import {
 import { constTrue } from "effect/Function"
 import type { Observation } from "../domain/observation.ts"
 import type { Policy, WindowPolicy } from "../domain/policy.ts"
-import type { Client } from "../domain/roles.ts"
+import type { Client } from "../domain/clients.ts"
 import { Window } from "../domain/window.ts"
 
 export class Allow extends Schema.TaggedClass<Allow>()("Allow", {}) {}

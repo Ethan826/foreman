@@ -84,6 +84,18 @@ const mustFail: Record<string, ReadonlyArray<Expected>> = {
   "src/format/import-features.ts": [{ ruleId: "no-restricted-imports", message: "format may import only domain" }],
   "src/runtime/import-format.ts": [{ ruleId: "no-restricted-imports", message: "runtime may import only domain" }],
   "src/facade/import-runtime.ts": [{ ruleId: "no-restricted-imports", message: "facade may import only" }],
+  "src/domain/literals-inline-array.ts": [
+    { ruleId: "no-restricted-syntax", message: "Schema.Literals" },
+  ],
+  "src/format/literal-inline.ts": [
+    { ruleId: "no-restricted-syntax", message: "Schema.Literal takes" },
+  ],
+  "src/features/bare-names.ts": [
+    { ruleId: "no-restricted-syntax", message: "closed vocabulary" },
+  ],
+  "test/bare-names.ts": [
+    { ruleId: "no-restricted-syntax", message: "closed vocabulary" },
+  ],
   "test/cast.ts": [{ ruleId: "@typescript-eslint/consistent-type-assertions" }],
   "test/schema-decode.ts": [{ ruleId: "no-restricted-syntax", message: "Schema.decode" }],
 }
@@ -91,6 +103,10 @@ const mustFail: Record<string, ReadonlyArray<Expected>> = {
 const clean: ReadonlyArray<string> = [
   "src/domain/ok.ts",
   "src/domain/control.ts",
+  "src/domain/literals-named.ts",
+  "src/domain/clients.ts",
+  "src/domain/roles.ts",
+  "src/features/names-ok.ts",
   "src/domain/effect-modules.ts",
   "src/runtime/native-ok.ts",
   "src/format/ok.ts",

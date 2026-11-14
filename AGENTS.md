@@ -49,6 +49,19 @@ lsatchapelhill project); `bun run lint` runs it. `lint-fixtures/` holds
 must-fail files that `test/lint/fixtures.test.ts` checks; a new rule group
 needs a fixture there. No lint-disable comments.
 
+### Closed vocabularies
+
+A closed vocabulary (clients, roles, windows, observation sources, commit
+refusal reasons) is defined once as a named `as const` object in Domain
+(`Clients`, `Roles`, `Windows`, ...). Its schema, struct keys and defaults
+derive from that object, and no other file retypes the strings. A tag that
+only one Format decoder knows lives in a constant at the top of that
+decoder. Two rules in `eslint.rules.js` enforce this: `Schema.Literals` and
+`Schema.Literal` in `src/` may not take inline literals, and the strings
+"claude", "codex", "implementer", "reviewer" and "corrector" may not appear
+as string literals outside `src/domain/clients.ts` and
+`src/domain/roles.ts`. A new vocabulary adds its names to that list.
+
 ## Provenance
 
 Ralph (MIT) was studied, not copied. Write adapters independently and

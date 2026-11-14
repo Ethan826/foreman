@@ -2,25 +2,28 @@
 // "Scope"): the user decides which client fills each role; Claude
 // implements and corrects and Codex reviews by default. Configuring the
 // same client for two roles is allowed.
-import { Schema } from "effect"
+// The role names are spelled once, here; `Clients` (clients.ts) holds the
+// client names.
+import { Record, Schema } from "effect"
+import { Client, Clients } from "./clients.ts"
 
-export const Client = Schema.Literals(["claude", "codex"])
-export type Client = typeof Client.Type
+export const Roles = {
+  Implementer: "implementer",
+  Reviewer: "reviewer",
+  Corrector: "corrector",
+} as const
 
-export const Role = Schema.Literals(["implementer", "reviewer", "corrector"])
+export const Role = Schema.Literals(Record.values(Roles))
 export type Role = typeof Role.Type
 
-export const RoleClients = Schema.Struct({
-  implementer: Client,
-  reviewer: Client,
-  corrector: Client,
-})
+// One client per role, keyed by the role names.
+export const RoleClients = Schema.Record(Role, Client)
 export type RoleClients = typeof RoleClients.Type
 
 export const defaultRoleClients: RoleClients = {
-  implementer: "claude",
-  reviewer: "codex",
-  corrector: "claude",
+  [Roles.Implementer]: Clients.Claude,
+  [Roles.Reviewer]: Clients.Codex,
+  [Roles.Corrector]: Clients.Claude,
 }
 
 // Guess to confirm: the design says `Intended(opId, tranche, step, ...)`

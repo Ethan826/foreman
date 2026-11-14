@@ -18,10 +18,18 @@
 // the shell decides what an undecodable line means.
 import { Schema } from "effect"
 
+// The wire tags of the events decoded here.
+export const ClaudeEventTypes = {
+  Result: "result",
+  RateLimitEvent: "rate_limit_event",
+  System: "system",
+} as const
+export const ClaudeSystemSubtypes = { ApiRetry: "api_retry" } as const
+
 const opaqueObject = Schema.Record(Schema.String, Schema.Unknown)
 
 export const ClaudeResult = Schema.Struct({
-  type: Schema.Literal("result"),
+  type: Schema.Literal(ClaudeEventTypes.Result),
   subtype: Schema.optionalKey(Schema.String),
   is_error: Schema.optionalKey(Schema.Boolean),
   session_id: Schema.optionalKey(Schema.String),
@@ -29,15 +37,15 @@ export const ClaudeResult = Schema.Struct({
 export type ClaudeResult = typeof ClaudeResult.Type
 
 export const ClaudeRateLimitEvent = Schema.Struct({
-  type: Schema.Literal("rate_limit_event"),
+  type: Schema.Literal(ClaudeEventTypes.RateLimitEvent),
   rate_limit_info: Schema.optionalKey(opaqueObject),
   session_id: Schema.optionalKey(Schema.String),
 })
 export type ClaudeRateLimitEvent = typeof ClaudeRateLimitEvent.Type
 
 export const ClaudeApiRetry = Schema.Struct({
-  type: Schema.Literal("system"),
-  subtype: Schema.Literal("api_retry"),
+  type: Schema.Literal(ClaudeEventTypes.System),
+  subtype: Schema.Literal(ClaudeSystemSubtypes.ApiRetry),
   session_id: Schema.optionalKey(Schema.String),
 })
 export type ClaudeApiRetry = typeof ClaudeApiRetry.Type

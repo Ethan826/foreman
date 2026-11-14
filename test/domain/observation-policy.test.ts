@@ -1,11 +1,12 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Option, Result, Schema, Struct } from "effect"
+import { Clients } from "../../src/domain/clients.ts"
 import { Observation } from "../../src/domain/observation.ts"
 import { defaultPolicy, Policy } from "../../src/domain/policy.ts"
 
 const decodeObservation = Schema.decodeUnknownResult(Observation)
 const base = {
-  provider: "claude",
+  provider: Clients.Claude,
   window: "fiveHour",
   usedPercent: 12.5,
   observedAt: 1_000,

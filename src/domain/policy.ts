@@ -9,7 +9,8 @@
 // TODO(design "Pacing", live test L2): Codex windows are not known; the
 // default lists none, and pace answers Unknown for a provider with none.
 import { Array as Arr, Schema, Struct } from "effect"
-import { Window } from "./window.ts"
+import { Client, Clients } from "./clients.ts"
+import { Window, Windows } from "./window.ts"
 
 const percent = Schema.Number.check(
   Schema.isBetween({ minimum: 0, maximum: 100 }),
@@ -34,10 +35,7 @@ export const ProviderPolicy = Schema.Struct({
 export type ProviderPolicy = typeof ProviderPolicy.Type
 
 export const Policy = Schema.Struct({
-  providers: Schema.Struct({
-    claude: ProviderPolicy,
-    codex: ProviderPolicy,
-  }),
+  providers: Schema.Record(Client, ProviderPolicy),
   freshnessMillis: Schema.Int.check(Schema.isGreaterThan(0)),
   initialEstimate: percent,
 })
@@ -45,13 +43,13 @@ export type Policy = typeof Policy.Type
 
 export const defaultPolicy: Policy = {
   providers: {
-    claude: {
+    [Clients.Claude]: {
       windows: [
-        { window: "fiveHour", reservePercent: 30 },
-        { window: "weekly", reservePercent: 40 },
+        { window: Windows.FiveHour, reservePercent: 30 },
+        { window: Windows.Weekly, reservePercent: 40 },
       ],
     },
-    codex: { windows: [] },
+    [Clients.Codex]: { windows: [] },
   },
   freshnessMillis: 10 * 60 * 1000,
   initialEstimate: 15,
