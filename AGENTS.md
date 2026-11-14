@@ -44,10 +44,20 @@ pure functions.
 
 ## Lint
 
-`eslint.rules.js` holds the house rules (adapted from the owner's
-lsatchapelhill project); `bun run lint` runs it. `lint-fixtures/` holds
-must-fail files that `test/lint/fixtures.test.ts` checks; a new rule group
-needs a fixture there. No lint-disable comments.
+`eslint.rules.js` holds the house rules; `bun run lint` runs it.
+`lint-fixtures/` holds must-fail files that `test/lint/fixtures.test.ts`
+checks; a new rule group needs a fixture there. No lint-disable comments.
+
+The shared source of these rules is the owner's skills repository
+(github.com/Ethan826/skills): the reference config and its check live in
+`skills/effect-v4/lint/` and `checks/effect-v4-lint/`, the closed-vocabulary
+rule in `decision-core-architecture` and `effect-v4`, and the onion
+generator in `decision-core-architecture/diagram/`. This project's config
+predates the reference and differs in two places: Format may not import
+Features here (stricter than the skill), and some rule messages differ.
+When this project adds a rule that forecloses a recurring class of mistake,
+lift it into the owning skill with its check in the same piece of work
+(skill `gate-integrity`, "Lift the rule into its skill").
 
 ### Closed vocabularies
 
