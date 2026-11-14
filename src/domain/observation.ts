@@ -1,5 +1,7 @@
 // A usage reading (design "Pacing": `{provider, window, usedPercent,
-// resetsAt, observedAt, source}`). `resetsAt` may be absent (R-P4).
+// resetsAt, observedAt, source}`). `resetsAt` may be absent (R-P4): the
+// encoded key is optional and decodes to an Option, so absence inside the
+// core is Option.none().
 // Times are epoch milliseconds on the supervisor's local clock.
 //
 // The design also lists `ingestedSeq`; it matters to quota-hold release
@@ -25,7 +27,7 @@ export const Observation = Schema.Struct({
   usedPercent: Schema.Number.check(
     Schema.isBetween({ minimum: 0, maximum: 100 }),
   ),
-  resetsAt: Schema.optionalKey(epochMillis),
+  resetsAt: Schema.OptionFromOptionalKey(epochMillis),
   observedAt: epochMillis,
   source: ObservationSource,
 })

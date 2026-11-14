@@ -31,7 +31,18 @@
 //
 // Not here: `estimate` itself (R-P3, built from finished-step records by the
 // shell's event fold) is a parameter.
-import { Array as Arr, Order, Schema } from "effect"
+import {
+  Array as Arr,
+  Data,
+  Number,
+  Option,
+  Order,
+  Predicate,
+  Schema,
+  Struct,
+  pipe,
+} from "effect"
+import { constTrue } from "effect/Function"
 import type { Observation } from "../domain/observation.ts"
 import type { Policy, WindowPolicy } from "../domain/policy.ts"
 import type { Client } from "../domain/roles.ts"
@@ -47,7 +58,13 @@ export class Unknown extends Schema.TaggedClass<Unknown>()("Unknown", {
 
 export type PaceDecision = Allow | Hold | Unknown
 
-type Verdict = "allows" | "fails" | "unusable"
+// The judgment of one policy window.
+type Judgment = Data.TaggedEnum<{
+  Allows: { readonly window: Window }
+  Fails: { readonly window: Window }
+  Unusable: { readonly window: Window }
+}>
+const Judgment = Data.taggedEnum<Judgment>()
 
 const newestThenHighest: Order.Order<Observation> = Order.combine(
   Order.mapInput(Order.Number, (reading: Observation) => reading.observedAt),
@@ -55,36 +72,48 @@ const newestThenHighest: Order.Order<Observation> = Order.combine(
 )
 
 const isUsable =
-  (now: number, freshnessMillis: number) => (reading: Observation) =>
-    reading.observedAt <= now &&
-    now - reading.observedAt <= freshnessMillis &&
-    (reading.resetsAt === undefined || now < reading.resetsAt)
+  (now: number, freshnessMillis: number) => (reading: Observation) => {
+    const beforeReset = (resetsAt: number) => now < resetsAt
+    return (
+      Number.between(now - reading.observedAt, {
+        minimum: 0,
+        maximum: freshnessMillis,
+      }) &&
+      Option.match(reading.resetsAt, { onNone: constTrue, onSome: beforeReset })
+    )
+  }
 
-const verdictOf = (
-  reading: Observation,
-  entry: WindowPolicy,
-  points: number,
-): Verdict =>
-  reading.usedPercent + points <= 100 - entry.reservePercent
-    ? "allows"
-    : "fails"
+const judgeReading =
+  (now: number, policy: Policy, entry: WindowPolicy, points: number) =>
+  (reading: Observation): Judgment => {
+    const { window } = entry
+    if (!isUsable(now, policy.freshnessMillis)(reading))
+      return Judgment.Unusable({ window })
+    return reading.usedPercent + points <= 100 - entry.reservePercent
+      ? Judgment.Allows({ window })
+      : Judgment.Fails({ window })
+  }
 
-const windowVerdict =
+const judgeWindow =
   (
     observations: ReadonlyArray<Observation>,
     now: number,
     policy: Policy,
     estimate: (window: Window) => number,
   ) =>
-  (entry: WindowPolicy): Verdict => {
-    const ofWindow = observations.filter(
-      (reading) => reading.window === entry.window,
+  (entry: WindowPolicy): Judgment => {
+    const isOfWindow = (reading: Observation) => reading.window === entry.window
+    const judgeNewest = (ofWindow: Arr.NonEmptyReadonlyArray<Observation>) =>
+      judgeReading(now, policy, entry, estimate(entry.window))(
+        Arr.max(ofWindow, newestThenHighest),
+      )
+    return pipe(
+      Arr.filter(observations, isOfWindow),
+      Arr.match({
+        onEmpty: () => Judgment.Unusable({ window: entry.window }),
+        onNonEmpty: judgeNewest,
+      }),
     )
-    if (!Arr.isReadonlyArrayNonEmpty(ofWindow)) return "unusable"
-    const newest = Arr.max(ofWindow, newestThenHighest)
-    return isUsable(now, policy.freshnessMillis)(newest)
-      ? verdictOf(newest, entry, estimate(entry.window))
-      : "unusable"
   }
 
 export const pace = (
@@ -94,21 +123,20 @@ export const pace = (
   provider: Client,
   estimate: (window: Window) => number,
 ): PaceDecision => {
-  const entries = policy.providers[provider].windows
-  const ofProvider = observations.filter(
-    (reading) => reading.provider === provider,
+  const isOfProvider = (reading: Observation) => reading.provider === provider
+  const ofProvider = Arr.filter(observations, isOfProvider)
+  const judged = Arr.map(
+    policy.providers[provider].windows,
+    judgeWindow(ofProvider, now, policy, estimate),
   )
-  const judge = windowVerdict(ofProvider, now, policy, estimate)
-  const judged = entries.map((entry) => ({
-    window: entry.window,
-    verdict: judge(entry),
-  }))
-  const notAllowing = judged
-    .filter((each) => each.verdict !== "allows")
-    .map((each) => each.window)
-  if (judged.some((each) => each.verdict === "fails"))
+  const notAllowing = Arr.map(
+    Arr.filter(judged, Predicate.not(Predicate.isTagged("Allows"))),
+    Struct.get("window"),
+  )
+  if (Arr.some(judged, Predicate.isTagged("Fails")))
     return new Hold({ windows: notAllowing })
-  if (Arr.isReadonlyArrayEmpty(judged) || Arr.isReadonlyArrayNonEmpty(notAllowing))
+  const noWindows = Arr.isReadonlyArrayEmpty(judged)
+  if (noWindows || Arr.isReadonlyArrayNonEmpty(notAllowing))
     return new Unknown({ windows: notAllowing })
   return new Allow({})
 }

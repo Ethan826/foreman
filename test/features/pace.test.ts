@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Struct } from "effect"
+import { Option } from "effect"
 import type { Observation } from "../../src/domain/observation.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import type { Window } from "../../src/domain/window.ts"
@@ -16,7 +16,7 @@ const reading = (patch: Partial<Observation> = {}): Observation => ({
   provider: "claude",
   window: "fiveHour",
   usedPercent: 10,
-  resetsAt: now + 60 * minute,
+  resetsAt: Option.some(now + 60 * minute),
   observedAt: now - minute,
   source: "claudeStatusline",
   ...patch,
@@ -102,7 +102,7 @@ describe("pace", () => {
 
   it("reading past its resetsAt: Unknown; at resetsAt it is also unusable", () => {
     const withReset = (resetsAt: number) =>
-      both(1, 1).map((o) => ({ ...o, resetsAt }))
+      both(1, 1).map((o) => ({ ...o, resetsAt: Option.some(resetsAt) }))
     expect(run(withReset(now + 1))).toEqual(new Allow({}))
     expect(run(withReset(now))).toEqual(
       new Unknown({ windows: ["fiveHour", "weekly"] }),
@@ -113,7 +113,7 @@ describe("pace", () => {
   })
 
   it("absent resetsAt: freshness alone limits the reading", () => {
-    const bare = Struct.omit(reading({ usedPercent: 1 }), ["resetsAt"])
+    const bare = reading({ usedPercent: 1, resetsAt: Option.none() })
     const weekly = { ...bare, window: "weekly" as const }
     expect(run([bare, weekly])).toEqual(new Allow({}))
   })
@@ -147,7 +147,7 @@ describe("pace", () => {
     const expiredNewer = reading({
       usedPercent: 1,
       observedAt: now - minute,
-      resetsAt: now - 1,
+      resetsAt: Option.some(now - 1),
     })
     const weekly = reading({ window: "weekly", usedPercent: 1 })
     expect(run([usableOlder, expiredNewer, weekly])).toEqual(

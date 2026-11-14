@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Result, Schema, Struct } from "effect"
+import { Option, Result, Schema, Struct } from "effect"
 import { Observation } from "../../src/domain/observation.ts"
 import { defaultPolicy, Policy } from "../../src/domain/policy.ts"
 
@@ -18,6 +18,15 @@ describe("Observation", () => {
     expect(
       Result.isSuccess(decodeObservation({ ...base, resetsAt: 9_000 })),
     ).toBe(true)
+  })
+
+  it("decodes resetsAt to an Option", () => {
+    const resetsAt = (input: unknown) =>
+      Result.map(decodeObservation(input), (reading) => reading.resetsAt)
+    expect(resetsAt(base)).toEqual(Result.succeed(Option.none()))
+    expect(resetsAt({ ...base, resetsAt: 9_000 })).toEqual(
+      Result.succeed(Option.some(9_000)),
+    )
   })
 
   it.each([
