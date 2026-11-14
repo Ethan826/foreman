@@ -1,0 +1,81 @@
+import { describe, expect, it } from "@effect/vitest"
+import { Result } from "effect"
+import {
+  decodeClaudeApiRetry,
+  decodeClaudeEvent,
+  decodeClaudeRateLimitEvent,
+  decodeClaudeResult,
+} from "../../src/format/claude.ts"
+
+// Fixtures are hand-written from the field names the design and decision
+// record cite (result subtype, session_id, is_error, rate_limit_event's
+// rate_limit_info, system/api_retry). They are not captured output; the
+// inner shape of rate_limit_info is unknown until live test L1.
+const resultFixture = {
+  type: "result",
+  subtype: "success",
+  is_error: false,
+  session_id: "11111111-2222-3333-4444-555555555555",
+}
+const rateLimitFixture = {
+  type: "rate_limit_event",
+  rate_limit_info: { anything: "unknown until L1" },
+}
+const apiRetryFixture = { type: "system", subtype: "api_retry" }
+
+describe("Claude result object (--output-format json)", () => {
+  it("decodes a result", () => {
+    const decoded = decodeClaudeResult(resultFixture)
+    expect(Result.isSuccess(decoded)).toBe(true)
+    expect(Result.getOrUndefined(decoded)).toMatchObject({
+      subtype: "success",
+      is_error: false,
+    })
+  })
+
+  it("decodes a result that carries only its type (every field optional)", () => {
+    expect(Result.isSuccess(decodeClaudeResult({ type: "result" }))).toBe(true)
+  })
+
+  it("rejects a result with a non-boolean is_error", () => {
+    const bad = { ...resultFixture, is_error: "yes" }
+    expect(Result.isFailure(decodeClaudeResult(bad))).toBe(true)
+  })
+
+  it("rejects another event type", () => {
+    expect(Result.isFailure(decodeClaudeResult(rateLimitFixture))).toBe(true)
+  })
+})
+
+describe("Claude stream-json events", () => {
+  it("decodes rate_limit_event with an opaque rate_limit_info", () => {
+    expect(Result.isSuccess(decodeClaudeRateLimitEvent(rateLimitFixture))).toBe(
+      true,
+    )
+    expect(
+      Result.isSuccess(decodeClaudeRateLimitEvent({ type: "rate_limit_event" })),
+    ).toBe(true)
+  })
+
+  it("rejects rate_limit_event whose rate_limit_info is not an object", () => {
+    const bad = { type: "rate_limit_event", rate_limit_info: "soon" }
+    expect(Result.isFailure(decodeClaudeRateLimitEvent(bad))).toBe(true)
+  })
+
+  it("decodes system/api_retry", () => {
+    expect(Result.isSuccess(decodeClaudeApiRetry(apiRetryFixture))).toBe(true)
+  })
+
+  it("rejects a system event with another subtype", () => {
+    const other = { type: "system", subtype: "init" }
+    expect(Result.isFailure(decodeClaudeApiRetry(other))).toBe(true)
+  })
+
+  it("the event union takes each of the three and nothing else", () => {
+    ;[resultFixture, rateLimitFixture, apiRetryFixture].forEach((fixture) =>
+      expect(Result.isSuccess(decodeClaudeEvent(fixture))).toBe(true),
+    )
+    expect(Result.isFailure(decodeClaudeEvent({ type: "assistant" }))).toBe(true)
+    expect(Result.isFailure(decodeClaudeEvent("result"))).toBe(true)
+  })
+})
