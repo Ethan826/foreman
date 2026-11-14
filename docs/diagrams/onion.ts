@@ -4,7 +4,7 @@
 // the directories under src/.
 //
 // The import lists below restate the layer edges in eslint.rules.js
-// (`mayImport`). Keep the two in step by hand; nothing compares them.
+// (`mayImport`); test/docs/onion.test.ts fails if the two differ.
 
 import { Array as Arr } from "effect"
 

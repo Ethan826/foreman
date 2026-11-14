@@ -250,8 +250,8 @@ const throwingImports = {
 }
 
 // Layer edges (decision-core-architecture): who may import whom.
-const layers = ["domain", "features", "format", "runtime", "program", "facade"]
-const mayImport = {
+export const layers = ["domain", "features", "format", "runtime", "program", "facade"]
+export const mayImport = {
   domain: [],
   features: ["domain"],
   format: ["domain"],
