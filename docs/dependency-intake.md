@@ -129,6 +129,45 @@ specifier (`**/features/**`), so a path that does not name the layer escapes
 it. Fixtures in `lint-fixtures/` (run by `test/lint/fixtures.test.ts`) prove
 each group can fail; they do not prove the list is complete.
 
+## Native-method and null-check bans (2026-11-14, branch `idiom`)
+
+No new package. An idiom audit found native `.filter`, `.map` and `.some`
+calls, a `new Set`, an `=== undefined` check and a string-literal verdict
+in core code. The rules ported from lsatchapelhill banned only
+`array[0]`, `.push` and `.length`, and the effect-v4 skill's table did not
+say that native collection methods give way to the `Array` and `String`
+modules. In `src/domain`, `src/features` and `src/format` the config now
+bans:
+
+- native array methods (map, filter, some, every, find, findIndex,
+  findLast, findLastIndex, reduce, reduceRight, flatMap, flat, forEach,
+  includes, indexOf, lastIndexOf, slice, concat, join, sort, toSorted,
+  reverse, toReversed, at, fill, splice, toSpliced) and native string
+  methods (split, trim, trimStart, trimEnd, toLowerCase, toUpperCase,
+  startsWith, endsWith, replace, replaceAll, padStart, padEnd, substring,
+  charAt, repeat, localeCompare, normalize), with core ESLint
+  `no-restricted-properties` and an `allowObjects` list of every
+  namespace the `effect` package exports plus the aliases `Arr` and `S`;
+- every member of the global `Object`;
+- `new Set`, `new Map`, `new WeakSet` and `new WeakMap`;
+- `===`, `!==`, `==` and `!=` against `undefined` or `null`, `typeof`
+  comparisons, `??` and optional chaining (`no-restricted-syntax`).
+
+Mechanism: neither typescript-eslint 8.54.0 nor eslint-plugin-functional
+9.0.4 has a rule keyed on the receiver's type, so the ban is name-based.
+No plugin was written. Blind spots: a receiver that happens to be named
+like an Effect module (a local `Option` or `Arr` holding a plain array)
+escapes; a method reached without naming it (`Reflect.apply`, a helper
+outside the core layers) escapes; a method missing from the lists
+escapes; a comparison against a variable that holds `undefined` escapes.
+An Effect module imported under an unlisted alias is flagged, a false
+positive that is fixed by listing the alias. Runtime, Program and the
+facade are not covered, since they adapt native APIs. Tests are not
+covered either. The fixtures list each method by name in
+`test/lint/fixtures.test.ts`, apart from the config, so dropping a method
+from the rule fails that test (checked by deleting `toSpliced` from the
+rule: the test failed).
+
 ## Considered and declined
 
 - oxlint and biome: see above.

@@ -11,7 +11,45 @@ interface Expected {
   readonly message?: string
 }
 
+// Each native method must be reported by name, so dropping one from the
+// rule's list fails this test. The lists are written out here on purpose,
+// apart from eslint.rules.js.
+const restricted = (
+  methods: ReadonlyArray<string>,
+): ReadonlyArray<Expected> =>
+  methods.map((method) => ({
+    ruleId: "no-restricted-properties",
+    message: `'${method}' is restricted`,
+  }))
+
 const mustFail: Record<string, ReadonlyArray<Expected>> = {
+  "src/domain/native-array-iterate.ts": restricted([
+    "map", "filter", "some", "every", "find", "findIndex", "findLast",
+    "findLastIndex", "reduce", "reduceRight", "flatMap", "flat", "forEach",
+  ]),
+  "src/features/native-array-access.ts": restricted([
+    "includes", "indexOf", "lastIndexOf", "slice", "concat", "join", "sort",
+    "toSorted", "reverse", "toReversed", "at", "fill", "splice", "toSpliced",
+  ]),
+  "src/format/native-string.ts": restricted([
+    "split", "trim", "trimStart", "trimEnd", "toLowerCase", "toUpperCase",
+    "startsWith", "endsWith", "replace", "replaceAll", "padStart", "padEnd",
+    "substring", "charAt", "repeat", "localeCompare", "normalize",
+  ]),
+  "src/domain/native-object.ts": [
+    { ruleId: "no-restricted-properties", message: "'Object.keys'" },
+    { ruleId: "no-restricted-properties", message: "'Object.entries'" },
+  ],
+  "src/domain/native-evasions.ts": restricted(["map", "filter"]),
+  "src/domain/native-set.ts": [{ ruleId: "no-restricted-syntax", message: "Native Set and Map" }],
+  "src/domain/eq-undefined.ts": [{ ruleId: "no-restricted-syntax", message: "Comparing with undefined" }],
+  "src/domain/ne-undefined.ts": [{ ruleId: "no-restricted-syntax", message: "Comparing with undefined" }],
+  "src/domain/eq-null.ts": [{ ruleId: "no-restricted-syntax", message: "Comparing with null" }],
+  "src/domain/ne-null.ts": [{ ruleId: "no-restricted-syntax", message: "Comparing with null" }],
+  "src/domain/loose-null.ts": [{ ruleId: "no-restricted-syntax", message: "Comparing with null" }],
+  "src/domain/typeof-undefined.ts": [{ ruleId: "no-restricted-syntax", message: "typeof comparisons" }],
+  "src/domain/nullish-coalesce.ts": [{ ruleId: "no-restricted-syntax", message: "?? on a nullable" }],
+  "src/features/optional-chain.ts": [{ ruleId: "no-restricted-syntax", message: "Optional chaining" }],
   "src/domain/cast.ts": [{ ruleId: "@typescript-eslint/consistent-type-assertions" }],
   "src/domain/nonnull.ts": [{ ruleId: "@typescript-eslint/no-non-null-assertion" }],
   "src/domain/throw.ts": [
@@ -53,6 +91,8 @@ const mustFail: Record<string, ReadonlyArray<Expected>> = {
 const clean: ReadonlyArray<string> = [
   "src/domain/ok.ts",
   "src/domain/control.ts",
+  "src/domain/effect-modules.ts",
+  "src/runtime/native-ok.ts",
   "src/format/ok.ts",
   "test/relaxed.ts",
 ]

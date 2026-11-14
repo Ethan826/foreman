@@ -13,6 +13,22 @@
 // sync and decode bans, Effect.run*, Effect.promise, _tag reads, casts,
 // non-null assertions, arrow-function style, no let.
 //
+// Added after an idiom audit (2026-11-14): in core layers (src/domain,
+// src/features, src/format) native array, string and Object methods and
+// null or undefined comparisons are banned, because the effect-v4 skill
+// replaces them with the Array, String, Record and Option modules. The
+// method ban uses core no-restricted-properties with `allowObjects`; it is
+// name-based, not type-aware (neither typescript-eslint nor
+// eslint-plugin-functional has a rule keyed on the receiver's type). Blind
+// spots: a receiver whose name is an Effect module name (a local `Option`
+// or `Arr` holding a plain array) escapes; an Effect module imported under
+// an alias not listed in effectModules is flagged (a false positive, so
+// add the alias here); a method reached without naming it (`Reflect.apply`,
+// a helper outside core) escapes; methods not in the lists below escape.
+// The comparison ban matches the literal `null`, the identifier
+// `undefined` and `typeof x === "undefined"`; a comparison against a
+// variable that holds undefined escapes.
+//
 // Exported as a factory so the gate-integrity fixtures (lint-fixtures/) run
 // the same rules under their own tsconfig. No rule here may be switched off
 // by a comment; AGENTS.md forbids lint-disable comments.
@@ -96,7 +112,98 @@ const parsing = [
   message("MemberExpression[object.name='JSON']", "JSON.parse and JSON.stringify throw; use Schema.fromJsonString."),
 ]
 
+const nullish = [
+  message(
+    "BinaryExpression[operator=/^[!=]==?$/]:matches([left.type='Identifier'][left.name='undefined'], [right.type='Identifier'][right.name='undefined'])",
+    "Comparing with undefined: use Option.fromNullishOr where the value enters core, then Option.match.",
+  ),
+  message(
+    "BinaryExpression[operator=/^[!=]==?$/]:matches([left.type='Literal'][left.raw='null'], [right.type='Literal'][right.raw='null'])",
+    "Comparing with null: use Option.fromNullishOr where the value enters core, then Option.match.",
+  ),
+  message(
+    "BinaryExpression[operator=/^[!=]==?$/] > UnaryExpression[operator='typeof']",
+    "typeof comparisons: use Option.fromNullishOr or a Predicate guard such as Predicate.isString.",
+  ),
+  message(
+    "LogicalExpression[operator='??']",
+    "?? on a nullable value: use Option.getOrElse, or Combiner/Reducer for a merge.",
+  ),
+  message(
+    "ChainExpression",
+    "Optional chaining on a nullable value: use Option.map / Option.flatMap.",
+  ),
+]
+
+const nativeCollections = [
+  message(
+    "NewExpression[callee.name=/^(Set|Map|WeakSet|WeakMap)$/]",
+    "Native Set and Map are mutable; use HashSet / HashMap, or Array.dedupe.",
+  ),
+]
+
 const noRestrictedSyntax = (...groups) => ["error", ...groups.flat()]
+
+// Every namespace the effect package exports, plus the aliases this code
+// base imports them under. Members of these are Effect functions, not
+// native methods.
+const effectModules = [
+  "Arbitrary", "Array", "BigDecimal", "BigInt", "Boolean", "Brand", "Bytes",
+  "ByteSize", "Cache", "Cause", "Channel", "ChannelSchema", "Chunk", "Clock",
+  "Combiner", "Config", "ConfigProvider", "Console", "Context", "Cron", "Data",
+  "DateTime", "Deferred", "Differ", "Duration", "Effect", "Effectable",
+  "Equal", "Equivalence", "ErrorReporter", "ExecutionPlan", "Exit", "Fiber",
+  "FiberHandle", "FiberMap", "FiberSet", "FileSystem", "Filter", "Formatter",
+  "Function", "Glob", "Graph", "Hash", "HashMap", "HashRing", "HashSet", "HKT",
+  "Inspectable", "Iterable", "JsonPatch", "JsonPointer", "JsonSchema", "Latch",
+  "Layer", "LayerMap", "LayerRef", "Logger", "LogLevel", "ManagedRuntime",
+  "Match", "Metric", "MutableHashMap", "MutableHashSet", "MutableList",
+  "MutableRef", "Newtype", "NonEmptyIterable", "Number", "Optic", "Option",
+  "Order", "Ordering", "PartitionedSemaphore", "Path", "Pipeable",
+  "PlatformError", "Pool", "Predicate", "PrimaryKey", "PubSub", "Pull", "Queue",
+  "Random", "Rational", "RcMap", "RcRef", "Record", "Redactable", "Redacted",
+  "Reducer", "Ref", "References", "RegExp", "Request", "RequestResolver",
+  "Resource", "Result", "Runtime", "Schedule", "Scheduler", "Schema",
+  "SchemaAST", "SchemaGetter", "SchemaIssue", "SchemaParser",
+  "SchemaRepresentation", "SchemaTransformation", "Scope", "ScopedCache",
+  "ScopedRef", "Semaphore", "SemVer", "SemVerRange", "Sink", "StandardSchema",
+  "Stdio", "Stream", "String", "Struct", "SubscriptionRef", "Symbol",
+  "SynchronizedRef", "Take", "Terminal", "TextDiff", "Tracer", "Trie", "Tuple",
+  "TxChunk", "TxDeferred", "TxHashMap", "TxHashSet", "TxPriorityQueue",
+  "TxPubSub", "TxQueue", "TxReentrantLock", "TxRef", "TxSemaphore",
+  "TxSubscriptionRef", "Types", "UndefinedOr", "Unify", "Utils", "Version",
+  // aliases
+  "Arr", "S",
+]
+
+const nativeArrayMethods = [
+  "map", "filter", "some", "every", "find", "findIndex", "findLast",
+  "findLastIndex", "reduce", "reduceRight", "flatMap", "flat", "forEach",
+  "includes", "indexOf", "lastIndexOf", "slice", "concat", "join", "sort",
+  "toSorted", "reverse", "toReversed", "at", "fill", "splice", "toSpliced",
+]
+const nativeStringMethods = [
+  "split", "trim", "trimStart", "trimEnd", "toLowerCase", "toUpperCase",
+  "startsWith", "endsWith", "replace", "replaceAll", "padStart", "padEnd",
+  "substring", "charAt", "repeat", "localeCompare", "normalize",
+]
+
+const nativeMethods = [
+  ...nativeArrayMethods.map((property) => ({
+    property,
+    allowObjects: effectModules,
+    message: `Native array method; use Array.${property === "at" ? "get" : property} or the nearest Array module function.`,
+  })),
+  ...nativeStringMethods.map((property) => ({
+    property,
+    allowObjects: effectModules,
+    message: "Native string method; use the String module (String.split, String.trim, ...).",
+  })),
+  {
+    object: "Object",
+    message: "Native Object functions; use the Record and Struct modules.",
+  },
+]
 
 const coreGroups = [loops, collections, failures, asynchrony, effectBans, parsing]
 const testGroups = [failures, asynchrony, effectBans]
@@ -168,7 +275,17 @@ export const buildConfig = ({ tsconfigRootDir, ignores = [] }) => defineConfig([
     rules: { "no-restricted-imports": importRule(layer) },
   })),
   {
-    // Tests relax the loop, mutation and parsing rules and nothing else.
+    // Core layers also ban native collection and string methods and
+    // null or undefined checks (effect-v4, "Reach for the combinator").
+    files: ["src/domain/**/*.ts", "src/features/**/*.ts", "src/format/**/*.ts"],
+    rules: {
+      "no-restricted-syntax": noRestrictedSyntax(...coreGroups, nullish, nativeCollections),
+      "no-restricted-properties": ["error", ...nativeMethods],
+    },
+  },
+  {
+    // Tests relax the loop, mutation and parsing rules, and the core-only
+    // native-method and null-check bans, and nothing else.
     files: ["test/**/*.ts"],
     rules: {
       "no-restricted-syntax": noRestrictedSyntax(...testGroups),
