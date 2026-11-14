@@ -80,6 +80,17 @@ describe("pace", () => {
     )
   })
 
+  it("a reading stamped in the future is unusable; one at now is usable", () => {
+    // Owner ruling 2026-11-14: clock skew must not make a stale reading
+    // look fresh.
+    const at = (observedAt: number) =>
+      both(1, 1).map((o) => ({ ...o, observedAt }))
+    expect(run(at(now))).toEqual(new Allow({}))
+    expect(run(at(now + 1))).toEqual(
+      new Unknown({ windows: ["fiveHour", "weekly"] }),
+    )
+  })
+
   it("a stale reading over reserve is Unknown, not Hold", () => {
     const old = both(99, 99).map((o) => ({ ...o, observedAt: now - 60 * minute }))
     expect(run(old)).toEqual(new Unknown({ windows: ["fiveHour", "weekly"] }))

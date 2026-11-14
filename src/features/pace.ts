@@ -13,8 +13,10 @@
 //    whatever order readings arrive in; among equal observedAt, the highest
 //    usedPercent (R-P4). The newest reading decides even when it is
 //    unusable; an older reading is never used in its place.
-// 4. A reading is usable when now - observedAt <= freshness and either
-//    resetsAt is absent or now < resetsAt.
+// 4. A reading is usable when 0 <= now - observedAt <= freshness and either
+//    resetsAt is absent or now < resetsAt. A reading stamped after `now` is
+//    unusable (owner ruling, 2026-11-14: clock skew could make a stale
+//    reading look fresh). Design revision 3 defines the clock basis.
 // 5. Allow iff every policy window has a usable reading with
 //    usedPercent + estimate(window) <= 100 - reserve(window). Hold if any
 //    usable reading fails that test. Otherwise Unknown.
@@ -26,8 +28,6 @@
 // - Hold and Unknown carry the policy windows without a usable allowing
 //   reading, in policy order: the `windows` of a Quota hold ("Holds", Quota
 //   row).
-// - A reading observed after `now` (clock stepped back) has a negative age
-//   and is usable, as rule 4 reads literally.
 //
 // Not here: `estimate` itself (R-P3, built from finished-step records by the
 // shell's event fold) is a parameter.
@@ -56,6 +56,7 @@ const newestThenHighest: Order.Order<Observation> = Order.combine(
 
 const isUsable =
   (now: number, freshnessMillis: number) => (reading: Observation) =>
+    reading.observedAt <= now &&
     now - reading.observedAt <= freshnessMillis &&
     (reading.resetsAt === undefined || now < reading.resetsAt)
 
