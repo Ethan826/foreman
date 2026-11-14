@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && bun run lint",
+    "lint": "eslint .",
     "test": "vitest run"
   },
   "dependencies": {
@@ -12,7 +13,11 @@
   },
   "devDependencies": {
     "@effect/vitest": "4.1.4",
+    "@eslint/js": "9.39.2",
+    "eslint": "9.39.2",
+    "eslint-plugin-functional": "9.0.4",
     "typescript": "5.9.3",
+    "typescript-eslint": "8.54.0",
     "vitest": "5.1.0"
   }
 }

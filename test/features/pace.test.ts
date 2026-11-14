@@ -1,4 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
+import { Struct } from "effect"
 import type { Observation } from "../../src/domain/observation.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import type { Window } from "../../src/domain/window.ts"
@@ -6,7 +7,10 @@ import { Allow, Hold, pace, Unknown } from "../../src/features/pace.ts"
 
 const now = 10_000_000
 const minute = 60_000
-const flat = (points: number) => (_window: Window) => points
+const flat =
+  (points: number): ((window: Window) => number) =>
+  () =>
+    points
 
 const reading = (patch: Partial<Observation> = {}): Observation => ({
   provider: "claude",
@@ -109,7 +113,7 @@ describe("pace", () => {
   })
 
   it("absent resetsAt: freshness alone limits the reading", () => {
-    const { resetsAt: _omitted, ...bare } = reading({ usedPercent: 1 })
+    const bare = Struct.omit(reading({ usedPercent: 1 }), ["resetsAt"])
     const weekly = { ...bare, window: "weekly" as const }
     expect(run([bare, weekly])).toEqual(new Allow({}))
   })

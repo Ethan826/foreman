@@ -72,9 +72,9 @@ describe("Claude stream-json events", () => {
   })
 
   it("the event union takes each of the three and nothing else", () => {
-    ;[resultFixture, rateLimitFixture, apiRetryFixture].forEach((fixture) =>
-      expect(Result.isSuccess(decodeClaudeEvent(fixture))).toBe(true),
-    )
+    ;[resultFixture, rateLimitFixture, apiRetryFixture].forEach((fixture) => {
+      expect(Result.isSuccess(decodeClaudeEvent(fixture))).toBe(true)
+    })
     expect(Result.isFailure(decodeClaudeEvent({ type: "assistant" }))).toBe(true)
     expect(Result.isFailure(decodeClaudeEvent("result"))).toBe(true)
   })

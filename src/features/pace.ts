@@ -108,7 +108,7 @@ export const pace = (
     .map((each) => each.window)
   if (judged.some((each) => each.verdict === "fails"))
     return new Hold({ windows: notAllowing })
-  if (judged.length === 0 || notAllowing.length > 0)
+  if (Arr.isReadonlyArrayEmpty(judged) || Arr.isReadonlyArrayNonEmpty(notAllowing))
     return new Unknown({ windows: notAllowing })
   return new Allow({})
 }

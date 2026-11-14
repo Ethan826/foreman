@@ -12,7 +12,7 @@ owner approved a first code slice only: project setup, Domain types,
 Format decoders and the pure pacing function (provisional until the
 design is approved). Runtime, process control, git handling,
 permissions, storage and recovery code are not approved. `bun run check`
-and `bun run test` must pass before any commit.
+(tsc and ESLint) and `bun run test` must pass before any commit.
 
 Pending live tests that must update code when they run: L1 (Claude
 usage reading and `rate_limit_event` shape: update `src/format/claude.ts`),
@@ -41,6 +41,13 @@ pure functions.
 - Holds for quota, approval, uncertain operations and failures stay
   distinct. Timers and notification timeouts never grant approval.
 - No bypass permission flags for either agent client.
+
+## Lint
+
+`eslint.rules.js` holds the house rules (adapted from the owner's
+lsatchapelhill project); `bun run lint` runs it. `lint-fixtures/` holds
+must-fail files that `test/lint/fixtures.test.ts` checks; a new rule group
+needs a fixture there. No lint-disable comments.
 
 ## Provenance
 

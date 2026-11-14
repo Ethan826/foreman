@@ -1,5 +1,5 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Result, Schema } from "effect"
+import { Result, Schema, Struct } from "effect"
 import { Observation } from "../../src/domain/observation.ts"
 import { defaultPolicy, Policy } from "../../src/domain/policy.ts"
 
@@ -34,7 +34,7 @@ describe("Observation", () => {
   })
 
   it("rejects a missing observedAt", () => {
-    const { observedAt: _omitted, ...rest } = base
+    const rest = Struct.omit(base, ["observedAt"])
     expect(Result.isFailure(decodeObservation(rest))).toBe(true)
   })
 })

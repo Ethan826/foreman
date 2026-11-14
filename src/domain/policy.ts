@@ -8,7 +8,7 @@
 // always has one.
 // TODO(design "Pacing", live test L2): Codex windows are not known; the
 // default lists none, and pace answers Unknown for a provider with none.
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
 import { Window } from "./window.ts"
 
 const percent = Schema.Number.check(
@@ -23,7 +23,7 @@ export type WindowPolicy = typeof WindowPolicy.Type
 
 const distinctWindows = Schema.makeFilter<ReadonlyArray<WindowPolicy>>(
   (entries) =>
-    new Set(entries.map((entry) => entry.window)).size === entries.length ||
+    new Set(entries.map((entry) => entry.window)).size === Arr.length(entries) ||
     "a window may be listed once per provider",
 )
 

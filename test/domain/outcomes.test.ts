@@ -6,8 +6,8 @@ import {
   TrancheEnd,
 } from "../../src/domain/outcomes.ts"
 
-const accepts = <S extends Schema.ConstraintDecoder<unknown>>(
-  schema: S,
+const accepts = (
+  schema: Schema.ConstraintDecoder<unknown>,
   input: unknown,
 ) => Result.isSuccess(Schema.decodeUnknownResult(schema)(input))
 
