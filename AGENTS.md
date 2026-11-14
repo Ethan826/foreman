@@ -7,7 +7,19 @@ before the next tranche. It paces launches against the user's
 subscription windows, renews context with every step, and keeps durable
 checkpoints.
 
-Status: design only. No code, dependency install or build is approved.
+Status (2026-11-14): the design is in revision and not yet approved. The
+owner approved a first code slice only: project setup, Domain types,
+Format decoders and the pure pacing function (provisional until the
+design is approved). Runtime, process control, git handling,
+permissions, storage and recovery code are not approved. `bun run check`
+and `bun run test` must pass before any commit.
+
+Pending live tests that must update code when they run: L1 (Claude
+usage reading and `rate_limit_event` shape: update `src/format/claude.ts`),
+L2 (Codex usage windows: add the Codex windows to the default policy in
+`src/domain/policy.ts`; until then every Codex launch needs a waiver),
+L3 (permissions), L4 (crash and restart).
+
 Start with `docs/plans/2026-11-14-agent-supervisor-design.md`; its
 decision record and the finished Ralph trial are beside it. Do not repeat
 the Ralph trial.
