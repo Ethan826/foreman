@@ -6,6 +6,7 @@
   "scripts": {
     "check": "tsc --noEmit && bun run lint",
     "lint": "eslint .",
+    "diagram": "bun -e 'import { renderOnion } from \"./docs/diagrams/onion.ts\"; await Bun.write(\"docs/diagrams/onion.svg\", renderOnion())'",
     "test": "vitest run"
   },
   "dependencies": {

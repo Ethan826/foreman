@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 640" width="960" height="640" role="img" aria-labelledby="t">
+<title id="t">Onion architecture: Domain at the center, then Features and Format, Runtime, Program and Facade; imports point inward</title>
+<style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+    .name { font-size: 15px; font-weight: 600; }
+    .note, .small { font-size: 12px; fill: #59636e; }
+    .ring { stroke: #59636e; stroke-width: 1.5; }
+    .planned { stroke-dasharray: 6 5; }
+    .divider { stroke: #59636e; stroke-width: 1.5; }
+    .arrow { stroke: #1f2328; stroke-width: 2; fill: none; }
+    .arrowhead { fill: #1f2328; }
+    .f0 { fill: #ddf4ff; }
+    .f1 { fill: #dafbe1; }
+    .f2 { fill: #fff8c5; }
+    .f3 { fill: #ffeff7; }
+    .f4 { fill: #f6f8fa; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #f0f6fc; }
+      .note, .small { fill: #9198a1; }
+      .ring, .divider { stroke: #9198a1; }
+      .arrow { stroke: #f0f6fc; }
+      .arrowhead { fill: #f0f6fc; }
+      .f0 { fill: #0d2a4a; }
+      .f1 { fill: #12361f; }
+      .f2 { fill: #3a3210; }
+      .f3 { fill: #3b1d33; }
+      .f4 { fill: #1e2530; }
+    }
+  </style>
+<defs><marker id="head" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path class="arrowhead" d="M 0 0 L 10 5 L 0 10 z"/></marker></defs>
+<circle class="ring f4 planned" cx="320" cy="320" r="300"/>
+<circle class="ring f3 planned" cx="320" cy="320" r="250"/>
+<circle class="ring f2 planned" cx="320" cy="320" r="200"/>
+<circle class="ring f1" cx="320" cy="320" r="150"/>
+<circle class="ring f0" cx="320" cy="320" r="64"/>
+<line class="divider" x1="320" y1="170" x2="320" y2="256"/><line class="divider" x1="320" y1="384" x2="320" y2="470"/>
+<text x="320" y="312" text-anchor="middle"><tspan class="name" x="320">Domain</tspan><tspan class="note" x="320" dy="16">types and policy</tspan></text>
+<text x="213" y="312" text-anchor="middle"><tspan class="name" x="213">Format</tspan><tspan class="note" x="213" dy="16">decoders</tspan></text>
+<text x="427" y="312" text-anchor="middle"><tspan class="name" x="427">Features</tspan><tspan class="note" x="427" dy="16">decisions</tspan></text>
+<text x="320" y="139" text-anchor="middle"><tspan class="name" x="320">Runtime</tspan><tspan class="note" x="320" dy="16">Effect services (planned)</tspan></text>
+<text x="320" y="89" text-anchor="middle"><tspan class="name" x="320">Program</tspan><tspan class="note" x="320" dy="16">wiring (planned)</tspan></text>
+<text x="320" y="39" text-anchor="middle"><tspan class="name" x="320">Facade</tspan><tspan class="note" x="320" dy="16">CLI (planned)</tspan></text>
+<line class="arrow" x1="526.48" y1="526.48" x2="369.5" y2="369.5" marker-end="url(#head)"/>
+<text class="name" x="660" y="40">Facade</text>
+<text class="small" x="660" y="57">imports Domain, Features, Format, Program</text>
+<text class="name" x="660" y="92">Program</text>
+<text class="small" x="660" y="109">imports Domain, Features, Format, Runtime</text>
+<text class="name" x="660" y="144">Runtime</text>
+<text class="small" x="660" y="161">imports Domain</text>
+<text class="name" x="660" y="196">Format</text>
+<text class="small" x="660" y="213">imports Domain</text>
+<text class="name" x="660" y="248">Features</text>
+<text class="small" x="660" y="265">imports Domain</text>
+<text class="name" x="660" y="300">Domain</text>
+<text class="small" x="660" y="317">imports nothing</text>
+<text class="small" x="660" y="376">Every import points inward. The rules are</text>
+<text class="small" x="660" y="393">narrower than a strict onion: Runtime imports</text>
+<text class="small" x="660" y="410">only Domain, Format and Features do not</text>
+<text class="small" x="660" y="427">import each other, and Facade does not</text>
+<text class="small" x="660" y="444">import Runtime.</text>
+</svg>
