@@ -49,4 +49,4 @@ Start with `docs/plans/2026-11-14-agent-supervisor-design.md`. Its decision reco
 
 ## License
 
-Not yet chosen.
+MIT. See [LICENSE](LICENSE).
