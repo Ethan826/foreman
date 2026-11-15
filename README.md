@@ -30,7 +30,7 @@ For sequence diagrams of a tranche and of a launch attempt, the hold states, a p
 
 ## Why not Ralph
 
-A disposable trial of Ralph 2.12.0 preceded this design. Its cooperative review routing worked, but the trial could not establish supported resume of a suspended primary loop or recovery of an interrupted operation. Its default calls also pass each client's permission-bypass flags, and it is far larger than a sequential workflow needs (254 Rust files). Ralph was studied, not copied. Details are in `docs/plans/2026-11-14-ralph-trial-results.md`.
+A disposable trial of Ralph 2.12.0 preceded this design. Its cooperative review routing worked, but the trial could not establish supported resume of a suspended primary loop or recovery of an interrupted operation. Its default calls also pass each client's permission-bypass flags, and it is far larger than a sequential workflow needs (254 Rust files). Ralph was studied and none of it was copied. Details are in `docs/plans/2026-11-14-ralph-trial-results.md`.
 
 ## Layout
 

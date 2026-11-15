@@ -1,6 +1,6 @@
 # Domain
 
-Built. Plain data and validators for everything the other layers pass around: identifiers, clients and roles, steps, outcomes, usage observations, windows and pacing policy. Back to [how it works](../../docs/how-it-works.md).
+Built. Plain data and validators. They cover what the other layers pass around: identifiers, clients, roles, steps, outcomes, usage observations, windows, pacing policy. Back to [how it works](../../docs/how-it-works.md).
 
 May import: nothing.
 

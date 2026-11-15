@@ -4,12 +4,9 @@ Read the [README](../README.md) first. This page shows how the pieces fit, with 
 
 ## What is built and what is planned
 
-Almost all of the runtime behavior described below is **planned**. The design is a draft (revision 3, not approved), and nothing runs agents yet. What exists is a first code slice:
+Almost all of the runtime behavior described below is **planned**. The design is an unapproved draft (revision 3), and nothing runs agents yet. The first code slice contains the Domain types, the Format decoders for Claude and Codex output, and the pure pacing function `pace` (provisional until the design is approved). The event log, process control and git handling are planned, as are holds, recovery and the CLI.
 
-- **Built:** the Domain types, the Format decoders for Claude and Codex output, and the pure pacing function `pace` (provisional until the design is approved).
-- **Planned:** the event log, process control, git handling, holds, recovery and the CLI.
-
-Each diagram below is labeled **built** or **planned**. A planned diagram shows the design's text, not working code. The source is [the design](plans/2026-11-14-agent-supervisor-design.md), which is still under review and may change.
+Each diagram below is labeled **built** or **planned**. A planned diagram draws what the design text says; the code for it does not exist yet. The source is [the design](plans/2026-11-14-agent-supervisor-design.md), which is still under review and may change.
 
 ## One tranche (planned)
 
@@ -169,9 +166,9 @@ stateDiagram-v2
 
 | Hold | Released only by |
 |---|---|
-| Approval (tranche, revision) | `Approved` from the CLI, with both fields matching the hold. It carries the protected-path permission for the next tranche. |
+| Approval (tranche, revision) | `Approved` from the CLI, with both fields matching the hold. It includes the protected-path permission for the next tranche. |
 | Quota (provider, windows, heldAt) | For every named window: the newest reading has `observedAt > heldAt` and allows, or the reset time reported for that window has passed. Or `Waived(provider, waiverId)` from the CLI. |
-| Uncertain (opId) | `reconcile <opId> discard`, `reconcile <opId> abandon`, or `Reconciled(opId, accept)`, naming that opId. |
+| Uncertain (opId) | `reconcile <opId> discard`, `reconcile <opId> abandon`, or `Reconciled(opId, accept)` with that opId. |
 | Failure (opId, class) | `Released(opId)` from the CLI. |
 | Drift (expected, head, dirty) | `Adopted(revision)`, or the completion of a `restore` that found the tree clean. |
 | Protected (paths) | `release-protected`, which re-digests and releases if the files match the recorded digest again. With `--accept` it records the current digest as the new baseline and releases. |
@@ -186,12 +183,12 @@ The `pace` function itself is **built** and provisional. The inputs it needs fro
 
 In plain words:
 
-- **Checked once, at launch.** Before a step starts, pacing compares the account's observed usage against a threshold. The reserve bounds launches, not usage. The design contains no rule that stops a step once it is running, and a running agent can overshoot, so there is no hard guarantee.
-- **Observed usage windows.** For Claude the policy lists the five-hour and weekly windows. The windows checked are the ones in the policy, not whichever ones happen to have readings. The Codex windows are unknown until live test L2, so the default Codex policy lists none and every Codex launch needs a waiver.
-- **The newest reading decides.** For each window the reading with the latest `observedAt` is used, even if it is unusable. An older reading never stands in. A reading is usable if it is no older than the freshness limit (default 10 minutes), is not stamped in the future, and has not passed its reset time.
-- **Reserve held back.** A window allows a launch when used percent plus the step's estimated cost stays at or below 100 minus the reserve. The defaults, confirmed by the owner on 2026-11-14 and configurable, are a 30 percent reserve on the five-hour window and 40 percent on the weekly window.
-- **Estimate from measured step costs (planned).** The design takes the role's last five finished steps, uses the largest measured increase in the window, and falls back to an initial estimate of 15 points when none was measured. Today `pace` takes the estimate as a parameter.
-- **Three answers.** Allow only if every policy window has a usable reading that allows. Hold if any usable reading fails. Otherwise Unknown, for example when readings are missing or stale. Unknown never turns into Allow by waiting. A Hold or an Unknown creates a Quota hold, and the owner can `waive` one launch.
+- Pacing checks once, at launch. It compares the account's observed usage against a threshold before a step starts. The reserve limits when a launch may happen. Nothing in the design stops a step once it is running, and a running agent can overshoot, so pacing gives no hard guarantee.
+- Pacing reads observed usage windows. For Claude the policy lists the five-hour and weekly windows. Only the windows in the policy are checked, whatever readings exist. The Codex windows are unknown until live test L2, so the default Codex policy lists none and every Codex launch needs a waiver.
+- For each window the reading with the latest `observedAt` is used, even if it is unusable, and an older reading never stands in. A reading is usable if it is no older than the freshness limit (default 10 minutes), is not stamped in the future, and has not passed its reset time.
+- A window allows a launch when used percent plus the step's estimated cost stays at or below 100 minus the reserve. The defaults, confirmed by the owner on 2026-11-14 and configurable, are a 30 percent reserve on the five-hour window and 40 percent on the weekly window.
+- The estimate is planned. The design takes the role's last five finished steps, uses the largest measured increase in the window, and falls back to an initial estimate of 15 points when none was measured. Today `pace` takes the estimate as a parameter.
+- The answer is one of three. Allow only if every policy window has a usable reading that allows. Hold if any usable reading fails. Otherwise Unknown, for example when readings are missing or stale. Unknown never turns into Allow by waiting. A Hold or an Unknown creates a Quota hold, and the owner can `waive` one launch.
 
 ## Where to read next
 

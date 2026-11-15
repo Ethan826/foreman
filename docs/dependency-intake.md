@@ -10,8 +10,8 @@ author; this record reviews the choice.
 
 - Why: Effect v4 is the project's chosen language runtime (AGENTS.md).
   Schema decodes the foreign formats and validates identifiers; Order and
-  Array carry the pure pacing function; Layer and Context.Service will
-  carry Runtime later.
+  Array are what the pure pacing function uses; Layer and Context.Service
+  will be used for Runtime later.
 - Alternatives considered: zod or valibot for decoding (a second
   vocabulary beside Effect, no gain); plain TypeScript with hand-written
   guards (unsafe casts, contrary to the baseline).
@@ -19,7 +19,7 @@ author; this record reviews the choice.
 - Fit: modules `Schema`, `Array`, `Order`, `Result` only so far; Domain,
   Features and Format import `effect` and nothing else.
 - Release cycle and maintenance: Effect-TS organization; minor releases add
-  and rename APIs, so upgrades are reviews, not bumps.
+  and rename APIs, so every upgrade is a review.
 - Security and supply chain: no install scripts, no downloaded binaries.
 - License: MIT.
 - Pinning: exact `4.1.4`.
@@ -82,21 +82,21 @@ about 5. No package here declares an install script; no native binaries.
 Versions equal the ones the owner's lsatchapelhill project resolves
 (`^9.39.2`, `^8.54.0`, `^9.0.4`), pinned exactly. License of all four: MIT.
 
-- **eslint 9.39.2** and **@eslint/js 9.39.2**: the linter and its
+- eslint 9.39.2 and @eslint/js 9.39.2: the linter and its
   recommended preset (same version, as eslint requires). Alternative:
   oxlint or biome (no type-aware typescript-eslint rules, none of the
   owner's existing rules to reuse). Release cycle: OpenJS Foundation,
   frequent minors; upgrades are reviews. ESLint 10 is out of scope until
   typescript-eslint supports it.
-- **typescript-eslint 8.54.0**: parser and the strictTypeChecked and
+- typescript-eslint 8.54.0: parser and the strictTypeChecked and
   stylisticTypeChecked presets (type-aware: no-unsafe-*, no-floating-promises,
   consistent-type-assertions, no-non-null-assertion). Peer range accepts
   typescript 5.9.3. Pulls @typescript-eslint/{parser,eslint-plugin,utils,
   typescript-estree} and ts-api-utils.
-- **eslint-plugin-functional 9.0.4**: only for `no-loop-statements`,
+- eslint-plugin-functional 9.0.4: only for `no-loop-statements`,
   `no-throw-statements`, `no-let` and `immutable-data`. The first two are also
   covered by core syntax selectors, so the plugin is redundant for them;
-  `immutable-data` (assignment to properties, mutating array methods such as
+  `immutable-data` (assignment to properties, and array methods that mutate, such as
   sort and splice) and `no-let` cannot be done with core rules. It brings
   deepmerge-ts, is-immutable-type, ts-declaration-location,
   escape-string-regexp. Declined alternative: write the two rules ourselves
@@ -179,7 +179,7 @@ Added 2026-11-15. No new package: both ship inside the pinned `effect`.
   `SqlRunnerStorage`, `ClusterWorkflowEngine`, `MessageStorage`,
   `RunnerStorage`.
 - Stability: every module in both folders (50 files, including the index
-  files) carries `@stability unstable` in its module doc comment, and Effect
+  files) has `@stability unstable` in its module doc comment, and Effect
   may change or remove them in any release. The owner accepted building on
   them on 2026-11-15 with that status known.
 - Tripwire: `test/docs/stability-watch.test.ts` compares the installed
@@ -188,7 +188,7 @@ Added 2026-11-15. No new package: both ship inside the pinned `effect`.
   test. On failure: update the JSON and this entry, and tell the owner, so
   the decision is revisited. Blind spots are listed in the test file; the
   main one is that it sees only what an installed version says, so it fires
-  at an upgrade, not at an announcement.
+  at an upgrade and cannot fire at an announcement.
 - Release cycle and maintenance: same as `effect`; upgrades are reviews.
 - License and pinning: as `effect`.
 

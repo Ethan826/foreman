@@ -28,9 +28,9 @@ the Ralph trial.
 
 Use the decision-core architecture (skill `decision-core-architecture`):
 pure, total Domain and Features; Format for decoding and encoding;
-Runtime in Effect for processes, storage, clock, git and notification;
-Program wires capabilities; the facade (CLI) converts input and makes no
-decisions. Persistent state lives in the shell and passes through the
+Runtime in Effect for processes and storage and for the clock, git and
+notification; Program wires capabilities; the facade (CLI) converts input
+and leaves every decision to the core. Persistent state lives in the shell and passes through the
 pure functions.
 
 - TypeScript with Effect v4 (skill `effect-v4`). Exact pins and a
@@ -82,7 +82,7 @@ the entry in `docs/dependency-intake.md`, and tell the owner.
 
 ## Provenance
 
-Ralph (MIT) was studied, not copied. Write adapters independently and
+Ralph (MIT) was studied and none of it was copied. Write adapters independently and
 record conceptual provenance. Waxwing is not a dependency or submodule.
 
 ## Writing
