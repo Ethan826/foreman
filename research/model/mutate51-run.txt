@@ -1,0 +1,19 @@
+== python3 -I mutate51.py  (2026-11-15 17:49, after check51 amendment 4)
+GA1 open grants (of every project) left out of the level: KILLED by AS ['FOUND AS admitted launch can take provider-counted use above the cap'] [] []
+GA2 a charged step is taken as reflected by the reading (revision 5's reflection test at its loosest): KILLED by AS ['FOUND AS admitted launch can take provider-counted use above the cap'] [] []
+GA4 no cancel after a lost race: MISSED [] ['liveness: states with no path to a launch, an owner release or the end: 0'] ['scope grants51: states explored: 1640670; launch transitions: 31324; finished states: 231794; bounded states: 1323557; 56s']
+GA5 startup does not charge Finished-without-Charged: KILLED by LK ['FOUND LK open grant of the project after a settle step'] [] []
+GA6 a grant is charged again on redo: KILLED by ND ['FOUND ND grant charged twice'] [] []
+GA7 a reading of a passed provider period stays usable: MISSED [] ['liveness: states with no path to a launch, an owner release or the end: 0'] ['scope grants51: states explored: 2439126; launch transitions: 72126; finished states: 326421; bounded states: 2027468; 88s']
+GA8 no reading taken as zero use (Unknown as Allow): ERROR TypeError: 'NoneType' object is not subscriptable [] [] []
+GA9 no settle step at ordinary launch attempts: KILLED by LK ['FOUND LK open grant of the project after a settle step'] [] []
+GA10 startup does not cancel unnamed grants: KILLED by LK ['FOUND LK open grant of the project after a settle step'] [] []
+GA11 no Uncertain hold at startup: MISSED [] ['liveness: states with no path to a launch, an owner release or the end: 0'] ['scope grants51: states explored: 1578212; launch transitions: 27701; finished states: 231794; bounded states: 1264373; 54s']
+GA12 orphan test by operation (opId) instead of grantId: MISSED [] ['liveness: states with no path to a launch, an owner release or the end: 0'] ['scope grants51: states explored: 1636070; launch transitions: 28506; finished states: 231794; bounded states: 1319039; 59s']
+GB1 an open grant counts only in its own period: KILLED by AS ['FOUND AS admitted launch can take provider-counted use above the cap'] [] []
+GB2 a step that spans the reset is not carried (revision 5's rule: own period only): KILLED by AS ['FOUND AS admitted launch can take provider-counted use above the cap'] [] []
+GB3 ledger settle leaves Intended-without-Finished open (revision 5's rule): KILLED by LK ['FOUND LK open grant of the project after a settle step'] [] []
+GB4 startup charges without killing the process first: KILLED by AS ['FOUND AS grant charged while its process may still spend'] [] []
+rc=0
+== python3 -I mutate51.py GA8  (2026-11-15 17:59, rerun: the first GA8 run stopped on a counter that read the missing reading; the mutant now also guards that counter line, which is instrumentation only)
+GA8 no reading taken as zero use (Unknown as Allow): MISSED [] ['liveness: states with no path to a launch, an owner release or the end: 0'] ['scope grants51: states explored: 2025219; launch transitions: 47494; finished states: 290312; bounded states: 1612685; 70s']

@@ -1,0 +1,30 @@
+== python3 -I check51.py grants51  (2026-11-15 17:25-17:40, runs 1-3: stopped; see amendments 1-3 in the file header)
+== python3 -I check51.py grants51  (2026-11-15, run 4, amendment 3)
+scope grants51: states explored: 1636070; launch transitions: 28506; finished states: 231794; bounded states: 1319039; 55s
+counters: {'launch_other_open': 15121, 'launch_spanning_carried': 4075, 'launch_on_delayed_reading': 18292, 'quota_hold_unusable': 26307, 'quota_hold_level': 16393, 'refused_by_counting_finished_steps': 9687, 'uncertain_hold': 79678, 'ordinary_settle_cancel': 14627, 'ordinary_settle_charge': 231702, 'kill_Start': 40646, 'kill_LedgerSettle': 40646, 'CancelFail': 14627, 'ChargeFail': 231702, 'crash_after_lost_race': 14627, 'orphan_process_spend': 10417, 'spend_in_undetected_or_later_period': 88293, 'ledger_settle': 181486, 'reconcile': 57858, 'old_period_reading_dropped': 0}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 30293 states
+no violations
+rc=0
+== python3 -I check51.py grants51  (2026-11-15 17:48, run 5, amendment 4)
+scope grants51: states explored: 1636070; launch transitions: 28506; finished states: 231794; bounded states: 1319039; 56s
+counters: {'launch_other_open': 15121, 'launch_spanning_carried': 4075, 'launch_on_delayed_reading': 18292, 'quota_hold_unusable': 26307, 'quota_hold_level': 16393, 'refused_by_counting_finished_steps': 9687, 'uncertain_hold': 79678, 'ordinary_settle_cancel': 14627, 'ordinary_settle_charge': 231702, 'kill_Start': 40646, 'kill_LedgerSettle': 40646, 'CancelFail': 14627, 'ChargeFail': 231702, 'crash_after_lost_race': 14627, 'orphan_process_spend': 10417, 'spend_in_undetected_or_later_period': 88293, 'ledger_settle': 181486, 'reconcile': 57858, 'old_period_reading_dropped': 0}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 30293 states
+no violations
+rc=0
+== python3 -I check51.py grants51 --overshoot --stop  (2026-11-15 17:49, run 6: assumption A1 dropped; an AS violation is expected)
+FOUND AS admitted launch can take provider-counted use above the cap
+stopped at first violation after 72 states
+    ('Snap',)
+    ('Ingest',)
+    ('Run', 0)
+    ('Run', 1)
+rc=0
+== python3 -I check51.py stages5  (2026-11-15 17:54, run 7: M5's scope with the revision-5.1 spend-down end rule)
+scope stages5: states explored: 2685064; launch transitions: 342508; finished states: 127152; bounded states: 2317408; 264s
+counters: {'waived_launch': 159792, 'waived_over_rules': 140544, 'waived_after_swap': 75444, 'waiver_expired': 278440, 'tight_launch': 7388, 'loose_skips_rule2': 9964, 'tight_rule2_refusal': 6688, 'stacked_launch': 12492, 'sb_and_live_launch': 19850, 'swapped_launch': 167616, 'unwind': 61456, 'backlog_removed': 666976, 'sb_hold': 50312, 'sb_consumed': 66616, 'preapproved_end': 111768}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0
