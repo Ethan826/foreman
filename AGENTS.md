@@ -72,6 +72,14 @@ decoder. Two rules in `eslint.rules.js` enforce this: `Schema.Literals` and
 as string literals outside `src/domain/clients.ts` and
 `src/domain/roles.ts`. A new vocabulary adds its names to that list.
 
+## Dependency watch
+
+`effect/workflow` and `effect/cluster` are `@stability unstable`; the owner
+accepted building on them on 2026-11-15. `test/docs/stability-watch.test.ts`
+fails when the installed effect's stability tags, module list or version
+differ from `docs/stability-watch.json`. When it fails, update the JSON and
+the entry in `docs/dependency-intake.md`, and tell the owner.
+
 ## Provenance
 
 Ralph (MIT) was studied, not copied. Write adapters independently and

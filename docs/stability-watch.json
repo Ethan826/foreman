@@ -1,0 +1,205 @@
+{
+  "effectVersion": "4.1.4",
+  "modules": {
+    "cluster/ClusterCron": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/ClusterError": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/ClusterMetrics": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/ClusterSchema": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/ClusterWorkflowEngine": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/DeliverAt": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Entity": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/EntityAddress": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/EntityId": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/EntityProxy": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/EntityProxyServer": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/EntityResource": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/EntityType": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Envelope": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/HttpRunner": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/K8sHttpClient": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/K8sTypes": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/MachineId": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Message": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/MessageRetention": {
+      "stability": "unstable",
+      "since": "4.1.3"
+    },
+    "cluster/MessageStorage": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Reply": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Runner": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/RunnerAddress": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/RunnerHealth": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/RunnerServer": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/RunnerStorage": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Runners": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/ShardId": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Sharding": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/ShardingConfig": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/ShardingRegistrationEvent": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/SingleRunner": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Singleton": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/SingletonAddress": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/Snowflake": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/SocketRunner": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/SqlMessageStorage": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/SqlRunnerStorage": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/TestRunner": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "cluster/index": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/Activity": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/DurableClock": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/DurableDeferred": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/DurableQueue": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/Workflow": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/WorkflowEngine": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/WorkflowProxy": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/WorkflowProxyServer": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    },
+    "workflow/index": {
+      "stability": "unstable",
+      "since": "4.0.0"
+    }
+  }
+}

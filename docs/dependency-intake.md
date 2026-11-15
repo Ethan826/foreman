@@ -168,6 +168,30 @@ covered either. The fixtures list each method by name in
 from the rule fails that test (checked by deleting `toSpliced` from the
 rule: the test failed).
 
+## effect/workflow and effect/cluster (subpaths of effect 4.1.4)
+
+Added 2026-11-15. No new package: both ship inside the pinned `effect`.
+
+- Why: durable workflows. Queues between stages (`DurableQueue`), approvals
+  as durable deferreds (`DurableDeferred`), reset timers (`DurableClock`),
+  with `Workflow`, `Activity` and `WorkflowEngine` on top. `effect/cluster`
+  supplies the engine and storage: `SingleRunner`, `SqlMessageStorage`,
+  `SqlRunnerStorage`, `ClusterWorkflowEngine`, `MessageStorage`,
+  `RunnerStorage`.
+- Stability: every module in both folders (50 files, including the index
+  files) carries `@stability unstable` in its module doc comment, and Effect
+  may change or remove them in any release. The owner accepted building on
+  them on 2026-11-15 with that status known.
+- Tripwire: `test/docs/stability-watch.test.ts` compares the installed
+  effect's module-level `@stability` and `@since` tags, the module list and
+  the effect version with `docs/stability-watch.json`. A mismatch fails the
+  test. On failure: update the JSON and this entry, and tell the owner, so
+  the decision is revisited. Blind spots are listed in the test file; the
+  main one is that it sees only what an installed version says, so it fires
+  at an upgrade, not at an announcement.
+- Release cycle and maintenance: same as `effect`; upgrades are reviews.
+- License and pinning: as `effect`.
+
 ## Considered and declined
 
 - oxlint and biome: see above.
