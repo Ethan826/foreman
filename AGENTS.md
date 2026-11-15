@@ -74,8 +74,10 @@ as string literals outside `src/domain/clients.ts` and
 
 ## Dependency watch
 
-`effect/workflow` and `effect/cluster` are `@stability unstable`; the owner
-accepted building on them on 2026-11-15. `test/docs/stability-watch.test.ts`
+`effect/workflow` and `effect/cluster` are `@stability unstable`. The
+owner's ruling on design revision 4 (2026-11-15) keeps foreman's
+hand-built log and recovery on SQLite instead of building on them; the
+tripwire stays so the question can be reopened. `test/docs/stability-watch.test.ts`
 fails when the installed effect's stability tags, module list or version
 differ from `docs/stability-watch.json`. When it fails, update the JSON and
 the entry in `docs/dependency-intake.md`, and tell the owner.

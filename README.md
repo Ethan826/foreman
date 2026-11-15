@@ -40,7 +40,7 @@ A disposable trial of Ralph 2.12.0 preceded this design. Its cooperative review 
 - `src/runtime`, `src/program`, `src/facade`: will hold the Effect shell, the wiring and the CLI. They hold no code.
 - `test`: tests for Domain, Features and Format.
 - `docs/plans`: the decision record, the design, the Ralph trial and the reviews.
-- `research/model`: a bounded model check of the design's hold and recovery rules (`check.py`).
+- `research/model`: bounded model checks of the design. `check3.py` covers holds and recovery. `check4.py` covers the usage ledger and the scheduler. `check5.py` covers the grant rules of revision 5. Each has a mutation test and saved output.
 
 ## Development
 

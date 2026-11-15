@@ -1,0 +1,207 @@
+== python3 -I check5.py grants  (2026-11-15 13:06, run 1)
+progress 100000 states, frontier 121420, 6s
+progress 200000 states, frontier 228608, 13s
+progress 300000 states, frontier 328394, 19s
+progress 400000 states, frontier 432760, 25s
+progress 500000 states, frontier 533830, 31s
+progress 600000 states, frontier 617437, 37s
+progress 700000 states, frontier 717147, 43s
+progress 800000 states, frontier 814523, 51s
+progress 900000 states, frontier 899368, 56s
+progress 1000000 states, frontier 1001046, 68s
+progress 1100000 states, frontier 1081921, 73s
+progress 1200000 states, frontier 1162491, 86s
+progress 1300000 states, frontier 1254472, 92s
+progress 1400000 states, frontier 1356508, 111s
+progress 1500000 states, frontier 1440314, 116s
+progress 1600000 states, frontier 1528306, 121s
+progress 1700000 states, frontier 1609229, 147s
+progress 1800000 states, frontier 1685206, 153s
+progress 1900000 states, frontier 1771198, 158s
+progress 2000000 states, frontier 1870715, 163s
+progress 2100000 states, frontier 1957268, 198s
+progress 2200000 states, frontier 2019665, 203s
+progress 2300000 states, frontier 2094792, 208s
+progress 2400000 states, frontier 2173112, 213s
+progress 2500000 states, frontier 2265117, 256s
+progress 2600000 states, frontier 2348506, 262s
+progress 2700000 states, frontier 2449159, 267s
+progress 2800000 states, frontier 2523462, 272s
+progress 2900000 states, frontier 2604231, 277s
+rc=124
+== python3 -I check5.py grants  (2026-11-15 13:11, run 2, amendment 1)
+progress 100000 states, frontier 77684, 5s
+progress 200000 states, frontier 134729, 10s
+progress 300000 states, frontier 189272, 15s
+progress 400000 states, frontier 237190, 20s
+progress 500000 states, frontier 276927, 25s
+progress 600000 states, frontier 319364, 30s
+progress 700000 states, frontier 359991, 35s
+progress 800000 states, frontier 392534, 40s
+progress 900000 states, frontier 428786, 44s
+progress 1000000 states, frontier 466104, 50s
+progress 1100000 states, frontier 496750, 54s
+progress 1200000 states, frontier 522810, 60s
+progress 1300000 states, frontier 554016, 64s
+progress 1400000 states, frontier 584560, 68s
+progress 1500000 states, frontier 612285, 74s
+progress 1600000 states, frontier 635896, 78s
+progress 1700000 states, frontier 656082, 82s
+progress 1800000 states, frontier 679519, 89s
+progress 1900000 states, frontier 709008, 93s
+progress 2000000 states, frontier 731361, 97s
+progress 2100000 states, frontier 751064, 105s
+progress 2200000 states, frontier 772258, 109s
+progress 2300000 states, frontier 791799, 113s
+progress 2400000 states, frontier 802815, 117s
+progress 2500000 states, frontier 821783, 120s
+progress 2600000 states, frontier 842247, 134s
+progress 2700000 states, frontier 856612, 138s
+progress 2800000 states, frontier 868838, 142s
+progress 2900000 states, frontier 884425, 146s
+progress 3000000 states, frontier 896346, 149s
+progress 3100000 states, frontier 911582, 170s
+progress 3200000 states, frontier 915701, 174s
+progress 3300000 states, frontier 928983, 177s
+progress 3400000 states, frontier 943564, 181s
+progress 3500000 states, frontier 954286, 185s
+progress 3600000 states, frontier 955385, 189s
+progress 3700000 states, frontier 957561, 193s
+progress 3800000 states, frontier 962328, 234s
+progress 3900000 states, frontier 971108, 238s
+progress 4000000 states, frontier 981028, 242s
+progress 4100000 states, frontier 980115, 246s
+progress 4200000 states, frontier 989870, 250s
+progress 4300000 states, frontier 995225, 253s
+progress 4400000 states, frontier 1003622, 257s
+progress 4500000 states, frontier 995396, 261s
+rc=124
+== python3 -I check5.py grants  (2026-11-15 13:16, run 3, amendment 2)
+progress 100000 states, frontier 60100, 5s
+progress 200000 states, frontier 101887, 10s
+progress 300000 states, frontier 133992, 14s
+progress 400000 states, frontier 160434, 19s
+progress 500000 states, frontier 186517, 24s
+progress 600000 states, frontier 207230, 29s
+progress 700000 states, frontier 225250, 34s
+progress 800000 states, frontier 239919, 37s
+progress 900000 states, frontier 253043, 42s
+progress 1000000 states, frontier 259027, 46s
+progress 1100000 states, frontier 269277, 51s
+progress 1200000 states, frontier 272532, 55s
+progress 1300000 states, frontier 275097, 60s
+progress 1400000 states, frontier 272804, 64s
+progress 1500000 states, frontier 268579, 67s
+progress 1600000 states, frontier 265003, 73s
+progress 1700000 states, frontier 253760, 76s
+progress 1800000 states, frontier 242664, 79s
+progress 1900000 states, frontier 231757, 85s
+progress 2000000 states, frontier 210609, 88s
+progress 2100000 states, frontier 187863, 91s
+progress 2200000 states, frontier 156611, 93s
+progress 2300000 states, frontier 126288, 96s
+progress 2400000 states, frontier 89273, 101s
+progress 2500000 states, frontier 34453, 103s
+scope grants: states explored: 2540706; launch transitions: 92112; finished states: 161490; bounded states: 1651504; 103s
+counters: {'launch_other_open': 43757, 'launch_unreflected_counted': 49298, 'launch_reflected': 39767, 'launch_on_lagged_reading': 64187, 'quota_hold_unusable': 306588, 'quota_hold_level': 99806, 'uncertain_hold': 38165, 'timer_release': 92669, 'settle_cancel': 38165, 'settle_charge': 107099, 'cancel_lost': 83598, 'reconcile': 38165, 'overshoot': 222085, 'refused_by_grants_only': 76467}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 325334 states
+no violations
+rc=0
+== python3 -I check5.py stages5  (2026-11-15 13:18, run 4)
+FOUND BR implement launch of a withdrawn tranche
+progress 100000 states, frontier 80102, 13s
+progress 200000 states, frontier 134022, 26s
+progress 300000 states, frontier 186550, 38s
+progress 400000 states, frontier 223374, 51s
+progress 500000 states, frontier 273060, 63s
+progress 600000 states, frontier 296064, 76s
+progress 700000 states, frontier 340194, 88s
+progress 800000 states, frontier 369791, 99s
+progress 900000 states, frontier 383341, 112s
+progress 1000000 states, frontier 418182, 123s
+progress 1100000 states, frontier 450347, 136s
+progress 1200000 states, frontier 454315, 147s
+progress 1300000 states, frontier 474525, 161s
+progress 1400000 states, frontier 499448, 172s
+progress 1500000 states, frontier 525025, 183s
+progress 1600000 states, frontier 537186, 198s
+progress 1700000 states, frontier 543692, 208s
+progress 1800000 states, frontier 553006, 219s
+progress 1900000 states, frontier 571051, 235s
+progress 2000000 states, frontier 585911, 246s
+progress 2100000 states, frontier 594596, 257s
+progress 2200000 states, frontier 591259, 268s
+progress 2300000 states, frontier 605822, 279s
+rc=124
+== python3 -I check5.py stages5 --stop  (2026-11-15 13:23, run 5, amendment 3)
+FOUND BR implement launch of a withdrawn tranche
+stopped at first violation after 109 states
+    ('Approve', 0, 0)
+    ('PreApprove', 0, 1, False)
+    ('BacklogRemove', 0, 1)
+    ('Run', 0)
+rc=0
+== python3 -I check5.py stages5  (2026-11-15 13:23, run 6, amendment 4)
+progress 100000 states, frontier 60212, 11s
+progress 200000 states, frontier 97448, 21s
+progress 300000 states, frontier 126343, 31s
+progress 400000 states, frontier 151143, 41s
+progress 500000 states, frontier 167546, 51s
+progress 600000 states, frontier 180228, 61s
+progress 700000 states, frontier 191669, 71s
+progress 800000 states, frontier 196823, 82s
+progress 900000 states, frontier 203934, 91s
+progress 1000000 states, frontier 206102, 101s
+progress 1100000 states, frontier 209989, 110s
+progress 1200000 states, frontier 211305, 121s
+progress 1300000 states, frontier 211995, 130s
+progress 1400000 states, frontier 213308, 139s
+progress 1500000 states, frontier 212045, 150s
+progress 1600000 states, frontier 214991, 159s
+progress 1700000 states, frontier 209325, 168s
+progress 1800000 states, frontier 212949, 180s
+progress 1900000 states, frontier 205101, 188s
+progress 2000000 states, frontier 208233, 197s
+progress 2100000 states, frontier 200041, 209s
+progress 2200000 states, frontier 202759, 218s
+progress 2300000 states, frontier 194921, 227s
+progress 2400000 states, frontier 196486, 236s
+progress 2500000 states, frontier 188870, 249s
+progress 2600000 states, frontier 189387, 258s
+progress 2700000 states, frontier 181723, 267s
+progress 2800000 states, frontier 180534, 276s
+rc=124
+== python3 -I check5.py stages5  (2026-11-15 13:28, run 7, amendment 5)
+progress 100000 states, frontier 57998, 10s
+progress 200000 states, frontier 92433, 20s
+progress 300000 states, frontier 116928, 30s
+progress 400000 states, frontier 135068, 39s
+progress 500000 states, frontier 147985, 49s
+progress 600000 states, frontier 156000, 59s
+progress 700000 states, frontier 157259, 68s
+progress 800000 states, frontier 159091, 78s
+progress 900000 states, frontier 158365, 87s
+progress 1000000 states, frontier 155381, 97s
+progress 1100000 states, frontier 150721, 105s
+progress 1200000 states, frontier 144517, 116s
+progress 1300000 states, frontier 136995, 124s
+progress 1400000 states, frontier 128783, 132s
+progress 1500000 states, frontier 119288, 143s
+progress 1600000 states, frontier 110820, 151s
+progress 1700000 states, frontier 102652, 159s
+progress 1800000 states, frontier 94804, 170s
+progress 1900000 states, frontier 85494, 178s
+progress 2000000 states, frontier 77439, 186s
+progress 2100000 states, frontier 69195, 198s
+progress 2200000 states, frontier 59504, 206s
+progress 2300000 states, frontier 48647, 214s
+progress 2400000 states, frontier 36375, 222s
+progress 2500000 states, frontier 23052, 229s
+progress 2600000 states, frontier 11932, 241s
+scope stages5: states explored: 2685064; launch transitions: 342508; finished states: 127152; bounded states: 2317408; 247s
+counters: {'waived_launch': 159792, 'waived_over_rules': 140544, 'waived_after_swap': 75444, 'waiver_expired': 278440, 'tight_launch': 7388, 'loose_skips_rule2': 9964, 'tight_rule2_refusal': 6688, 'stacked_launch': 12492, 'sb_and_live_launch': 19850, 'swapped_launch': 167616, 'unwind': 61456, 'backlog_removed': 666976, 'sb_hold': 50312, 'sb_consumed': 66616, 'preapproved_end': 111768}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0

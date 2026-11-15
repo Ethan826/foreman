@@ -172,7 +172,13 @@ rule: the test failed).
 
 Added 2026-11-15. No new package: both ship inside the pinned `effect`.
 
-- Why: durable workflows. Queues between stages (`DurableQueue`), approvals
+- Status: not used. The owner's ruling on design revision 4 (2026-11-15)
+  keeps foreman's hand-built log and recovery on SQLite: these modules run
+  activities at least once with automatic retries, accept the first
+  completion of a durable deferred without a match check, and give the
+  durable queue no bound, and foreman needs the opposite of each. This
+  entry and the tripwire stay so the question can be reopened.
+- Why it was evaluated: durable workflows. Queues between stages (`DurableQueue`), approvals
   as durable deferreds (`DurableDeferred`), reset timers (`DurableClock`),
   with `Workflow`, `Activity` and `WorkflowEngine` on top. `effect/cluster`
   supplies the engine and storage: `SingleRunner`, `SqlMessageStorage`,
@@ -180,8 +186,9 @@ Added 2026-11-15. No new package: both ship inside the pinned `effect`.
   `RunnerStorage`.
 - Stability: every module in both folders (50 files, including the index
   files) has `@stability unstable` in its module doc comment, and Effect
-  may change or remove them in any release. The owner accepted building on
-  them on 2026-11-15 with that status known.
+  may change or remove them in any release. The owner had accepted that
+  status on 2026-11-15 when asking for the evaluation; the later ruling
+  above declined to build on them.
 - Tripwire: `test/docs/stability-watch.test.ts` compares the installed
   effect's module-level `@stability` and `@since` tags, the module list and
   the effect version with `docs/stability-watch.json`. A mismatch fails the
