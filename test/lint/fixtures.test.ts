@@ -153,10 +153,18 @@ describe("lint fixtures", () => {
             : [`${file}: ${want.ruleId} ${want.message ?? ""}`],
         ),
       )
-      const parseErrors = Object.values(linted).flatMap((result) =>
-        result.messages.filter((found) => found.ruleId === null),
+      const parseErrors = Object.entries(linted).flatMap(([file, result]) =>
+        result.messages
+          .filter((found) => found.ruleId === null)
+          .map((found) => `${file}:${String(found.line)}: ${found.message}`),
       )
-      expect(missing).toEqual([])
+      const reported = Object.entries(mustFail).flatMap(([file]) =>
+        (linted[file]?.messages ?? []).map((found) => `${file}: ${found.ruleId ?? "parse"}: ${found.message}`),
+      )
+      expect({ missing, reported: missing.length === 0 ? [] : reported }).toEqual({
+        missing: [],
+        reported: [],
+      })
       expect(parseErrors).toEqual([])
     }),
     120_000,
@@ -165,7 +173,14 @@ describe("lint fixtures", () => {
   it.effect("each clean control reports nothing", () =>
     Effect.gen(function* () {
       const linted = yield* lintFixtures
-      const dirty = clean.filter((file) => (linted[file]?.messages.length ?? 1) !== 0)
+      const dirty = clean.flatMap((file) => {
+        const result = linted[file]
+        return result === undefined
+          ? [`${file}: not linted`]
+          : result.messages.map(
+              (found) => `${file}:${String(found.line)}: ${found.ruleId ?? "parse"}: ${found.message}`,
+            )
+      })
       expect(dirty).toEqual([])
     }),
     120_000,
