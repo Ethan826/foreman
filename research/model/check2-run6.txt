@@ -1,0 +1,7 @@
+progress 200000 states, frontier 30610, 68s
+progress 400000 states, frontier 14419, 138s
+states explored: 439056; launch transitions: 17280; bounded states: 219096; 151s
+most holds at once: 1; states with a waiver for another provider's step: 0
+liveness: states with no path to a launch or approval release: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations

@@ -1,0 +1,19 @@
+states explored: 97932; launch transitions: 10308
+deadlocked states (no path to a launch or approval release): 38022
+DEADLOCK holds=[] step=impl inflight=None head=1 expected=0 rounds=0
+   trace: (('Drift',),)
+DEADLOCK holds=[('quota', 'claude')] step=impl inflight=None head=1 expected=0 rounds=0
+   trace: (('Run',), ('Drift',))
+DEADLOCK holds=[('failure', 'drift')] step=impl inflight=None head=1 expected=0 rounds=0
+   trace: (('Drift',), ('Run',))
+DEADLOCK holds=[('failure', 'op')] step=impl inflight=None head=1 expected=0 rounds=0
+   trace: (('Observe', 'claude', 'allow'), ('Run',), ('Exit', 'changes'), ('Drift',))
+DEADLOCK holds=[] step=review inflight=None head=2 expected=1 rounds=0
+   trace: (('Observe', 'claude', 'allow'), ('Run',), ('Crash',), ('Reconcile', 'accept'), ('Drift',))
+DEADLOCK holds=[('quota', 'codex')] step=review inflight=None head=2 expected=1 rounds=0
+   trace: (('Observe', 'claude', 'allow'), ('Run',), ('Crash',), ('Reconcile', 'accept'), ('Run',), ('Drift',))
+DEADLOCK holds=[('failure', 'drift')] step=review inflight=None head=2 expected=1 rounds=0
+   trace: (('Observe', 'claude', 'allow'), ('Run',), ('Crash',), ('Reconcile', 'accept'), ('Drift',), ('Run',))
+DEADLOCK holds=[] step=correct inflight=None head=2 expected=1 rounds=1
+   trace: (('Observe', 'claude', 'allow'), ('Run',), ('Crash',), ('Reconcile', 'accept'), ('Observe', 'codex', 'allow'), ('Run',), ('Exit', 'changes'), ('Drift',))
+no violations

@@ -1,0 +1,86 @@
+== python3 -I check3.py recovery  (2026-11-14 17:56)
+progress 100000 states, frontier 35433, 22s
+progress 200000 states, frontier 48876, 44s
+progress 300000 states, frontier 55146, 66s
+progress 400000 states, frontier 54064, 88s
+progress 500000 states, frontier 48288, 110s
+progress 600000 states, frontier 35628, 133s
+progress 700000 states, frontier 12891, 155s
+scope recovery: states explored: 733728; launch transitions: 8040; bounded states: 471648; 164s
+counters: {'maxholds': 2, 'waivmis': 0, 't1': 57920, 't2': 185088, 'e1': 1728, 'nested': 112448, 'fail_and_drift': 0, 'uncertain_and_quota': 0}
+liveness: states with no path to a launch or approval release: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0
+== python3 -I check3.py quota  (2026-11-14 17:59)
+progress 100000 states, frontier 30491, 26s
+progress 200000 states, frontier 39791, 52s
+progress 300000 states, frontier 45557, 78s
+progress 400000 states, frontier 44055, 106s
+progress 500000 states, frontier 32412, 134s
+progress 600000 states, frontier 10688, 161s
+scope quota: states explored: 626256; launch transitions: 13208; bounded states: 399648; 168s
+counters: {'maxholds': 1, 'waivmis': 0, 't1': 26272, 't2': 170496, 'e1': 0, 'nested': 52576, 'fail_and_drift': 0, 'uncertain_and_quota': 0}
+liveness: states with no path to a launch or approval release: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0
+== python3 -I check3.py tranches  (2026-11-14 18:02)
+progress 100000 states, frontier 24861, 19s
+progress 200000 states, frontier 37461, 37s
+progress 300000 states, frontier 43089, 56s
+progress 400000 states, frontier 43884, 75s
+progress 500000 states, frontier 40723, 94s
+progress 600000 states, frontier 35757, 112s
+progress 700000 states, frontier 25514, 131s
+progress 800000 states, frontier 8245, 150s
+scope tranches: states explored: 824592; launch transitions: 2632; bounded states: 545664; 155s
+counters: {'maxholds': 2, 'waivmis': 0, 't1': 0, 't2': 0, 'e1': 1728, 'nested': 0, 'fail_and_drift': 0, 'uncertain_and_quota': 0}
+liveness: states with no path to a launch or approval release: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0
+
+######## AMENDMENT 8 (revision 3.1, approve --base), 2026-11-15; runs above are before it ########
+== python3 -I check3.py recovery  (2026-11-15 10:43, amendment 8)
+progress 100000 states, frontier 35970, 22s
+progress 200000 states, frontier 48144, 44s
+progress 300000 states, frontier 54386, 66s
+progress 400000 states, frontier 54150, 88s
+progress 500000 states, frontier 49418, 111s
+progress 600000 states, frontier 36352, 134s
+progress 700000 states, frontier 14386, 159s
+scope recovery: states explored: 738912; launch transitions: 8040; bounded states: 472032; 169s
+counters: {'maxholds': 2, 'waivmis': 0, 't1': 57920, 't2': 185088, 'e1': 1728, 'nested': 112640, 'fail_and_drift': 0, 'uncertain_and_quota': 0, 'base': 192}
+liveness: states with no path to a launch or approval release: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0
+== python3 -I check3.py quota  (2026-11-15 10:46, amendment 8)
+progress 100000 states, frontier 30491, 26s
+progress 200000 states, frontier 39791, 52s
+progress 300000 states, frontier 45557, 78s
+progress 400000 states, frontier 44055, 105s
+progress 500000 states, frontier 32412, 133s
+progress 600000 states, frontier 10688, 160s
+scope quota: states explored: 626256; launch transitions: 13208; bounded states: 399648; 167s
+counters: {'maxholds': 1, 'waivmis': 0, 't1': 26272, 't2': 170496, 'e1': 0, 'nested': 52576, 'fail_and_drift': 0, 'uncertain_and_quota': 0, 'base': 0}
+liveness: states with no path to a launch or approval release: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0
+== python3 -I check3.py tranches  (2026-11-15 10:49, amendment 8)
+progress 100000 states, frontier 23433, 21s
+progress 200000 states, frontier 36622, 41s
+progress 300000 states, frontier 42086, 62s
+progress 400000 states, frontier 43499, 82s
+progress 500000 states, frontier 41199, 104s
+progress 600000 states, frontier 35425, 124s
+progress 700000 states, frontier 26247, 145s
+progress 800000 states, frontier 9939, 165s
+scope tranches: states explored: 831120; launch transitions: 2632; bounded states: 549504; 171s
+counters: {'maxholds': 2, 'waivmis': 0, 't1': 0, 't2': 0, 'e1': 1728, 'nested': 0, 'fail_and_drift': 0, 'uncertain_and_quota': 0, 'base': 2496}
+liveness: states with no path to a launch or approval release: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+rc=0
