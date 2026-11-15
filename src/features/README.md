@@ -1,6 +1,6 @@
 # Features
 
-Built. Pure decision functions. Only pacing exists so far, and it is provisional until the design is approved. Back to [how it works](../../docs/how-it-works.md).
+Pure decision functions. Only pacing exists, and it is provisional until the design is approved. Back to [how it works](../../docs/how-it-works.md).
 
 May import: `domain`.
 
@@ -55,4 +55,4 @@ Details the flowchart leaves out:
 - A reading stamped after `now` is unusable (owner ruling, 2026-11-14).
 - A provider whose policy lists no windows is Unknown, never Allow. The default Codex policy lists none until live test L2.
 - `Allows`, `Fails` and `Unusable` are internal judgments and are not exported.
-- `estimate` is a parameter. How it is built from finished steps is planned and belongs to the shell.
+- `estimate` is a parameter. How it is computed from finished steps belongs to the shell.

@@ -1,6 +1,6 @@
 # Program
 
-Planned. No code. Back to [how it works](../../docs/how-it-works.md).
+See [how it works](../../docs/how-it-works.md).
 
 May import: `domain`, `features`, `format`, `runtime`.
 

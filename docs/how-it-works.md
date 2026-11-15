@@ -2,13 +2,11 @@
 
 Read the [README](../README.md) first. This page shows how the pieces fit, with diagrams, so you can follow the design before reading the code.
 
-## What is built and what is planned
+## Status
 
-Almost all of the runtime behavior described below is **planned**. The design is an unapproved draft (revision 3), and nothing runs agents yet. The first code slice contains the Domain types, the Format decoders for Claude and Codex output, and the pure pacing function `pace` (provisional until the design is approved). The event log, process control and git handling are planned, as are holds, recovery and the CLI.
+The code is a first slice: the Domain types, the Format decoders for Claude and Codex output, the pure pacing function `pace` (provisional until the design is approved), and tests for them. Nothing runs agents yet. Everything else on this page describes the design, an unapproved draft (revision 3): the event log, process control, git handling, holds, recovery and the CLI. The source is [the design](plans/2026-11-14-agent-supervisor-design.md), which is still under review and may change.
 
-Each diagram below is labeled **built** or **planned**. A planned diagram draws what the design text says; the code for it does not exist yet. The source is [the design](plans/2026-11-14-agent-supervisor-design.md), which is still under review and may change.
-
-## One tranche (planned)
+## One tranche
 
 A tranche is a unit of work the owner names in a task file. The diagram follows the default roles: Claude implements and corrects, Codex reviews. The owner can configure which client fills each role.
 
@@ -66,9 +64,9 @@ Points the diagram compresses:
 - The design text still has the agents sharing the owner's working tree. The owner ruled on 2026-11-15 that every agent step runs in a supervisor-owned linked worktree on its own branch, so the owner's edits cannot be committed as an agent's step. The design text has not been updated to match.
 - The four records named in the task (Intended, Launched, Finished, Committed) are events in an append-only log in SQLite. State is a fold over that log. A crash or restart reads the log to find its place.
 
-## One launch attempt (planned, pacing call built)
+## One launch attempt
 
-Before every step, the process that holds the instance lock runs the launch-attempt procedure. The numbers follow the design's list. A refusal or a created hold stops the attempt and consumes or expires the armed waiver, if any. The pure `pace` function in the diagram is the **built** part: see [src/features](../src/features/README.md).
+Before every step, the process that holds the instance lock runs the launch-attempt procedure. The numbers follow the design's list. A refusal or a created hold stops the attempt and consumes or expires the armed waiver, if any. The pure `pace` function in the diagram is the one part that has code: see [src/features](../src/features/README.md).
 
 ```mermaid
 sequenceDiagram
@@ -76,7 +74,7 @@ sequenceDiagram
     participant H as Lock holder
     participant L as Event log
     participant G as Files and git
-    participant P as pace (pure, built)
+    participant P as pace (pure)
     participant A as Agent process
 
     H->>L: fold the log at its current position
@@ -118,7 +116,7 @@ sequenceDiagram
 
 A launch attempt creates at most one hold, and only when it found none (rule H1).
 
-## Holds (planned)
+## Holds
 
 A launch is allowed only when the hold set is empty and no request is pending. Holds are keyed by reason and several can exist at once. Each is removed only by its own release event, and one release removes only its own hold. Clock ticks and notifier timeouts never release any hold.
 
@@ -175,11 +173,11 @@ stateDiagram-v2
 
 The Quota release rule has one more condition: a reading counts as post-hold only if it was also ingested after the hold was appended. An approval for one tranche and revision does not release a hold for another. A tranche that ends as `notConverged` creates only the approval hold.
 
-The Domain hold types are not written yet. [`src/domain/holds.ts`](../src/domain/holds.ts) is an empty placeholder until the event grammar is approved.
+[`src/domain/holds.ts`](../src/domain/holds.ts) is empty until the event grammar is approved; the Domain hold types will go there.
 
 ## How pacing works
 
-The `pace` function itself is **built** and provisional. The inputs it needs from the shell are **planned**. See [src/features](../src/features/README.md) for the flowchart.
+The `pace` function is provisional, and the shell will supply its inputs. See [src/features](../src/features/README.md) for the flowchart.
 
 In plain words:
 
@@ -187,14 +185,14 @@ In plain words:
 - Pacing reads observed usage windows. For Claude the policy lists the five-hour and weekly windows. Only the windows in the policy are checked, whatever readings exist. The Codex windows are unknown until live test L2, so the default Codex policy lists none and every Codex launch needs a waiver.
 - For each window the reading with the latest `observedAt` is used, even if it is unusable, and an older reading never stands in. A reading is usable if it is no older than the freshness limit (default 10 minutes), is not stamped in the future, and has not passed its reset time.
 - A window allows a launch when used percent plus the step's estimated cost stays at or below 100 minus the reserve. The defaults, confirmed by the owner on 2026-11-14 and configurable, are a 30 percent reserve on the five-hour window and 40 percent on the weekly window.
-- The estimate is planned. The design takes the role's last five finished steps, uses the largest measured increase in the window, and falls back to an initial estimate of 15 points when none was measured. Today `pace` takes the estimate as a parameter.
+- The estimate comes from measured step costs. The design takes the role's last five finished steps, uses the largest measured increase in the window, and falls back to an initial estimate of 15 points when none was measured. Today `pace` takes the estimate as a parameter.
 - The answer is one of three. Allow only if every policy window has a usable reading that allows. Hold if any usable reading fails. Otherwise Unknown, for example when readings are missing or stale. Unknown never turns into Allow by waiting. A Hold or an Unknown creates a Quota hold, and the owner can `waive` one launch.
 
 ## Where to read next
 
-- [`src/domain`](../src/domain/README.md): the built types, with class diagrams.
-- [`src/format`](../src/format/README.md): the built decoders.
+- [`src/domain`](../src/domain/README.md): the types, with class diagrams.
+- [`src/format`](../src/format/README.md): the decoders.
 - [`src/features`](../src/features/README.md): `pace`, with a flowchart.
-- [`src/runtime`](../src/runtime/README.md), [`src/program`](../src/program/README.md), [`src/facade`](../src/facade/README.md): planned layers, no code yet.
+- [`src/runtime`](../src/runtime/README.md), [`src/program`](../src/program/README.md), [`src/facade`](../src/facade/README.md): the layers for the Effect shell, the wiring and the CLI.
 - [The design](plans/2026-11-14-agent-supervisor-design.md): Scope, Holds, Pacing, Operations and recovery, Context per step.
 - [Dependency intake](dependency-intake.md): why each package is there.

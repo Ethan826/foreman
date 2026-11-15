@@ -1,6 +1,6 @@
 # Runtime
 
-Planned. No code, and not approved until the design is. Back to [how it works](../../docs/how-it-works.md).
+See [how it works](../../docs/how-it-works.md).
 
 May import: `domain`.
 
