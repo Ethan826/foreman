@@ -12,7 +12,7 @@ owner approved a first code slice only: project setup, Domain types,
 Format decoders and the pure pacing function (provisional until the
 design is approved). Runtime, process control, git handling,
 permissions, storage and recovery code are not approved. `bun run check`
-(tsc and ESLint) and `bun run test` must pass before any commit.
+(tsc, ESLint and the prose gate) and `bun run test` must pass before any commit.
 
 Pending live tests that must update code when they run: L1 (Claude
 usage reading and `rate_limit_event` shape: update `src/format/claude.ts`),
@@ -87,7 +87,10 @@ record conceptual provenance. Waxwing is not a dependency or submodule.
 
 ## Writing
 
-American spelling. Run the humanizer skill on README prose.
+American spelling. Run the humanizer skill on README prose. `bun run prose`
+(part of `bun run check`) runs the tell linter in `tools/prose/` over every
+Markdown file outside `docs/plans/`, and a blocking finding fails the check;
+fix the wording rather than adding a keep entry.
 
 <!-- agent-baseline:start v2 -->
 ## Agent baseline

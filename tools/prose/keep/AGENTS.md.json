@@ -1,0 +1,31 @@
+[
+  {
+    "rule": "bold-label",
+    "all": true,
+    "reason": "vendored agent-baseline block (v2) between the agent-baseline markers; the file says to edit its source in the skills repository, and its drift check compares the block verbatim. The source itself has the same ten findings. All ten bold-label findings in this file are inside the block; tell_lint reports them on the preceding line, so a text-pinned entry cannot match them."
+  },
+  {
+    "rule": "not-tail",
+    "text": "edit its source, not here",
+    "count": 1,
+    "reason": "vendored agent-baseline block text; see the bold-label entry"
+  },
+  {
+    "rule": "not-just",
+    "text": "not only the one pointed at",
+    "count": 1,
+    "reason": "vendored agent-baseline block text; see the bold-label entry"
+  },
+  {
+    "rule": "definition-opener",
+    "text": "A check is a floor",
+    "count": 1,
+    "reason": "vendored agent-baseline block text; see the bold-label entry"
+  },
+  {
+    "rule": "triad",
+    "text": "denied, stop and quote",
+    "count": 1,
+    "reason": "vendored agent-baseline block text; see the bold-label entry"
+  }
+]
