@@ -1,12 +1,18 @@
 # Agent supervisor: short design
 
-2026-11-14. Status: DRAFT (revision 3.1), awaiting final review. Revision 1
+2026-11-14. Status: DRAFT (revision 4), awaiting final review. Revision 1
 was rejected by adversarial review (see "Review 2026-11-14" at the end).
 Revision 2 was approved with nine required fixes by a second review (see
 "Re-review 2026-11-14 (revision 2)", with the table of how revision 3
 answers each fix). Revision 3.1 (2026-11-15) applies the owner ruling
 that agents run in a supervisor-owned linked worktree (see "Owner ruling
-2026-11-15" near the end; the new rules are under "Supervisor worktree").
+2026-11-15" near the end; the new rules are under "Supervisor worktree"). Revision 4
+(2026-11-15) designs the owner rulings on a shared usage ledger,
+scheduling and durable workflows (last section): new sections "Usage
+ledger", "Stages, review queue and scheduler", "Pre-approved backlog",
+"Role-swap suggestions" and "Durable layer", model check M4, and edits
+to the scope, holds, launch attempt, claims, restrictions, provenance,
+live tests and open items.
 No repository, dependency install, build, live model call or message send
 is approved.
 Decision record: [standalone direction](2026-11-14-agent-supervisor-decision.md).
@@ -15,8 +21,9 @@ D1-D4, P1-P6) are prefixed "R-" below to keep the two apart.
 
 ## Scope
 
-One supervisor process on the user's Mac drives one target repository
-through tranches. A tranche is a unit of work the user names, written as
+One supervisor process per target repository on the user's Mac drives
+that repository through tranches; the processes for different
+repositories share one usage ledger (see "Usage ledger"). A tranche is a unit of work the user names, written as
 a task file in the target repository. Inside a tranche the cycle is:
 
 1. Claude implements (fresh `claude -p` process).
@@ -27,7 +34,8 @@ a task file in the target repository. Inside a tranche the cycle is:
    abandonment, or when a review still asks for changes after
    `maxCorrectionRounds` corrections (recorded as `notConverged`; ruling
    1, 2026-11-14: no extra rounds). Nothing further runs until the user
-   approves.
+   approves, unless the next tranche was approved ahead of time (see
+   "Pre-approved backlog").
 
 Which client fills each role (implementer, reviewer, corrector) is
 configuration, decided by the user on 2026-11-14; Claude implements and
@@ -43,8 +51,9 @@ repository, on the supervisor's branch, never in the owner's checkout
 "HEAD" and "the recorded revision" mean that worktree and branch unless
 the owner's checkout is named.
 
-One operation runs at a time, and one `run` instance at a time (see
-"Single instance"). No parallel graph, web UI, multi-user service or
+In each project one operation runs at a time, and one `run` instance at
+a time (see "Single instance"); projects run in parallel and meet only
+in the ledger. No parallel graph, web UI, multi-user service or
 phone channel in the first version.
 
 ## Research results used here
@@ -72,7 +81,8 @@ against the fetched pages. The client versions they saw disagree (see
   commands)` plus the pure pacing and classification functions below.
   Total over every state and event. The protected-path rule is a pure
   function of the approval record, the recorded protected digest and the
-  current one.
+  current one. Revision 4 adds pure functions for scheduling, admission
+  and the rate fit (see the revision-4 sections below).
 - **Format:** decoders for Claude stream-json and Codex JSONL, the
   handoff file, and the stored event records.
 - **Runtime (Effect):** process launch in a new process group, SQLite
@@ -80,10 +90,12 @@ against the fetched pages. The client versions they saw disagree (see
   protected-set walk and digest, worktree creation, git reads and the
   commit/reset procedures (all in the clean git environment below, against
   the supervisor worktree), the notifier (a log notifier in the first
-  version).
+  version), and, from revision 4, the shared ledger store and the review
+  worktree.
 - **Program:** wires capabilities into use cases.
 - **Facade:** CLI commands `status`, `approve` (optionally `--base`), `reconcile`, `waive`,
-  `release`, `release-protected`, `adopt`, `restore`, `run`. Converts input
+  `release`, `release-protected`, `adopt`, `restore`, `run`, and from
+  revision 4 `backlog`, `roles`, `spend-down` and `ledger`. Converts input
   to events; makes no decisions.
 
 State is a fold over an append-only event log in SQLite. Commands are
@@ -225,8 +237,9 @@ them.
 
 ## Holds (S7)
 
-A launch is allowed only when the hold set is empty and no request is
-pending. Holds are keyed by reason, and each is removed only by its own
+A launch is allowed only when no hold blocks it and no request is
+pending. A `Quota(provider, ...)` hold blocks only that provider's steps
+(revision 4); every other hold blocks every launch. Holds are keyed by reason, and each is removed only by its own
 release event. Several can exist at once: a failed step that also changed
 a protected file gets a `Failure` and a `Protected` hold, and a restart
 after a crash can create `Uncertain` and `Protected` together. Model check
@@ -235,7 +248,7 @@ removes only its own hold.
 
 | Hold | Created by | Released only by |
 |---|---|---|
-| `Approval(tranche, revision)` | the tranche ended: passing review, `notConverged`, or `abandon`; and at first start, for the starting tranche at the initial revision | `Approved(tranche, revision, permits, base?)` from the CLI with both fields matching the hold. `permits` is the protected-path permission for the next tranche (below); `base`, if given, also appends a `BaseRequested` request (see "Supervisor worktree"). |
+| `Approval(tranche, revision)` | the tranche ended: passing review when the next tranche is neither pre-approved nor started (revision 4), `notConverged`, or `abandon`; and at first start, for the starting tranche at the initial revision | `Approved(tranche, revision, permits, base?)` from the CLI with both fields matching the hold. `permits` is the protected-path permission for the next tranche (below); `base`, if given, also appends a `BaseRequested` request (see "Supervisor worktree"). |
 | `Quota(provider, windows, heldAt)` | pacing says Hold or Unknown at a launch attempt (`windows` = the policy windows without a usable allowing reading), or a `rateLimited` outcome (`windows` = the window the rate-limit event names, else every policy window of the provider) | for every window in `windows`, either the newest reading of that window has `observedAt > heldAt` and allows, or the reset time reported for that window has passed; or `Waived(provider, waiverId)` from the CLI (fix 8) |
 | `Uncertain(opId)` | startup finds an unsettled operation (rules below) | completion of `reconcile <opId> discard` or `abandon`, or `Reconciled(opId, accept)`, naming that held opId (fix 2) |
 | `Failure(opId, class)` | a classified failure other than rate limit, a refused commit (head moved), or a commit failure | `Released(opId)` from the CLI |
@@ -247,8 +260,10 @@ for one tranche and revision does not release a hold for another.
 `notConverged` creates only the approval hold; there is no failure hold
 to release and no way to add rounds within the tranche (ruling 1).
 
-Hold creation rule H1 (fix 6, checked by M3): a launch attempt creates at
-most one hold, and only when it found none. Other holds come from the
+Hold creation rule H1 (fix 6, checked by M3; revision 4 by M4): a launch
+attempt creates at most one hold, and only when it found none that
+blocks every launch (a quota hold for one provider does not stop an
+attempt from holding the other). Other holds come from the
 outcome of the operation in flight, from startup, or from a compare
 point.
 
@@ -259,16 +274,20 @@ flight:
 
 1. If a request is pending, perform it (see "Requests"); this is not a
    launch attempt.
-2. If any hold exists, append a refusal. The armed waiver, if any,
-   expires.
+2. If any hold other than a quota hold exists, append a refusal. The
+   armed waiver, if any, expires.
 3. Compare the protected digest (no git command has run yet). On a change
    not permitted, create `Protected` and stop.
 4. Read the supervisor worktree's HEAD and tree state against the
    recorded revision (below). If HEAD differs or the tree is not clean, create `Drift` and
    stop.
-5. If a waiver is armed for the step's provider, launch with it.
-6. If pacing allows, launch; otherwise create `Quota` naming the
-   blocking windows.
+5. If a waiver is armed for the provider of the scheduler's first
+   candidate, launch that candidate with it.
+6. Otherwise the scheduler (see "Stages, review queue and scheduler")
+   takes the candidates in deadline order, skips those under a quota hold
+   for their provider, and launches the first that passes the admission
+   rule; if none passes, it creates `Quota` for the first refused by rule
+   1 (naming the blocking windows), or waits.
 
 Steps 2-6 each consume or expire the armed waiver.
 
@@ -364,7 +383,9 @@ Unknown`, pure.
   (defaults 30 percent of the five-hour window, 40 percent of the weekly
   window), freshness (default 10 minutes) and `initialEstimate` (default
   15 points). Defaults confirmed by the user on 2026-11-14; the reserve
-  must stay configurable.
+  must stay configurable. Revision 4 moves the reserve to the shared
+  ledger, where a spend-down can raise the cap for one period (see "Usage
+  ledger").
 
 Clock basis (fix 9). `heldAt` and `now` are the supervisor's local wall
 clock. `observedAt` is the local wall clock of the process that took the
@@ -418,17 +439,356 @@ launch after a quiet period may be Unknown. The supervisor then holds,
 and the user can `waive` one launch. Unknown never becomes Allow by
 waiting.
 
+## Usage ledger (revision 4)
+
+The owner rulings of 2026-11-15 (end of this document) add a usage ledger
+that every foreman instance on the Mac shares. There is one foreman per
+target repository. A *project* below is one such repository with its own
+`<stateDir>`, event log, lock and supervisor worktree; everything in
+revision 3.1 stays per project, and the ledger is the only state the
+projects share.
+
+### Where the ledger lives and how instances coordinate
+
+- One SQLite database, `<ledgerDir>/ledger.sqlite` (configuration, default
+  `~/.foreman/`), in WAL mode. At its first start a project appends
+  `LedgerBound(path)` to its own log; a later start with another ledger
+  path stops and reports, so a project cannot move to another ledger
+  unnoticed.
+- The ledger holds append-only tables, one per record kind (`readings`,
+  `periods`, `reserves`, `allocations`, `spendDowns`, `grants`, `charges`,
+  `grantCancellations`). Each project's log keeps its own review queue
+  and backlog, and its roles and suggestions.
+- Every ledger write is one `BEGIN IMMEDIATE` transaction. SQLite takes
+  the write lock when such a transaction begins, so two instances'
+  admissions run one after the other: each reads the totals and appends
+  its grant inside the same transaction. No instance leads; an instance
+  waits for another only on that lock (`busy_timeout`, default 5
+  seconds; a timeout ends the launch attempt with nothing launched, and
+  the next attempt tries again).
+- Admission reserves before it spends (the escrow method below). The
+  instance appends `Grant(grantId, project, opId, provider, estimate per
+  window, period keys)` to the ledger, then `Intended(..., grantId)` to its
+  own log. The two databases share no transaction (SQLite does not make a
+  commit across attached databases atomic in WAL mode), so a crash
+  between the two appends leaves a grant with no `Intended`. The project's
+  next startup cancels its own such grants (`GrantCancelled`); until then
+  the grant counts at its estimate, which overstates use. A finished
+  operation's grant is settled by `Charged(grantId, tokens, charge per
+  window)`. An operation held `Uncertain` keeps its grant at the estimate
+  until it is reconciled; one with no run report is charged its estimate.
+- The ledger has no log-position check: each transaction re-reads
+  everything it decides on. The project log keeps its lock and
+  compare-and-append as in 3.1.
+
+### Periods
+
+A period is one instance of a provider's window, keyed by its reset time:
+`(provider, window, resetsAt)`.
+
+- A new period opens when an ingested reading has a reset time later
+  than the current key by more than `resetTolerance` (default 5 minutes);
+  when a reading of the current period shows usage lower than that
+  period's highest reading by more than `dropTolerance` (default 5
+  points); or on the owner command `ledger reset <provider> <window>`.
+  Each appends `PeriodOpened(provider, window, key, cause)`.
+- Opening a period loosens policy, since use starts over against every
+  allocation and ceiling. Only a reading or an owner command opens one.
+  The clock passing a reset time can only tighten: readings of the old
+  period become unusable (as under "Pacing"), a spend-down for that period
+  ends, a role-swap suggestion that depends on it expires, and launches
+  for that window wait for a reading of the new period. This is the
+  owner's rule that timers may only tighten policy.
+- The 3.1 rule that a quota hold is released once the reset time of every
+  window it names has passed fits this rule. The release only leads to a
+  new pacing check, which needs a fresh reading. With none, the answer
+  is Unknown and the hold returns.
+
+### Allocations, reserve and borrowing
+
+These settings live in the ledger, so every instance reads one copy.
+`ledger reserve <provider> <window> <percent>` and `ledger allocate
+<project> <provider> <window> <percent> [--ceiling <percent>]` append
+them.
+
+- `reserve(p, w)` is the share of window `w` of provider `p` kept for
+  personal use outside foreman. The 3.1 per-project reserve moves here,
+  with the same defaults (30 percent of the five-hour window, 40 percent
+  of the weekly window).
+- `alloc(j, p, w)` is project `j`'s share. The transaction refuses a
+  change that would make the allocations of `p, w` plus its reserve exceed
+  100.
+- `ceiling(j, p, w)` is the most project `j` may use in a period,
+  borrowing included: `alloc ≤ ceiling ≤ 100 − reserve`. It defaults to
+  the allocation, which means no borrowing.
+- `use(j, p, w)` is the sum of project `j`'s charges and open grants in
+  the current period. Foreman's use is the sum over projects.
+
+A project borrows when its use goes above its allocation. It may do so
+while its use stays within its ceiling and foreman's use stays within the
+sum of allocations, so borrowing only takes allocation that other
+projects have not used in this period. No project ever borrows from the
+reserve. Two owner commands can spend it: a waiver (one launch, 3.1) and a
+spend-down (one period, below). A lender gets no protection: allocation
+borrowed early in a period stays used for the rest of it (restrictions
+table, open items).
+
+### Measurement
+
+- Tokens per step: the shell takes each step's token counts from the
+  client's run report and records them in `Finished` and `Charged`.
+  Claude's stream-json `result` message includes a `usage` object (input,
+  output, cache-creation and cache-read tokens); L1 confirms the shape
+  under the subscription login. What Codex reports per run is to be
+  recorded in L2.
+- Rates: for each provider and window, foreman fits `Δu = θ · x + e`
+  over consecutive pairs of readings within one period. `Δu` is the
+  change in `usedPercent`; `x` holds the token counts by class summed over
+  every foreman step, from every project, charged between the two
+  readings, plus the elapsed hours; `e` is noise. The fit is recursive
+  least squares with forgetting factor λ (default 0.99), one update per
+  pair. The token coefficients convert tokens to percent; the
+  elapsed-hours coefficient is the average rate of outside usage.
+- Residual: for each pair, `Δu − θ_tokens · x_tokens` is the usage
+  outside foreman in that interval (the owner's own sessions on the same
+  account). `status` shows it per period.
+- Convergence: a provider window's rates are used once at least
+  `minPairs` (default 10) pairs with nonzero tokens have been fitted, every
+  token coefficient is positive, and the relative standard error of the
+  predicted charge of a typical step, taken from the fit's covariance
+  matrix, is at most `maxRelError` (default 0.2). Until then, and again
+  whenever a later update breaks the condition, that window is in
+  fallback.
+- Fallback: a window in fallback is admitted by launch-time pacing
+  alone, 3.1's `pace` (`src/features/pace.ts`) with the ledger's reserve.
+  Steps are not charged to projects, and no allocation or ceiling is
+  checked for that window. The reserve still bounds every launch against
+  the provider's total reading. Steps still record their tokens,
+  so the fit keeps learning.
+- Charge and estimate: in ledger mode, a finished step's charge in
+  window `w` is `θ_tokens(w) · tokens`. The admission estimate is the
+  charge of the largest token count among the role's last five finished
+  steps (3.1's sliding maximum, now taken over tokens), or
+  `initialEstimate` when there are none.
+
+Budget caps per step. Where a client accepts a budget for one run, the
+step is launched with one. Claude documents a budget limit for print-mode
+runs; L1 records the flag, its unit and whether it stops a step
+mid-turn. If the cap's unit is one the run report also gives, foreman
+fits it like tokens and sets the cap to `capFactor` (default 1.5) times
+the step's admitted headroom (the smallest remaining room over the
+provider's windows), converted with the learned rate. Otherwise no cap is
+set and admission bounds the launch only, as in 3.1. Codex has no known
+cap until L2. A step stopped by its cap is classified `budgetExceeded`,
+which creates a `Failure` hold.
+
+### Admission rule
+
+A step of project `j` for provider `p` may launch only if, for every
+policy window `w` of `p`:
+
+1. **Pacing** (3.1) allows with cap `cap(p, w)`: the newest usable reading
+   has `usedPercent + est(w) ≤ cap(p, w)`, where `cap(p, w)` is the level
+   of a spend-down active for that window's current period, and otherwise
+   `100 − reserve(p, w)`.
+2. **Allocation**, only when `w` is in ledger mode and no spend-down is
+   active on it: `use(j, p, w) + est(w) ≤ ceiling(j, p, w)`, and foreman's
+   use plus `est(w)` is at most the sum of allocations of `p, w`.
+
+The holds must also allow it (see "Holds"). A failure of rule 1 creates a
+`Quota` hold, as in 3.1. A failure of rule 2 creates no hold; the
+scheduler tries its next candidate, and if none passes the project waits.
+Rule 2 can start passing again only through a new period, a spend-down,
+an allocation change or a cancelled grant. Each is a ledger row, and each
+instance's scheduler runs again when the ledger's last row id changes.
+
+Admission bounds launches. Usage itself is unbounded: a running step can
+use more than its estimate; the excess is charged to its project and may make the
+project's later steps wait.
+
+### Spend-down override
+
+`spend-down <provider> [--window <w>] --to <percent>` appends
+`SpendDown(provider, window, level, periodKey)` to the ledger. `window`
+defaults to the provider's longest policy window and `periodKey` is that
+window's current period. The command is refused when the window has no
+usable reading or a spend-down is already active on it. While it is
+active, rule 1 uses `level` as that window's cap and rule 2 is skipped
+for that window. It is active only while the window's current period key
+equals `periodKey` and the clock is before `periodKey`. It therefore ends
+at a detected or manual reset, when the clock passes the reset time, or
+with `spend-down <provider> --cancel`. A level below `100 − reserve`
+tightens. The provider's other windows keep their rules: a weekly
+spend-down leaves the five-hour reserve in force.
+
+## Stages, review queue and scheduler (revision 4)
+
+### Review queue
+
+Each project has a review queue: tranche results waiting for review,
+oldest first, each `(tranche, trancheBase, revision)`. A successful
+implement step's commit (or its `NothingToCommit`) appends
+`ReviewQueued`; a correction's commit replaces its tranche's entry at the
+head. The queue is a fold of the project log, so it survives a crash as
+the rest of the log does.
+
+Bound and backpressure. `reviewQueueBound` (default 2). An implement step
+may launch only while the queue length plus one is at most the bound.
+With bound 1 the cycle is 3.1's: the next tranche starts only after the
+previous one has left the queue. With bound 2 one pre-approved tranche
+may be implemented, stacked on the previous tranche's unreviewed result,
+while that result waits for review.
+
+Review worktree. Reviews run in a second linked worktree,
+`<stateDir>/review`, detached at the revision under review. It is created
+like the supervisor worktree (`git worktree add --lock --detach`), and
+before each review the lock holder checks out the revision there in the
+clean git environment, with the review worktree's own recorded `GIT_DIR`,
+`GIT_WORK_TREE` and `GIT_COMMON_DIR`, and runs the clean check. Its
+`.git` file and its per-worktree git directory join the protected set.
+Stacking needs this worktree: the
+supervisor worktree's HEAD can be ahead of the tranche under review. The
+reviewer's working directory is the review worktree and its profile stays
+read-only.
+
+Unwinding. When the review of the head tranche requests changes, ends in
+`notConverged`, or the tranche is abandoned, every tranche stacked above
+it is unwound before anything else runs. The lock holder performs
+`UnwindRequested(target, atHead)`, where `target` is the head tranche's
+latest revision, exactly as a restore (digest compare, HEAD guard, `git
+reset --hard`, `git clean -fd`), then appends `Unwound(tranches, atHead,
+target)`. The unwound tranches leave the queue, their pre-approvals are
+armed again, and their commits stay findable through the log and the
+reflog. The correction runs next, or the approval hold stands. With bound
+1 nothing is ever stacked and nothing is unwound.
+
+### Scheduler
+
+`schedule(project, ledgerView, now) -> Launch(step) | Hold(reason) |
+Wait(reasons)`, pure. One operation runs at a time per project (C5), so
+the scheduler picks its own project's next step. Projects run in
+parallel, one instance each, and meet only in the ledger.
+
+Candidates, when no hold blocks every launch and no request is pending:
+
+- the correction of the head tranche, if its last review requested
+  changes and rounds remain (it is then the only candidate);
+- the review of the head tranche;
+- the implement step of the next tranche, if that tranche is approved
+  (live or pre-approved) and the bound allows it.
+
+Order: earliest deadline first. A candidate's deadline is its provider's
+reset time for the longest policy window, the period whose unused share
+is lost at the reset. A provider without a known reset time sorts last,
+and a tie goes to the review, which drains the queue. The scheduler
+launches the first candidate in that order that is not under a quota
+hold for its provider and passes the admission rule. If none does, it
+creates a `Quota` hold for the first candidate refused by rule 1 (H1: at
+most one hold per attempt), or else waits.
+
+The short window enters through admission. The five-hour window has its
+own reserve and allocations, so a provider's short-window rate caps every
+project's launches whatever the deadlines say.
+
+Quota holds now block only their provider's steps: under `Quota(codex)` a
+Claude implement step may still launch. Every other hold still blocks
+every launch (holds table).
+
+Published sources: earliest deadline first (Liu and Layland, 1973;
+Jackson's rule for one machine, 1955), applied to the admissible
+candidates; allocations and ceilings are the rate and ceil of a
+hierarchical token bucket class (Devera, HTB, 2002), with a budget per
+period in place of token refill; grants are escrow reservations (O'Neil,
+"The Escrow Transactional Method", 1986); the bounded queue with
+backpressure is the bounded buffer (Dijkstra, 1965), a work-in-progress
+limit in Kanban terms; the rates are recursive least squares (Plackett,
+1950; Ljung and Söderström, 1983).
+
+## Pre-approved backlog (revision 4)
+
+The owner may approve upcoming tranches before they start: `backlog add
+<tranche> [--allow-protected] [--stop-before]` appends
+`PreApproved(tranche, permits, stopBefore)` to the project log. The
+backlog holds at most `backlogMax` (default 3) entries, in order. `backlog
+remove <tranche>` withdraws an entry that has not started; a stacked one
+is unwound first.
+
+- Each tranche still needs its own approval to start: a live `Approved`
+  (3.1) that releases the previous tranche's approval hold, or its own
+  `PreApproved` entry. No tranche starts unless the owner named it.
+- A tranche that ends with a passing review creates no approval hold if
+  the next tranche is pre-approved without `--stop-before` or has already
+  started; the next tranche starts, or carries on if stacked. Otherwise
+  the 3.1 approval hold is created.
+- `notConverged` and `abandon` always create the approval hold, whatever
+  the backlog holds, and unwind stacked tranches. The backlog stays, but
+  nothing starts until the live approval.
+- A pre-approval is used when its tranche's implement step is intended.
+  An unwind arms it again.
+
+Base. A pre-approved tranche always starts on the previous tranche's
+latest revision on the supervisor branch; `--base` exists only on a live
+approval. An approval names what it approves, and a commit the owner has
+not yet delivered to does not exist when the pre-approval is written. A
+symbolic base resolved later, such as "the tip of the owner's branch when
+the tranche starts", would let commits the owner never named reach the
+agents, and it would skip the `git cherry` warning that the base lacks
+tranche commits, which the owner must see when approving. To move the
+work onto a delivered commit, the owner marks the next entry
+`--stop-before`. The tranche before it then ends in an approval hold, and
+the owner approves with `--base` after delivering. That approval also
+releases the `--stop-before` entry, which then starts as if approved live.
+
+Reading of "no speculative work" used here: no work on a tranche the owner
+has not approved. Stacking (bound 2) runs approved work on an unreviewed
+base, and an unwind can discard that work; bound 1 never does (decision
+for the owner, open items).
+
+## Role-swap suggestions (revision 4)
+
+The scheduler computes a suggestion at each launch attempt of a project,
+from the same ledger view. It suggests swapping the implementer (with the
+corrector) and the reviewer when all of these hold:
+
+1. One provider B is the bottleneck: the project has a candidate for B
+   that failed admission or sits under a `Quota(B)` hold, or the review
+   queue is full and B is the reviewer.
+2. The other provider A's longest-window reset comes before B's.
+3. A's headroom in that window, its cap minus its newest reading, is at
+   least `swapThreshold` (default 20 points).
+4. Making A the implementer requires A's editing profile to be marked
+   verified in configuration (an L3 run for that client), since a
+   reviewer's read-only profile does not exercise it.
+
+The scheduler appends `SwapSuggested(id, project, proposedRoles,
+evidence)` when the proposal differs from the last open one, and the
+notifier reports it; `status` shows it with its figures. It expires when
+the earlier of the two resets passes (a timer that only withdraws an
+option). Roles change only through an owner command: `roles swap
+--accept <id>` (refused once expired) or `roles set implementer=<client>
+reviewer=<client>`, each appending `RolesSet(roles, suggestionId?)`. The
+new roles apply from the next launch attempt; a step in flight keeps its
+role and profile.
+
+Permission profiles follow the role. Each `Intended` records the role,
+the client and the profile: the client's editing profile for the
+implementer and the corrector, its read-only profile for the reviewer. A
+swap therefore changes which profile each client runs under; a client
+never edits in the reviewer role. The tranche's protected-path permission
+is unchanged by a swap.
+
 ## Operations, checkpoints and recovery (S5, S6)
 
 For each step:
 
 1. Append `Intended(opId, tranche, step, baseRevision, waiverId?,
-   protectedDigest)` (compare-and-append; the transaction commits before
-   step 2).
+   protectedDigest)`, with `grantId`, `role`, `client` and `profile` from
+   revision 4 (compare-and-append; the transaction commits before step
+   2). The ledger's `Grant` is appended first (see "Usage ledger").
 2. Launch a fresh process as the leader of a new process group
    (`posix_spawn` with `POSIX_SPAWN_SETPGROUP`) and append
    `Launched(opId, pgid)` (fix 4). Its working directory is the
-   supervisor worktree. Its inputs are the task file, the previous step's
+   supervisor worktree (for a review, the review worktree; revision 4). Its inputs are the task file, the previous step's
    handoff file and that worktree at `baseRevision`, which the launch
    attempt found clean. No `--resume` or `--continue`.
 3. On exit, send `SIGKILL` to the process group (children of the agent
@@ -618,6 +978,8 @@ crash, and the startup check); then:
    `Uncertain(opId)`. Review steps run read-only; the first version still
    holds them rather than replaying (F1 deferred).
 4. Perform any pending request (below).
+5. Cancel this project's ledger grants that no `Intended` names (revision
+   4).
 
 The shell may show the commit carrying that `Op-Id` as evidence, but it
 does not resolve the hold itself. `reconcile <opId> <resolution>` is
@@ -661,6 +1023,13 @@ blocks launches like a hold. The lock holder performs it:
    worktree, check the tree, and append the completion record
    (`Restored`, `RestoreIncomplete`, `Reconciled`, `Rebased`).
 
+Revision 4 adds `UnwindRequested(target, atHead)`, which `run` appends
+itself after a change request with tranches stacked above the head (see
+"Stages, review queue and scheduler"); it is performed by the same three
+steps and completed by `Unwound`. A stale one is dropped like the
+others; the moved HEAD then holds for drift, and the unwind is requested
+again after `adopt` or `restore`.
+
 A stale `BaseRequested` is dropped like any other: the approval stands,
 the tranche keeps the approved revision as its base, and the moved HEAD
 makes the next launch attempt hold for drift. No command re-requests a
@@ -672,7 +1041,8 @@ idempotent, and the HEAD guard in step 2 covers a user commit in between.
 
 Classification (no catch-all into retry): `success`, `changesRequested`
 (review), `rateLimited` -> Quota hold, `authFailed`, `permissionDenied`,
-`maxTurns`, `crashed(signal)`, `unclassified` -> Failure hold. Commit
+`maxTurns`, `budgetExceeded` (revision 4), `crashed(signal)`,
+`unclassified` -> Failure hold. Commit
 outcomes: `Committed`, `NothingToCommit`, `CommitRefused(protectedPath |
 headMoved)`, `CommitFailed`; `headMoved` and `CommitFailed` -> Failure,
 `protectedPath` -> Protected. A review requesting changes after
@@ -749,6 +1119,93 @@ capability; the first implementation writes to the supervisor's log and
 fits alerts only; Telegram is the only researched channel with tap
 replies that identify the sender, if phone approval is wanted.
 
+## Durable layer: effect/workflow evaluated (revision 4)
+
+The owner asked whether `effect/workflow` (Workflow, Activity,
+DurableQueue, DurableDeferred, DurableClock) on `effect/cluster`'s
+`SingleRunner` and SQL storage should replace the hand-built log and
+recovery. The source read is effect 4.1.4, the project's pin, from the
+npm tarball; paths are under its `src/`.
+
+Semantics found:
+
+- Activities run at least once. The engine stores each activity call
+  as a persisted request whose primary key is `name/attempt`
+  (`cluster/ClusterWorkflowEngine.ts:948-957`, key built at `:1057`). The
+  SQL storage ignores a second insert with the same key
+  (`cluster/SqlMessageStorage.ts:393`), and a stored reply is replayed
+  instead of re-running the body. A request with no reply counts as
+  unprocessed (`cluster/MessageStorage.ts:161-175`; query at
+  `SqlMessageStorage.ts:638-651`), and a runner clears the claims on the
+  shards it acquires at startup (`cluster/Sharding.ts:657`). A crash
+  after the activity's effect and before `saveReply`
+  (`SqlMessageStorage.ts:771-777`) therefore re-runs the body. A claim
+  older than ten minutes is also read again
+  (`SqlMessageStorage.ts:429-434`, `:651`).
+- Replay repeats suspended bodies. Only completed results are
+  memoized. An activity that suspends runs again from its start on
+  replay, and its side effects before the suspension can repeat
+  (`workflow/Activity.ts:126-129`).
+- Interrupted activities are retried. By default an interrupted activity is
+  retried up to 10 times with exponential backoff (`Activity.ts:193-217`).
+- Idempotency keys: `Activity.idempotencyKey(name)` hashes the
+  execution id and the name, optionally with the attempt
+  (`Activity.ts:276-292`); a workflow's execution id hashes its tag and
+  the payload's idempotency key (`workflow/Workflow.ts:345`). The engine
+  deduplicates its own requests by these keys; an external effect is
+  protected only if it uses them itself.
+- For `DurableDeferred` the first completion wins. Completion is a
+  persisted request keyed by the deferred's name
+  (`ClusterWorkflowEngine.ts:971-980`), so a later `done` for the same
+  name is a duplicate. There is no comparison with any other state.
+- `DurableQueue` is unbounded and delivers at least once. An item that
+  exhausts its attempts (default 10, `persistence/PersistedQueue.ts:180`,
+  `:267`) is dead-lettered; the waiting workflow then stays parked until
+  someone requeues the item by hand (`workflow/DurableQueue.ts:11-17`).
+  `PersistedQueue.make` has no capacity parameter, and `process` retries the offer until it is stored
+  (`DurableQueue.ts:221-245`). It is a call to a worker that the workflow
+  awaits.
+- `DurableClock` sleeps for a duration. The wake-up time is computed
+  once as now plus the duration (`ClusterWorkflowEngine.ts:889-903`), and
+  durations at or below `InMemoryThreshold` run as an in-memory sleep
+  activity (`workflow/DurableClock.ts:119-127`; the threshold reference
+  appeared in 4.1.3).
+- `SingleRunner` wires sharding to SQL message storage and to SQL or
+  in-memory runner storage (`cluster/SingleRunner.ts:61-79`). For SQLite
+  the shard locks are rows in a locks table
+  (`cluster/SqlRunnerStorage.ts:1-10`); with in-memory runner storage two
+  processes on one database would both claim the shards.
+- Storage needs a `SqlClient` (for SQLite, an `@effect/sql-sqlite-*`
+  package that has had no dependency intake) and a `Digest` service; the
+  layers run their own migrations for the tables they use
+  (`SqlMessageStorage.ts:11-14`).
+- Every module is marked `@stability unstable` (`docs/dependency-intake.md`
+  and its tripwire test).
+
+| 3.1 or revision-4 rule | Workflow mechanism | How it fits | Recommendation |
+|---|---|---|---|
+| `Intended`, `Launched`, `Finished` around an agent step; `Uncertain` hold at restart | Activity | A crashed activity re-runs on its own; C4 forbids relaunching an agent step without the owner. To fit, the activity body would have to read the log and report "uncertain" instead of launching, which is the hand-built rule moved inside the activity. | Keep the hand-built records. |
+| `Committed` (commit procedure with `update-ref` and the old value) | Activity | Already idempotent through git's compare-and-swap with the `Op-Id`. An activity would add replay of a stored result, which the fold already gives. | Keep. |
+| Requests (restore, reconcile, base, unwind) redone by the lock holder | Activity, at-least-once redo | The closest fit: 3.1 redoes a request after a crash, guarded by the HEAD check, and an activity would need the same guard. Little to gain. | Keep. |
+| Holds and their releases | No direct mechanism; one deferred per hold | Holds form a set with one release per reason and rule H1; refusing a command that does not match needs the current state at the CLI. | Keep. |
+| Approvals as `DurableDeferred` | `DurableDeferred.done` | An approval must match the tranche and revision, or be refused. First completion wins, which gives neither a refusal nor a position check. Pre-approvals arrive before any deferred exists. | Keep `Approved` and `PreApproved` events. |
+| Review queue as `DurableQueue` | `DurableQueue.process` and `worker` | No capacity; a dead letter parks the workflow; an at-least-once handler would re-run a review. The queue is a fold of the project log with an explicit bound. | Keep the fold. |
+| Reset timers as `DurableClock` | `DurableClock.sleep(duration)` | Revision 4's timers only tighten and are evaluated from `now` at each decision (a spend-down is inactive once the clock passes its key); no wake-up has to survive a crash. A durable clock would also fix a duration at scheduling time from a reset time that can change. | Not needed. |
+| Event log, compare-and-append, instance lock | Message storage with primary-key deduplication; shard locks | A journal of replies per workflow, with no expected-version append; the `flock` would still be needed with in-memory runner storage. | Keep. |
+| Usage ledger | None | Each admission must read the totals and append its grant in one serialized transaction; `BEGIN IMMEDIATE` gives that directly. | Plain SQLite. |
+
+Recommendation: replace nothing in the first version. The rules the
+workflow modules could take over either need the opposite of
+at-least-once re-execution (agent steps), need refusals and state checks
+that a first-completion deferred lacks (approvals), or need a bound the
+queue lacks; the remaining timers need no durability. Adopting the
+modules would add three unstable modules, a SQLite driver package and a
+determinism requirement on workflow code during replay, and the agent
+step would still need reconciliation. The dependency-intake entry and the
+stability tripwire stay, so the question can return if a later version
+needs durable timers or messages between processes (the notifier's phone
+replies, for example).
+
 ## Provenance of components
 
 | Component | Source | Fidelity |
@@ -775,25 +1232,48 @@ replies that identify the sender, if phone approval is wanted.
 | Delivery by the owner | `git merge --ff-only`, `git cherry-pick` or `git rebase --onto` | Faithful use of git; the supervisor runs none of them |
 | Warning that a new base lacks the tranche's commits | `git cherry` (patch-id equivalence) | Faithful use of git; a warning only |
 | Next tranche's base chosen at approval and applied as a lock-holder request | None found; the restore request with another target, carried by the approval | Invented composition of two rules above; flagged; M3 amendment 8 |
+| Shared usage ledger; admission as one `BEGIN IMMEDIATE` transaction that reads the totals and appends a grant (revision 4) | SQLite transactions (writers serialized by the database lock); escrow reservations (O'Neil, 1986) | Adapted: grant and intent live in two databases, joined by orphan-grant cleanup at startup |
+| Allocations with borrowing ceilings; a reserve no project borrows | Hierarchical token bucket rate and ceil (Devera, 2002) | Adapted: a budget per period in place of token refill; no lender protection |
+| Periods keyed by reset time, opened by a new reset time, a usage drop or an owner command | None found | Invented; flagged |
+| Timers only tighten | None found; a monotonicity rule over policy | Invented rule, simple; flagged |
+| Tokens to window percent, outside usage as the residual | Recursive least squares with forgetting factor (Plackett, 1950; Ljung and Söderström, 1983) | Faithful for the fit; the convergence test (pair count, positive coefficients, relative standard error) is invented; flagged |
+| Fallback to launch-time pacing until rates converge | 3.1 pacing | Invented composition; flagged |
+| Spend-down override that ends with its period | None found | Invented; flagged |
+| Scheduler: earliest deadline first among admissible candidates | Earliest deadline first (Liu and Layland, 1973; Jackson, 1955) | Adapted: the deadline is the provider's reset time instead of a job's own; non-preemptive; flagged |
+| Review queue with a bound and backpressure | Bounded buffer (Dijkstra, 1965); work-in-progress limit (Kanban) | Faithful |
+| Stacking a pre-approved tranche on an unreviewed result, unwound when the review below asks for changes | None found; resembles stacked branches and a pipeline flush after a misprediction | Invented composition; flagged |
+| Review worktree detached at the reviewed revision | `git worktree add --lock --detach` (git documentation) | Faithful use of git |
+| Pre-approved backlog | None found; a queue of one-shot approvals used at intent and re-armed by an unwind | Invented; flagged |
+| Role-swap suggestion | None found | Invented heuristic, advisory only; flagged |
+| Budget cap per step | The client's documented run budget | Faithful use of the client once L1 confirms it |
 
 ## Claims ledger
 
 | ID | Claim | Backing |
 |---|---|---|
-| C1 | No launch happens while any hold or request exists, and every launch is made by the lock holder on an unchanged log position. | M3 (C1, K). |
-| C2 | An approval hold is released only by an approval naming the same tranche and revision; a matching approval is never refused. | M3 (C2, K). |
+| C1 | No launch happens while a request or a hold that blocks the step exists (a quota hold blocks only its provider's steps, revision 4), and every launch is made by the lock holder on an unchanged log position. | M3 (C1, K); M4 (C1) for quota holds per provider. |
+| C2 | An approval hold is released only by an approval naming the same tranche and revision; a matching approval is never refused. Revision 4: a tranche's implement step launches only with an unused approval for that tranche (live, or its own pre-approval); a passing review creates the approval hold exactly when the next tranche is neither approved nor started; `notConverged` always creates it. | M3 (C2, K); M4 (BK). |
 | C3 | Ticks never release a hold and never turn Unknown into Allow; a quota hold is released only when every window it names has a newest post-hold allowing reading or a passed reset time, or by a waiver. | M3 (C3, K), with readings arriving out of order. Pacing arithmetic: unit and property tests later, argument for now. |
 | C4 | Every launch is preceded by a durable intent; a crash with an operation unsettled produces an Uncertain hold for that opId at the next startup and no launch until it is reconciled; a reconciled operation is settled. | M3 (C4), crash at every point, including between `git commit` and `Committed` and between a request's git effect and its completion. |
 | C5 | At most one operation is in flight. | M3 (C5), with two `run` instances and late appends. |
 | C6 | In a tranche, a correction is launched only after the 1st to `maxCorrectionRounds`-th change-requesting review; the review after the last correction that still requests changes ends the tranche in an approval hold, and nothing launches until that approval. | M3 (C6, C2). |
-| C7 | A launch is allowed only if pacing allows it, except a launch whose `Intended` records a waiver armed since the previous launch attempt. The reserve bounds launches, not usage: a running agent can overshoot. | M3 (C7). Reserve arithmetic and overshoot: argument, not yet checked against live data. |
+| C7 | A launch is allowed only if pacing allows it (rule 1 of the admission rule) and, for a window in ledger mode, the allocation rule allows it (rule 2), except a launch whose `Intended` records a waiver armed since the previous launch attempt. The reserve bounds launches, not usage: a running agent can overshoot. | M3 (C7). Reserve arithmetic and overshoot: argument, not yet checked against live data. |
 | C8 | Fresh processes carry no earlier transcript; they still load the files listed under "Context per step". | Argument from E5 and the docs; L3 to confirm. Handoff sufficiency is unverified. |
 | C9 | Agents cannot push, use the network, or change protected paths without the tranche's permission; no shell git command runs a repository hook, filter, fsmonitor or signing program, or runs while an unpermitted protected change is on disk. | Git part: probes (E7) and M3 (P, P2). Agent part: argument from docs; live test L3 required. |
 | C10 | No agent process acts after a startup that follows a crash. | M3 (F4) for the kill-and-verify rule; L4 for macOS behavior. |
 | D | No launch while the recorded revision differs from the supervisor worktree's HEAD or that worktree is dirty; every launch's base is the recorded revision; git effects requested from the CLI (including `approve --base`) run only by the lock holder, with HEAD at the request's HEAD or target. | M3 (D, G), with amendment 8 for `--base`; mutants R10a, R10b. The model's HEAD and tree are the supervisor worktree's. |
 | C11 | Nothing the owner does in their own checkout, committed or not, enters a step's commit or a step's inputs; no supervisor process writes the owner's checkout or branches. | Argument: steps and shell git run only in the supervisor worktree with the recorded git directories, and the commit procedure moves only the supervisor branch. Worktree probes (owner's `main` and `git status` unchanged; branch protections). Not in M3, which has one tree. L3 and L4 to confirm with real agents. Exception: the shared common directory (protected digest). |
 | C12 | A tranche's work reaches the owner's branch only through a git command the owner runs; approval moves only the supervisor branch, and only through a `--base` request. | Argument from the text (no supervisor command writes the owner's refs); M3 amendment 8 for the request; worktree probes for the delivery commands. |
-| L | From every reachable state some sequence of events reaches a launch or an approval release. | M3 liveness and strict liveness. |
+| C13 | Reserve: no launch leaves less than the reserve of a window, by the newest usable reading plus the estimate, unless a spend-down is active for that window's period or a waiver is armed; no launch uses a reading of a period whose reset time has passed. Overshoot by a running step is not bounded. | M4 (RS) without waivers; waivers: M3 (C7). |
+| C14 | Allocations: for a window in ledger mode with no active spend-down, no launch takes its project's use above the project's ceiling, or foreman's use above the sum of allocations. While the window is in fallback, allocations are not enforced. | M4 (AL). |
+| C15 | A spend-down is accepted only with a usable reading and when none is active. It is in effect only in the period it was recorded in, and only before that period's reset time. | M4 (SD, RS). |
+| C16 | Periods: only a reading or the owner's `ledger reset` opens a period; a timer only tightens. A charge belongs to the period of its grant. | M4 (PD, through RS and AL); mutant PD2 killed; PD1 and SD2 equivalent (the stale-reading rule already blocks the window until a new period). |
+| C17 | The review queue never exceeds its bound, and an implement step launches only with room for its result. A change request at the head unwinds exactly the tranches stacked above it, and their pre-approvals are armed again. | M4 (QB, UW, BK). |
+| C18 | Roles change only by an owner command; every launch's client follows the last owner-set roles, and its profile follows its role (editing for implementer and corrector, read-only for reviewer). | M4 (SW). |
+| C19 | The scheduler launches the first candidate in earliest-deadline order that is not under a quota hold for its provider and passes admission, refuses only when none passes, and creates at most one quota hold per attempt, for the first candidate refused by pacing. | M4 (ED, H1). |
+| C20 | Admissions by different projects' instances are serialized by the ledger, and a crash between `Grant` and `Intended` leaves only an overstated use until that project's next startup. | Argument from SQLite's `BEGIN IMMEDIATE` (the write lock is taken at the start of the transaction); M4 treats an admission as atomic and interleaves two projects; L4 for the crash. |
+| C21 | Rates are used only after convergence; before it, admission is 3.1's pacing with the ledger's reserve. | Argument; unit and property tests of the fit later (RLS against a batch least-squares oracle on generated data). M4 models convergence as a one-way event. |
+| L | From every reachable state some sequence of events reaches a launch or an approval release. | M3 liveness and strict liveness; M4 liveness (with credit for states where a provider has used its one modeled reset). |
 
 ### Model check M3
 
@@ -924,6 +1404,92 @@ Bounded evidence only. Pacing arithmetic, git behavior beyond the probes,
 the permission layer, the process-group kill on macOS, worktree creation
 and the separation of the owner's checkout (C11) are outside the model.
 
+### Model check M4 (revision 4)
+
+`research/model/check4.py`, with `check3.py` kept unchanged. M4 models the
+revision-4 rules: the shared ledger (reserve, allocations, borrowing,
+spend-down, periods, fallback until rates converge), the scheduler, the
+review queue with stacking and unwind, the pre-approved backlog and role
+swaps. It leaves out what M3 checks (crashes, a second instance of one
+project, protected changes, drift, git requests, failures, waivers, the
+log-position check). The two meet only through "a hold exists", and M4
+gates every launch on the holds it has (approval holds and quota holds per
+provider); the unwind reuses M3's restore request, which M4 performs in
+one step. An admission is atomic, as the ledger's `BEGIN IMMEDIATE`
+transaction makes it, and two projects' events interleave freely.
+
+Grammar and bounds were fixed in the file's header before the first run.
+Providers have one window each, usage is in integer units (U = 100
+percent), every estimate is one unit, and each provider can reset once.
+The monitor `check(m, ev, out)` sees events and outputs only; its
+expectations (admission, candidates in deadline order, approval holds,
+queue, roles) are written from the sections above; none is taken from
+the model's `decide`.
+
+- Scope ledger: two projects, one tranche each; U = 6, reserve 2,
+  allocations 1 and 2, ceilings 2 and 2, spend-down level 5; Claude steps
+  cost 1 or 2 (overshoot), outside usage on Claude.
+- Scope stages: one project, two tranches, queue bound 2, one correction
+  round, backlog of 2, role swaps; U = 8, reserve 2, spend-down level 7.
+- Scope queue1 (amendment 5): as stages, with three tranches, queue
+  bound 1 and a backlog of 1.
+
+Five amendments, each labeled in the file with its before and after
+results: (1) the first ledger run passed but never reached a borrowing
+launch or a launch under a spend-down (counters 0), so project 0 got a
+correction round; (2) the ledger scope then timed out, so only Claude
+steps overshoot, outside usage is Claude's only, and project 1 has no
+correction round; (3) the stages scope timed out, so it drops the
+convergence event (with one project whose allocation and ceiling equal
+`100 − reserve`, rule 2 follows from rule 1) and outside usage on Codex;
+(4) the first mutation pass missed AL1 and AL3 because no ceiling and no
+allocation sum ever bound in the ledger scope, so its allocations became
+1 and 2 and its ceilings 2 and 2, and every mutant was rerun; (5) the
+second pass missed QB1, BK1 and BK2, whose distinguishing cases need a
+third tranche or a backlog of one, so scope queue1 was added.
+
+| Scope | States | Launch transitions | Violations | Liveness | Coverage counters |
+|---|---|---|---|---|---|
+| ledger | 2,084,092 | 318,120 | none | 0 | borrowing launches 21,010; launches above `100 − reserve` under a spend-down 6,020; launches in fallback 161,630; overshooting exits 332,496 |
+| stages | 933,192 | 98,999 | none | 0 | unwinds 38,324; stacked implement launches 5,560; passing reviews with no hold (backlog) 68,820; launches after an owner swap 49,322; suggestions 14,751; launches under another provider's quota hold 35,212; launches under a spend-down 1,687 |
+| queue1 | 1,840,192 | 203,712 | none | 0 | passing reviews with no hold 119,336; launches after an owner swap 101,983; launches under another provider's quota hold 72,020; launches under a spend-down 4,844 |
+
+Strict liveness (no credit for states where a provider has used its one
+modeled reset) reports 229,872, 114,648 and 241,704 states (ledger,
+stages, queue1); these are states where
+a window is used up and only a further reset would let work continue,
+which is the intended behavior. Output: `research/model/check4-run.txt`.
+
+Mutation test (`research/model/mutate4.py`, output
+`research/model/mutate4-run.txt`): 30 mutants of the model part only, at
+least one per new rule (reserve RS1-RS2, periods PD1-PD2, allocations
+AL1-AL5, spend-down SD1-SD4, queue QB1, unwind UW1-UW2, backlog and
+approvals BK1-BK6, roles SW1-SW3, scheduler and holds ED1-ED3, H1a,
+C1a). Each runs first in its named scope and, if missed, in the others.
+The first pass was stopped after AL1 and AL3 were missed (amendment 4);
+the second pass killed 25 and missed QB1, BK1, BK2, PD1 and SD2; after
+amendment 5, QB1, BK1 and BK2 are killed in queue1.
+
+- 28 killed.
+- 2 missed, both equivalent in every scope. PD1 (the clock passing the
+  reset time zeroes use) and SD2 (the spend-down survives the clock
+  passing the reset time) change the model only between that moment and
+  the next period. In that interval rule 1 refuses every launch of the
+  provider (readings of a passed period are unusable, property RS) and a
+  spend-down is refused; the next period resets use and ends the
+  spend-down in the faithful model too. SD2 gives the faithful state
+  counts in all three scopes; PD1 gives the faithful counts in stages and
+  queue1 and more states in ledger (3,014,828), with no output that the
+  monitor rejects. So the rule "timers only tighten" is enforced by the
+  stale-reading rule; the explicit end of a spend-down at the reset time
+  is kept for `status` and for clarity, and no check depends on it.
+
+Not covered by M4: two windows per provider (rules 1 and 2 are a
+conjunction over windows; M3's quota scope has two windows for pacing);
+Codex overshoot and outside usage in the ledger scope; borrowing together
+with stacking (the ledger scope has one tranche and bound 1); the rate fit
+itself (C21); crashes between `Grant` and `Intended` (C20, L4).
+
 ## Restrictions table
 
 | Restriction | Why believed harmless | Challenge example |
@@ -953,6 +1519,17 @@ and the separation of the owner's checkout (C11) are outside the model.
 | A child that calls `setsid` leaves the agent's process group | Agents' tools do not normally daemonize | A test command starts a daemon that survives the kill; L4 looks for survivors |
 | `NothingToCommit` advances the cycle | An unchanged tree is a legitimate result | A correction that changes nothing uses a round and the same review repeats |
 | Shell commits, agents cannot | Gives each step a revision and Op-Id | An agent that needs history rewriting cannot do it |
+| One ledger for every instance on the Mac, one account per provider (revision 4) | Readings and resets are per account | Two Claude logins on one Mac would mix readings; not supported |
+| A lender is not protected within a period | Ceilings bound each borrower; the reserve is never borrowed | Project A borrows its full ceiling in the morning; project B finds its allocation partly used for the rest of the period |
+| Allocations are not enforced while a window is in fallback | Per-project charges need converged rates; the reserve still bounds every launch | Early on, one busy project uses most of foreman's share before the fit converges |
+| Rates are biased when outside usage coincides with steps | The elapsed-hours term absorbs steady outside usage | The owner works only while steps run; rates overstate foreman's cost, which charges projects more and understates the residual |
+| A usage drop opens a period | Providers reset usage to zero | A provider corrects a reading down by more than `dropTolerance`; a period opens early and allocations start over, while rule 1 still uses the real reading |
+| One operation at a time per project, even with a review worktree | Keeps C5 and the model; projects still run in parallel | In a single project Codex idles while Claude implements |
+| Stacking can discard approved work (bound 2) | Bounded by the queue bound; the commits stay in the log and reflog | Tranche N's review asks for changes; tranche N+1, already implemented on top, is unwound and redone |
+| A pre-approved tranche's base is the previous tranche's result | An approval names what it approves | The owner delivers mid-backlog; the next pre-approved tranche does not see the delivered commit unless its entry was `--stop-before` |
+| A swap that makes a client the implementer needs that client's editing profile verified | The read-only profile does not exercise prevention | Codex has headroom but no L3 run; the suggestion is not made |
+| The deadline uses only the longest window's reset | That window's unused share is what a reset loses | A five-hour window about to reset with unused room does not raise its provider's priority |
+| A spend-down ends when the clock passes the reset time | Timers may only tighten | The provider resets late; the override ends early and launches wait for a reading of the new period |
 
 ## Live tests needed before relying on the design
 
@@ -963,8 +1540,14 @@ Each needs separate approval because it spends allowance or uses a login.
   record the exact shape of a `rate_limit_event` in stream-json: whether
   it names the window, carries a timestamp, a usage figure and a reset
   time (fix 9).
+- L1, revision 4: also record the `result` message's `usage` object
+  (token classes) under the subscription login, and the print-mode budget
+  limit: flag name, unit, whether the run report gives the same unit, and
+  whether reaching it stops the run mid-turn and how that is reported.
 - **L2:** `account/rateLimits/read` through `codex app-server`: window
-  shapes for the user's plan, and whether a turn is started.
+  shapes for the user's plan, and whether a turn is started. Revision 4:
+  whether `codex exec --json` reports token usage per run and in which
+  event, and whether Codex has any per-run budget option.
 - **L3:** one implement step on a disposable repository, run in the
   supervisor worktree created as under "Supervisor worktree", under the
   permission settings above, with a task that attempts each of: rewriting
@@ -1005,7 +1588,15 @@ Each needs separate approval because it spends allowance or uses a login.
   the worktree; an agent whose task starts a child process (`sleep`)
   and a grandchild, with the supervisor killed by `SIGKILL`: after
   restart, `ps` shows no survivor in the recorded group (fix 4); a second
-  `run` started alongside is refused.
+  `run` started alongside is refused. Revision 4: two projects' `run`
+  instances share one ledger; one is killed between `Grant` and
+  `Intended`, and its restart cancels the orphan grant; a stacked tranche
+  is unwound after a change request and the review worktree shows the
+  reviewed revision.
+- **L3c (revision 4, only if a swap that makes Codex the implementer is
+  wanted):** L3's task with Codex in its editing profile (`--sandbox
+  workspace-write`), with the same expectations; its result decides
+  whether Codex's editing profile is marked verified.
 
 ## Later improvements (logged, not in the first version)
 
@@ -1042,10 +1633,27 @@ fixes recorded for later:
   base during a tranche after a `BaseRequested` went stale; the default
   `<stateDir>` and branch name; whether the agents' sandbox lets `git
   status` refresh `<gitDir>/index` (L3).
-- Revision 4 (owner rulings 2026-11-15, usage ledger and scheduling) must
-  say how a pre-approved backlog of tranches meets `approve --base`, since
-  an approval made ahead of time cannot name a base the owner has not yet
-  delivered to.
+- Revision 3.1's question of how a pre-approved backlog meets `approve
+  --base`: closed in "Pre-approved backlog" (a pre-approved tranche starts
+  on the previous tranche's result; `--base` only on a live approval,
+  reached through `--stop-before`).
+- Decisions for the owner from revision 4:
+  - the review-queue bound: 2 (stacking, which an unwind can discard) or
+    1 (3.1's sequence); this also settles the reading of "no speculative
+    work";
+  - lender protection: none (as written), or refuse borrowing while
+    another project with ready work is below its allocation, which needs
+    readiness leases in the ledger;
+  - the durable layer: keep the hand-built log (recommended) or adopt
+    `effect/workflow` for requests only;
+  - defaults: `resetTolerance` 5 minutes, `dropTolerance` 5 points, λ
+    0.99, `minPairs` 10, `maxRelError` 0.2, `capFactor` 1.5, `backlogMax`
+    3, `swapThreshold` 20 points, ledger path `~/.foreman/`.
+- Codex's run report and budget option (L2), Claude's budget flag (L1),
+  and Codex's editing profile (L3c) before a swap to Codex.
+- A review worktree would allow a review and an implement step of one
+  project to run at once; that drops C5 within a project and is not in
+  revision 4.
 - The text of first-review findings R-S5-R-S7, R-D1, R-D3, R-P2 and R-P5
   is not saved in this repository; their rows in the table under "How
   revision 2 answers the review" give the evidence available and need the
@@ -1243,3 +1851,39 @@ revision 3.1, then reviewed once:
   from readings; the residual is outside usage. Per-step budget caps where
   the client supports them (Claude's run budget limit; Codex unknown until
   L2).
+
+Applied in revision 4: "Usage ledger" (store and coordination, periods,
+allocations and borrowing, measurement, budget caps, admission rule,
+spend-down), "Stages, review queue and scheduler", "Pre-approved backlog"
+(with the answer to 3.1's `--base` question), "Role-swap suggestions",
+"Durable layer: effect/workflow evaluated" (recommendation: replace
+nothing in the first version), and edits to "Scope", "Architecture",
+"Holds", "Launch attempt", "Pacing", "Operations", "Startup recovery",
+classification, provenance, claims C1, C2, C7 and C13-C21, model check
+M4, restrictions, L1, L2, L3c, L4 and open items.
+
+## Owner rulings 2026-11-15 on revision 4
+
+- The owner approved revision 4 and agreed with the durable-layer
+  finding: foreman keeps its hand-built log and recovery on SQLite.
+  effect/workflow and effect/cluster run activities at least once with
+  automatic retries, accept the first completion of a durable deferred
+  without a match check, and give the durable queue no bound; foreman
+  needs the opposite of each. The stability tripwire stays so the
+  question can be reopened.
+- The owner asked whether another engine (DBOS was named) would fit
+  better. Open question for the final review: any durable-execution
+  engine that replays steps after a crash conflicts with C4, because an
+  agent step is an external effect that only the owner may rerun. The
+  coordinator's recommendation is to build on the primitives already in
+  the design (SQLite transactions, write-ahead intent, a single-writer
+  lock) unless an engine is found that never replays a step on its own.
+  DBOS's step semantics have not been checked against its source.
+- Review queue bound: default 1 (no work on a tranche before the one
+  below it is reviewed), configurable per project to 2, the setting the
+  owner would use for a spend-down across providers with different reset
+  times. Coordinator's recommendation, adopted pending the final review.
+- Lender protection: adopt readiness leases in the ledger, so a project
+  that is ready to launch can reserve its own allocation and other
+  projects cannot borrow it at that moment.
+- Defaults in revision 4's table are confirmed.

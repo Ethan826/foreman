@@ -1,0 +1,220 @@
+== python3 -I check4.py ledger  (2026-11-15 11:09, run 1)
+progress 100000 states, frontier 86599, 9s
+progress 200000 states, frontier 143934, 18s
+progress 300000 states, frontier 192848, 27s
+progress 400000 states, frontier 238875, 36s
+progress 500000 states, frontier 269780, 44s
+progress 600000 states, frontier 298375, 53s
+progress 700000 states, frontier 326422, 61s
+progress 800000 states, frontier 351524, 69s
+progress 900000 states, frontier 362430, 79s
+progress 1000000 states, frontier 387218, 89s
+progress 1100000 states, frontier 388349, 96s
+progress 1200000 states, frontier 384290, 103s
+progress 1300000 states, frontier 392175, 116s
+progress 1400000 states, frontier 393484, 123s
+progress 1500000 states, frontier 373441, 130s
+progress 1600000 states, frontier 352055, 146s
+progress 1700000 states, frontier 341934, 152s
+progress 1800000 states, frontier 323029, 158s
+progress 1900000 states, frontier 284167, 165s
+progress 2000000 states, frontier 245782, 171s
+progress 2100000 states, frontier 212285, 190s
+progress 2200000 states, frontier 158837, 196s
+progress 2300000 states, frontier 106246, 201s
+progress 2400000 states, frontier 40747, 206s
+scope ledger: states explored: 2451648; launch transitions: 260480; finished states: 106624; bounded states: 2241216; 208s
+counters: {'borrow': 0, 'sd_launch': 0, 'unwind': 0, 'stacked_launch': 0, 'preapproved_end': 0, 'swapped_launch': 0, 'suggest': 0, 'quota_other_launch': 0, 'fallback_launch': 130240, 'overshoot': 1502848}
+liveness: states with no path to a launch, an approval release or the end: 0
+strict liveness (no credit for BOUNDED): 162240 states
+no violations
+rc=0
+== python3 -I check4.py ledger  (2026-11-15 11:13, run 2, amendment 1)
+progress 100000 states, frontier 101023, 10s
+progress 200000 states, frontier 181855, 19s
+progress 300000 states, frontier 259104, 29s
+progress 400000 states, frontier 327733, 39s
+progress 500000 states, frontier 393790, 49s
+progress 600000 states, frontier 440111, 58s
+progress 700000 states, frontier 519084, 69s
+progress 800000 states, frontier 571517, 77s
+progress 900000 states, frontier 635488, 88s
+progress 1000000 states, frontier 688844, 96s
+progress 1100000 states, frontier 738260, 109s
+progress 1200000 states, frontier 806259, 118s
+progress 1300000 states, frontier 856899, 135s
+progress 1400000 states, frontier 899041, 144s
+progress 1500000 states, frontier 953390, 152s
+progress 1600000 states, frontier 1014372, 179s
+progress 1700000 states, frontier 1044431, 187s
+progress 1800000 states, frontier 1084942, 195s
+progress 1900000 states, frontier 1144368, 228s
+progress 2000000 states, frontier 1205102, 237s
+progress 2100000 states, frontier 1254382, 245s
+progress 2200000 states, frontier 1285917, 254s
+rc=124
+== python3 -I check4.py ledger  (2026-11-15 11:18, run 3, amendment 2)
+progress 100000 states, frontier 70543, 9s
+progress 200000 states, frontier 115596, 17s
+progress 300000 states, frontier 154237, 25s
+progress 400000 states, frontier 186844, 33s
+progress 500000 states, frontier 205863, 41s
+progress 600000 states, frontier 228778, 49s
+progress 700000 states, frontier 240342, 57s
+progress 800000 states, frontier 253216, 63s
+progress 900000 states, frontier 258917, 71s
+progress 1000000 states, frontier 256213, 77s
+progress 1100000 states, frontier 263089, 86s
+progress 1200000 states, frontier 259487, 92s
+progress 1300000 states, frontier 248702, 100s
+progress 1400000 states, frontier 240992, 107s
+progress 1500000 states, frontier 229359, 112s
+progress 1600000 states, frontier 203415, 118s
+progress 1700000 states, frontier 182781, 127s
+progress 1800000 states, frontier 146059, 132s
+progress 1900000 states, frontier 110930, 137s
+progress 2000000 states, frontier 57707, 142s
+scope ledger: states explored: 2084092; launch transitions: 323260; finished states: 48608; bounded states: 1971948; 146s
+counters: {'borrow': 3268, 'sd_launch': 6020, 'unwind': 0, 'stacked_launch': 0, 'preapproved_end': 0, 'swapped_launch': 0, 'suggest': 0, 'quota_other_launch': 0, 'fallback_launch': 161630, 'overshoot': 332496}
+liveness: states with no path to a launch, an approval release or the end: 0
+strict liveness (no credit for BOUNDED): 229872 states
+no violations
+rc=0
+== python3 -I check4.py stages  (2026-11-15 11:21, run 4, amendment 2)
+progress 100000 states, frontier 72729, 8s
+progress 200000 states, frontier 122429, 17s
+progress 300000 states, frontier 166498, 25s
+progress 400000 states, frontier 210683, 33s
+progress 500000 states, frontier 239193, 41s
+progress 600000 states, frontier 275267, 48s
+progress 700000 states, frontier 296246, 57s
+progress 800000 states, frontier 319959, 65s
+progress 900000 states, frontier 348948, 72s
+progress 1000000 states, frontier 366152, 80s
+progress 1100000 states, frontier 386431, 87s
+progress 1200000 states, frontier 405640, 96s
+progress 1300000 states, frontier 421635, 102s
+progress 1400000 states, frontier 438319, 112s
+progress 1500000 states, frontier 448847, 118s
+progress 1600000 states, frontier 460957, 125s
+progress 1700000 states, frontier 469360, 135s
+progress 1800000 states, frontier 478398, 142s
+progress 1900000 states, frontier 496013, 148s
+progress 2000000 states, frontier 503807, 155s
+progress 2100000 states, frontier 497234, 168s
+progress 2200000 states, frontier 506882, 174s
+progress 2300000 states, frontier 514712, 181s
+progress 2400000 states, frontier 526944, 188s
+progress 2500000 states, frontier 528478, 210s
+progress 2600000 states, frontier 518287, 218s
+progress 2700000 states, frontier 524806, 225s
+progress 2800000 states, frontier 525121, 232s
+progress 2900000 states, frontier 538675, 238s
+progress 3000000 states, frontier 532321, 275s
+rc=124
+== python3 -I check4.py stages  (2026-11-15 11:26, run 5, amendment 3)
+progress 100000 states, frontier 41066, 7s
+progress 200000 states, frontier 59257, 14s
+progress 300000 states, frontier 65388, 21s
+progress 400000 states, frontier 67861, 27s
+progress 500000 states, frontier 60380, 34s
+progress 600000 states, frontier 53210, 40s
+progress 700000 states, frontier 44287, 46s
+progress 800000 states, frontier 30026, 53s
+progress 900000 states, frontier 10942, 58s
+scope stages: states explored: 933192; launch transitions: 98999; finished states: 53204; bounded states: 818340; 59s
+counters: {'borrow': 0, 'sd_launch': 1687, 'unwind': 38324, 'stacked_launch': 5560, 'preapproved_end': 68820, 'swapped_launch': 49322, 'suggest': 14751, 'quota_other_launch': 35212, 'fallback_launch': 98999, 'overshoot': 0}
+liveness: states with no path to a launch, an approval release or the end: 0
+strict liveness (no credit for BOUNDED): 114648 states
+no violations
+rc=0
+== python3 -I check4.py ledger  (2026-11-15 11:27, run 6, final file after amendment 3, which changes scope stages only)
+progress 100000 states, frontier 70543, 8s
+progress 200000 states, frontier 115596, 17s
+progress 300000 states, frontier 154237, 25s
+progress 400000 states, frontier 186844, 33s
+progress 500000 states, frontier 205863, 41s
+progress 600000 states, frontier 228778, 49s
+progress 700000 states, frontier 240342, 57s
+progress 800000 states, frontier 253216, 63s
+progress 900000 states, frontier 258917, 71s
+progress 1000000 states, frontier 256213, 77s
+progress 1100000 states, frontier 263089, 86s
+progress 1200000 states, frontier 259487, 92s
+progress 1300000 states, frontier 248702, 100s
+progress 1400000 states, frontier 240992, 106s
+progress 1500000 states, frontier 229359, 112s
+progress 1600000 states, frontier 203415, 118s
+progress 1700000 states, frontier 182781, 126s
+progress 1800000 states, frontier 146059, 132s
+progress 1900000 states, frontier 110930, 137s
+progress 2000000 states, frontier 57707, 142s
+scope ledger: states explored: 2084092; launch transitions: 323260; finished states: 48608; bounded states: 1971948; 145s
+counters: {'borrow': 3268, 'sd_launch': 6020, 'unwind': 0, 'stacked_launch': 0, 'preapproved_end': 0, 'swapped_launch': 0, 'suggest': 0, 'quota_other_launch': 0, 'fallback_launch': 161630, 'overshoot': 332496}
+liveness: states with no path to a launch, an approval release or the end: 0
+strict liveness (no credit for BOUNDED): 229872 states
+no violations
+rc=0
+== python3 -I check4.py ledger  (2026-11-15 11:43, run 7, amendment 4)
+Traceback (most recent call last):
+  File "/Users/ethan/Desktop/foreman/research/model/check4.py", line 640, in <module>
+    main()
+  File "/Users/ethan/Desktop/foreman/research/model/check4.py", line 577, in main
+    evs, bnd = events(s)
+  File "/Users/ethan/Desktop/foreman/research/model/check4.py", line 353, in events
+    if p in OUT_PROVS and s["out"][pi] < OUT_MAX: evs.append(("Outside", p))
+NameError: name 'OUT_PROVS' is not defined
+rc=1
+(run 7 above stopped on a NameError from a mistyped edit of the constants line, fixed with no model change; run 8 repeats it)
+== python3 -I check4.py ledger  (2026-11-15 11:43, run 8, amendment 4)
+progress 100000 states, frontier 70543, 9s
+progress 200000 states, frontier 115596, 18s
+progress 300000 states, frontier 154237, 26s
+progress 400000 states, frontier 186844, 34s
+progress 500000 states, frontier 205863, 42s
+progress 600000 states, frontier 228778, 50s
+progress 700000 states, frontier 240326, 58s
+progress 800000 states, frontier 253216, 65s
+progress 900000 states, frontier 258917, 74s
+progress 1000000 states, frontier 256213, 80s
+progress 1100000 states, frontier 263089, 89s
+progress 1200000 states, frontier 259487, 95s
+progress 1300000 states, frontier 248702, 105s
+progress 1400000 states, frontier 240992, 111s
+progress 1500000 states, frontier 229212, 117s
+progress 1600000 states, frontier 203415, 124s
+progress 1700000 states, frontier 182781, 136s
+progress 1800000 states, frontier 146059, 142s
+progress 1900000 states, frontier 110930, 148s
+progress 2000000 states, frontier 57707, 153s
+scope ledger: states explored: 2084092; launch transitions: 318120; finished states: 48608; bounded states: 1971948; 156s
+counters: {'borrow': 21010, 'sd_launch': 6020, 'unwind': 0, 'stacked_launch': 0, 'preapproved_end': 0, 'swapped_launch': 0, 'suggest': 0, 'quota_other_launch': 0, 'fallback_launch': 161630, 'overshoot': 332496}
+liveness: states with no path to a launch, an approval release or the end: 0
+strict liveness (no credit for BOUNDED): 229872 states
+no violations
+rc=0
+== python3 -I check4.py queue1  (2026-11-15 12:12, run 9, amendment 5)
+progress 100000 states, frontier 45559, 8s
+progress 200000 states, frontier 68756, 15s
+progress 300000 states, frontier 81286, 23s
+progress 400000 states, frontier 95695, 31s
+progress 500000 states, frontier 103853, 38s
+progress 600000 states, frontier 109331, 45s
+progress 700000 states, frontier 110628, 53s
+progress 800000 states, frontier 110907, 59s
+progress 900000 states, frontier 111228, 67s
+progress 1000000 states, frontier 110554, 73s
+progress 1100000 states, frontier 107598, 81s
+progress 1200000 states, frontier 102522, 87s
+progress 1300000 states, frontier 96452, 95s
+progress 1400000 states, frontier 88434, 101s
+progress 1500000 states, frontier 77708, 110s
+progress 1600000 states, frontier 63417, 116s
+progress 1700000 states, frontier 44335, 122s
+progress 1800000 states, frontier 16599, 131s
+scope queue1: states explored: 1840192; launch transitions: 203712; finished states: 57136; bounded states: 1694216; 133s
+counters: {'borrow': 0, 'sd_launch': 4844, 'unwind': 0, 'stacked_launch': 0, 'preapproved_end': 119336, 'swapped_launch': 101983, 'suggest': 36068, 'quota_other_launch': 72020, 'fallback_launch': 203712, 'overshoot': 0}
+liveness: states with no path to a launch, an approval release or the end: 0
+strict liveness (no credit for BOUNDED): 241704 states
+no violations
+rc=0
