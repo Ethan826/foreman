@@ -1887,3 +1887,129 @@ M4, restrictions, L1, L2, L3c, L4 and open items.
   that is ready to launch can reserve its own allocation and other
   projects cannot borrow it at that moment.
 - Defaults in revision 4's table are confirmed.
+
+## Final review 2026-11-15 (revision 4)
+
+An independent reviewer (Opus, fresh context, read-only) found revision 4
+not ready: the body has not caught up with two of the owner's revision-4
+rulings, and admission rule 1 has a concurrency gap that M4 cannot see.
+The reviewer reran check4.py in all three scopes; every count matches
+check4-run.txt (stages 933,192 states, queue1 1,840,192, ledger 2,084,092;
+no violations; liveness 0 in each scope). The coordinator confirmed
+findings 1 to 4 and 13 against the text. Each finding below stays open
+until revision 5 answers it.
+
+Blocking:
+
+1. Admission rule 1 ("Admission rule") compares the newest reading plus
+   this launch's estimate with the cap and ignores other projects' open
+   grants. Two instances that both see 68 against a cap of 70 with
+   estimate 2 both launch, and the account ends at 72; in fallback mode
+   rule 2 does not apply, so nothing stops it. M4's `used` includes
+   in-flight grants at their estimates, so the model checks the escrowed
+   rule, not the written one, and C13's backing is stronger than the text.
+2. The review-queue ruling (default 1, configurable per project to 2) is
+   not applied: "Review queue" still says default 2, and "Pre-approved
+   backlog" and "Open items" still list the bound as an owner decision.
+3. Readiness leases (ruled under "Owner rulings 2026-11-15 on revision 4")
+   are not designed: no ledger table, admission clause, expiry rule,
+   claim or M4 property. The body still says lenders get no protection
+   ("Allocations, reserve and borrowing", the restrictions table,
+   provenance). A lease is invented machinery and must be flagged; its
+   expiry must not loosen anything.
+4. A `Grant` is committed before `Intended`'s compare-and-append. When
+   that append loses a race, the grant stays open until the next startup,
+   so a long `run` leaks one grant per lost race and can stall rule 2. A
+   crash between `Finished` and `Charged` also leaves an open grant that
+   startup step 5 does not settle. C20 rests on argument only and the
+   argument misses both paths.
+
+Should fix:
+
+5. The rate fit (θ, convergence state, ledger-or-fallback mode) is not in
+   the ledger, so instances can disagree on a window's mode and on
+   charges. The text lets convergence revert; M4 models only `Converge`.
+   Fallback launches are uncharged, so a switch to ledger mode mid-period
+   starts every project's use near zero.
+6. With bound 2, a `--stop-before` entry is an implement candidate and can
+   be stacked before the previous review passes, which skips the hold.
+   The holds table and C2 omit `--stop-before`; M4's `PreApprove` has no
+   such flag.
+7. "Waivers" says no event changes the step while a hold exists; per-
+   provider holds and `RolesSet` make that false. Launch attempt step 5
+   applies a waiver only to the first candidate in deadline order, and
+   whether a waived launch takes a `Grant` is unspecified. M3's N15
+   argument rests on the false premise; M4 leaves waivers out.
+8. The review worktree is not carried into Permissions (Codex's working
+   directory), Launch attempt step 4 and the Drift hold (only the
+   supervisor worktree is checked), Context per step (auto-memory is keyed
+   by path), or the four client profiles the role swap needs.
+9. A project refused by rule 2 has no wake-up: period changes need a
+   reading, and Codex readings come only at launch. The list of what frees
+   room omits a `Charged` below the estimate. M4's liveness assumes
+   `Run`, `Observe` and `ResetSeen` are always enabled.
+10. Period keys `(provider, window, resetsAt)` repeat when a usage drop
+    opens a period with the same `resetsAt`, so a spend-down survives a
+    detected reset. Readings without `resetsAt` have no period. Key
+    periods by a sequence number.
+11. After `reconcile discard` the rerun of a pre-approved implement step
+    has no unused approval under C2. Neither M3 nor M4 covers this.
+12. Contradictions: "Clock ticks never release any hold" against the quota
+    hold's release at reset time; which `permits` applies when a live and
+    a pre-approval both cover a tranche; `spend-down --cancel` has no
+    window argument or table; the ruling cites a defaults table that does
+    not exist.
+13. AGENTS.md ("Dependency watch") and docs/dependency-intake.md say the
+    owner accepted building on effect/workflow, which the revision-4
+    ruling reverses. README cites check.py instead of check3.py and
+    check4.py.
+14. The effect 4.1.4 file and line citations are unverified (no
+    node_modules here).
+
+Invented or mis-cited machinery: the scheduler's deadline rule (Liu and
+Layland and Jackson order jobs by their own due dates, not a shared
+expiry); borrowing under a per-period budget takes the lender's share,
+which HTB does not; the `capFactor` budget-cap rule is listed as faithful
+use of the client; the convergence test does not say which noise-variance
+estimate scales P; attributing a step's tokens to the interval it finished
+in biases θ; readiness leases.
+
+Not modeled in M4: stop-before, backlog removal, suggestion conditions and
+expiry, tightening spend-downs and `--cancel`, reading staleness and
+Unknown, quota release at reset time.
+
+Open items: decided but still listed are the queue bound, lender
+protection, the durable layer, the defaults, S1, the Effect intake, and
+the first-review finding texts (now in the appendix). Open but not listed
+are the readiness-lease design, where the rate fit lives, review-worktree
+drift, and the wake-up after a rule-2 wait.
+
+Prose: tell_lint.py reports 117 findings, 94 blocking (49 bold labels).
+The revision-4 sections are nearly clean; the heaviest are the revision-4
+rulings, Live tests, the appendix, M3, Architecture and Supervisor
+worktree. The header still says "awaiting final review"; "cancelled" and
+`GrantCancelled` use British spelling.
+
+### Durable-execution engines (answers the DBOS question)
+
+No engine both runs embedded on local storage and documents that it never
+re-executes an in-flight step after a crash. Temporal documents at-most-once
+for a normal activity with `maximumAttempts: 1`; after a worker crash the
+workflow sees only a timeout, which cannot tell "never ran" from "ran,
+result lost", and Temporal needs a server
+(https://temporal.io/blog/idempotency-and-durable-execution). AWS Step
+Functions Standard never reruns a task without `Retry` but is a cloud
+service. DBOS Python runs in-process on SQLite, but its steps are
+at-least-once ("tried at least once but are never re-executed after they
+complete", https://docs.dbos.dev/python/tutorials/workflow-tutorial), and
+it records a step only after the body returns (dbos-transact-py
+`dbos/_core.py` `record_step_result`, checked by the coordinator), so a
+crash leaves no trace of a started step; its `max_recovery_attempts` is a
+workflow-level dead-letter queue, untested at 0; DBOS TypeScript requires
+Postgres. Restate, Inngest, Cloudflare Workflows, Azure Durable Functions
+and effect/workflow rerun an interrupted step; Trigger.dev's docs and
+source disagree on crashes. Every candidate would still need foreman's own
+write-ahead intent record, so the decision to keep the hand-built log
+stands. Two tests would settle the remaining unknowns if the question is
+reopened: a DBOS crash with `max_recovery_attempts=0`, and a Temporal
+worker kill under `maximumAttempts: 1`.
