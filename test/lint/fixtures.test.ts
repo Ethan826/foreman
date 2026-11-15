@@ -2,8 +2,8 @@
 // has a must-fail fixture under lint-fixtures/ that has to produce the named
 // rule, and the clean controls have to pass. A fixture missing from the
 // manifest fails the test, so a new fixture cannot sit unchecked.
-import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { expect, layer } from "@effect/vitest"
+import { Context, Effect, Layer } from "effect"
 import { ESLint } from "eslint"
 
 interface Expected {
@@ -119,6 +119,16 @@ const fixtureRoot = `${process.cwd()}/lint-fixtures`
 
 class LintFailed extends Error {}
 
+// The fixtures are linted once and the result shared by every test below.
+// Linting them once per test broke in CI: CI=true puts typescript-eslint in
+// single-run mode, which treats a second parse of the same file in one
+// process as an autofix pass and parses it in an isolated program without
+// lint-fixtures/tsconfig.json (no strict, no lib, no `effect` types).
+class LintedFixtures extends Context.Service<
+  LintedFixtures,
+  Readonly<Record<string, ESLint.LintResult>>
+>()("LintedFixtures") {}
+
 const lintFixtures = Effect.gen(function* () {
   const eslint = new ESLint({ cwd: fixtureRoot })
   const results = yield* Effect.tryPromise({
@@ -130,10 +140,12 @@ const lintFixtures = Effect.gen(function* () {
   )
 })
 
-describe("lint fixtures", () => {
+const lintedFixtures = Layer.effect(LintedFixtures, lintFixtures)
+
+layer(lintedFixtures, { timeout: 120_000 })("lint fixtures", (it) => {
   it.effect("every fixture is a listed must-fail or a listed clean control", () =>
     Effect.gen(function* () {
-      const found = Object.keys(yield* lintFixtures).sort()
+      const found = Object.keys(yield* LintedFixtures).sort()
       expect(found).toEqual([...Object.keys(mustFail), ...clean].sort())
     }),
     120_000,
@@ -141,7 +153,7 @@ describe("lint fixtures", () => {
 
   it.effect("each must-fail fixture reports its expected rule, and no parse error", () =>
     Effect.gen(function* () {
-      const linted = yield* lintFixtures
+      const linted = yield* LintedFixtures
       const missing = Object.entries(mustFail).flatMap(([file, expected]) =>
         expected.flatMap((want) =>
           (linted[file]?.messages ?? []).some(
@@ -172,7 +184,7 @@ describe("lint fixtures", () => {
 
   it.effect("each clean control reports nothing", () =>
     Effect.gen(function* () {
-      const linted = yield* lintFixtures
+      const linted = yield* LintedFixtures
       const dirty = clean.flatMap((file) => {
         const result = linted[file]
         return result === undefined
