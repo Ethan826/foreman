@@ -1,0 +1,81 @@
+Model check M5.2 runs (research/model/check52.py). Runs 1-3 of periods52 and the first leaks52 run were stopped by hand for memory; see amendments 1-3 and 6 in the file header.
+
+== python3 -I check52.py periods52  (run 4, under amendment 3; 2026-11-15 18:25)
+FOUND TC admitted launch can take the provider's total count above the cap plus the unseen outside use the reserve covers
+scope periods52: states explored: 1735094; launch transitions: 83968; finished states: 541222; bounded states: 583376; 36s
+counters: {'launch_after_early_reset': 53104, 'launch_with_carried_charge': 2664, 'launch_after_clock_back': 59338, 'launch_with_outside_above_reserve': 46812, 'launch_on_delayed_reading': 49932, 'launch_with_older_snapshot_pending': 18820, 'refused_unknown': 193778, 'refused_only_by_carried_charges': 17588, 'earlier_period_reading_dropped': 13412, 'owner_retire': 303656, 'ingest_out_of_order': 179518, 'false_drop_kept_in_period': 22856, 'reading_without_reset_time': 286356, 'owner_ledger_reset': 558176, 'early_reset': 32826}
+VIOLATION TC admitted launch can take the provider's total count above the cap plus the unseen outside use the reserve covers:
+    ('Snap', True)
+    ('Outside',)
+    ('Outside',)
+    ('Ingest', 1)
+    ('Run', 0)
+    ('Run', 1)
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 54262 states
+
+== python3 -I check52.py periods52  (run 5, under amendment 4; 2026-11-15 18:28)
+FOUND TC admitted launch can take the provider's total count above the cap plus the unseen outside use the reserve covers
+scope periods52: states explored: 1666388; launch transitions: 71112; finished states: 518710; bounded states: 555702; 32s
+counters: {'launch_after_early_reset': 45250, 'launch_with_carried_charge': 2260, 'launch_after_clock_back': 50246, 'launch_with_outside_above_reserve': 33956, 'launch_on_delayed_reading': 38094, 'launch_with_older_snapshot_pending': 16640, 'refused_unknown': 191458, 'refused_only_by_carried_charges': 17332, 'earlier_period_reading_dropped': 12096, 'owner_retire': 289450, 'ingest_out_of_order': 158624, 'false_drop_kept_in_period': 19464, 'reading_without_reset_time': 256954, 'owner_ledger_reset': 535917, 'early_reset': 30504}
+VIOLATION TC admitted launch can take the provider's total count above the cap plus the unseen outside use the reserve covers:
+    ('Reset',)
+    ('Outside',)
+    ('Snap', True)
+    ('Outside',)
+    ('Snap', True)
+    ('Ingest', 2)
+    ('LedgerReset',)
+    ('Ingest', 1)
+    ('Run', 0)
+liveness: states with no path to a launch, an owner release or the end: 3044
+DEADLOCK trace: (('Reset',), ('LedgerReset',), ('Snap', True), ('Outside',), ('Outside',))
+DEADLOCK trace: (('Reset',), ('LedgerReset',), ('Snap', False), ('Outside',), ('Outside',))
+DEADLOCK trace: (('EarlyReset',), ('LedgerReset',), ('Snap', True), ('Outside',), ('Outside',))
+DEADLOCK trace: (('EarlyReset',), ('LedgerReset',), ('Snap', False), ('Outside',), ('Outside',))
+strict liveness (no credit for BOUNDED): 55733 states
+
+== python3 -I check52.py periods52  (run 6, under amendment 5; 2026-11-15 18:29; final)
+scope periods52: states explored: 1347706; launch transitions: 52386; finished states: 423618; bounded states: 403198; 27s
+counters: {'launch_after_early_reset': 32724, 'launch_with_carried_charge': 920, 'launch_after_clock_back': 36802, 'launch_with_outside_above_reserve': 24646, 'launch_on_delayed_reading': 28052, 'launch_with_older_snapshot_pending': 16640, 'refused_unknown': 155862, 'refused_only_by_carried_charges': 13188, 'earlier_period_reading_dropped': 113848, 'owner_retire': 236792, 'ingest_out_of_order': 157632, 'false_drop_kept_in_period': 16936, 'reading_without_reset_time': 244954, 'owner_ledger_reset': 535917, 'early_reset': 30504}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 37713 states
+no violations
+
+== python3 -I check52.py periods52 --no-a5 --stop  (A5 dropped, as run 4's grammar; 2026-11-15 18:30)
+FOUND TC admitted launch can take the provider's total count above the cap plus the unseen outside use the reserve covers
+stopped at first violation after 2300 states
+    ('Snap', True)
+    ('Outside',)
+    ('Outside',)
+    ('Ingest', 1)
+    ('Run', 0)
+    ('Run', 1)
+        0.12 real         0.11 user         0.01 sys
+
+== /usr/bin/time -l python3 -I check52.py leaks52  (second leaks52 run, under amendment 6; 2026-11-15 18:30; ledger settle with termination, the revision-5.1 rule; superseded by amendment 7)
+scope leaks52: states explored: 885264; launch transitions: 165470; finished states: 52996; bounded states: 832268; 36s
+counters: {'launch_other_open': 108282, 'launch_spanning_carried': 0, 'launch_second_operation_or_relaunch': 121250, 'quota_hold_unusable': 0, 'quota_hold_level': 0, 'refused_by_counting_finished_steps': 0, 'uncertain_hold': 107632, 'ordinary_settle_cancel': 18192, 'ordinary_settle_charge': 149442, 'kill_Start': 71592, 'kill_LedgerSettle': 71592, 'CancelFail': 18192, 'ChargeFail': 149442, 'crash_after_lost_race': 5364, 'orphan_process_spend': 0, 'spend_in_undetected_or_later_period': 0, 'ledger_settle': 178592, 'reconcile': 47728, 'settle_write_failed_RunSF': 147186, 'settle_write_failed_StartSF': 136360, 'settle_write_failed_LedgerSettleSF': 77364}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+       38.71 real        37.93 user         0.75 sys
+          1979613184  maximum resident set size
+
+== /usr/bin/time -l python3 -I check52.py leaks52  (third leaks52 run, under amendment 7: ledger settle without termination; 2026-11-15 18:33)
+scope leaks52: states explored: 838192; launch transitions: 160834; finished states: 41964; bounded states: 796228; 34s
+counters: {'launch_other_open': 108282, 'launch_spanning_carried': 0, 'launch_second_operation_or_relaunch': 117934, 'quota_hold_unusable': 0, 'quota_hold_level': 0, 'refused_by_counting_finished_steps': 0, 'uncertain_hold': 69624, 'ordinary_settle_cancel': 17696, 'ordinary_settle_charge': 145430, 'kill_Start': 69624, 'kill_LedgerSettle': 0, 'CancelFail': 17696, 'ChargeFail': 145430, 'crash_after_lost_race': 5212, 'orphan_process_spend': 0, 'spend_in_undetected_or_later_period': 0, 'ledger_settle': 173664, 'reconcile': 46416, 'settle_write_failed_RunSF': 143150, 'settle_write_failed_StartSF': 116204, 'settle_write_failed_LedgerSettleSF': 75228}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+       36.04 real        35.24 user         0.74 sys
+          1842528256  maximum resident set size
+
+== /usr/bin/time -l python3 -I check52.py leaks52  (fourth leaks52 run, under amendment 8, monitor only; 2026-11-15 18:36; final)
+scope leaks52: states explored: 838192; launch transitions: 160834; finished states: 41964; bounded states: 796228; 33s
+counters: {'launch_other_open': 108282, 'launch_spanning_carried': 0, 'launch_second_operation_or_relaunch': 117934, 'quota_hold_unusable': 0, 'quota_hold_level': 0, 'refused_by_counting_finished_steps': 0, 'uncertain_hold': 69624, 'ordinary_settle_cancel': 17696, 'ordinary_settle_charge': 145430, 'kill_Start': 69624, 'kill_LedgerSettle': 0, 'CancelFail': 17696, 'ChargeFail': 145430, 'crash_after_lost_race': 5212, 'orphan_process_spend': 0, 'spend_in_undetected_or_later_period': 0, 'ledger_settle': 173664, 'reconcile': 46416, 'settle_write_failed_RunSF': 143150, 'settle_write_failed_StartSF': 116204, 'settle_write_failed_LedgerSettleSF': 75228}
+liveness: states with no path to a launch, an owner release or the end: 0
+strict liveness (no credit for BOUNDED): 0 states
+no violations
+       35.04 real        34.36 user         0.64 sys
+          1830486016  maximum resident set size

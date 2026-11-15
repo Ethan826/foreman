@@ -1,0 +1,20 @@
+model rule:
+('Reset',) [] [] level None tu 0
+('Outside',) [] [] level None tu 1
+('Snap', True) [] [] level None tu 1
+('Outside',) [] [] level None tu 2
+('Snap', False) [] [] level None tu 2
+('Ingest', 2) [] [] level 2 tu 2
+('LedgerReset',) [('ownerperiod', 1)] [] level None tu 2
+('Ingest', 1) [('dropped',)] [] level None tu 2
+('Run', 0) [('refuse', 0)] [] level None tu 2
+design rule (observed after reset joins):
+('Reset',) [] [] level None tu 0
+('Outside',) [] [] level None tu 1
+('Snap', True) [] [] level None tu 1
+('Outside',) [] [] level None tu 2
+('Snap', False) [] [] level None tu 2
+('Ingest', 2) [] [] level 2 tu 2
+('LedgerReset',) [('ownerperiod', 1)] [] level None tu 2
+('Ingest', 1) [] [] level 1 tu 2
+('Run', 0) [('launch', 0, 0)] ["TC admitted launch can take the provider's total count above the cap plus the unseen outside use the reserve covers"] level 2 tu 2

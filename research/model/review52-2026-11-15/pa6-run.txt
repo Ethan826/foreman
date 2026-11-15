@@ -1,0 +1,26 @@
+== PA6 mutant
+('Snap', True) [] [] fresh False tu 0
+('Reset',) [] [] fresh False tu 0
+('Snap', True) [] [] fresh False tu 0
+   model guard enables: True | design A5 constrains this arrival: True
+('Ingest', 2) [] [] fresh True tu 0
+('Stale',) [] [] fresh False tu 0
+('Outside',) [] [] fresh False tu 1
+('Outside',) [] [] fresh False tu 2
+   model guard enables: False | design A5 constrains this arrival: False
+('Ingest', 1) [] [] fresh True tu 2
+('Run', 0) [('launch', 0, 0)] [] fresh True tu 2
+('Run', 1) [('launch', 1, 1)] ["TC admitted launch can take the provider's total count above the cap plus the unseen outside use the reserve covers"] fresh True tu 2
+== unmutated
+('Snap', True) [] [] fresh False tu 0
+('Reset',) [] [] fresh False tu 0
+('Snap', True) [] [] fresh False tu 0
+   model guard enables: True | design A5 constrains this arrival: True
+('Ingest', 2) [] [] fresh True tu 0
+('Stale',) [] [] fresh False tu 0
+('Outside',) [] [] fresh False tu 1
+('Outside',) [] [] fresh False tu 2
+   model guard enables: False | design A5 constrains this arrival: False
+('Ingest', 1) [('dropped',)] [] fresh False tu 2
+('Run', 0) [('refuse', 0)] [] fresh False tu 2
+('Run', 1) [('refuse', 1)] [] fresh False tu 2

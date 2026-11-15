@@ -1,7 +1,13 @@
 # Agent supervisor: short design
 
-2026-11-14. Status: DRAFT (revision 5.1, 2026-11-15), awaiting re-review.
-The re-review of revision 5 found it not ready (see "Re-review 2026-11-15
+2026-11-14. Status: DRAFT (revision 5.2, 2026-11-15). It awaits re-review.
+The re-review of revision 5.1 found it not ready (see "Re-review
+2026-11-15 (revision 5.1)"); "How revision 5.2 answers the re-review",
+at the end, maps each of its findings and each of the owner's
+requirements for revision 5.2 to its change and check, or says why it
+stays open. A passing model check supports only the rules it models,
+within its bounds, and a `bun run check` pass says nothing about whether
+the design is ready. The re-review of revision 5 found it not ready (see "Re-review 2026-11-15
 (revision 5)"); "How revision 5.1 answers the re-review", at the end,
 maps each finding to its change and check, under the owner's terms for
 revision 5.1. Revision 4's final review found it not ready (see "Final
@@ -35,12 +41,15 @@ Labels used throughout, by where each is defined:
   2026-11-14 (revision 2)".
 - E1-E7: "Research results used here". L1-L4, L3c and L3r: "Live tests
   needed before relying on the design". F1 and F2: "Later improvements".
-- C1-C21, D and L: "Claims ledger". H1: "Holds". M2 to M5.1: the model
-  checks (M2 is kept in `research/model/check2.py`; M3, M4, M5 and M5.1
-  have sections under the claims ledger).
+- C1-C21, D and L: "Claims ledger". H1: "Holds". M2 to M5.2: the model
+  checks (M2 is kept in `research/model/check2.py`; M3, M4, M5, M5.1 and
+  M5.2 have sections under the claims ledger).
 - Revision 5.1: rule P and assumptions A1-A4 are under "Reconciling
   readings, grants and charges"; owner decisions O1-O6 are under "Open
   items"; properties AS, LK and ND are M5.1's.
+- Revision 5.2: rule P is restated and assumption A5 added under
+  "Reconciling readings, grants and charges"; owner decisions O7-O9 are
+  under "Open items"; property TC is M5.2's.
 
 ## Scope
 
@@ -282,9 +291,9 @@ removes only its own hold.
 | `Drift(worktree, expected, head, dirty)` | a launch attempt finds the supervisor worktree's HEAD different from the recorded revision, or that worktree dirty; or, before a review, finds the review worktree's HEAD different from the revision under review, or that worktree dirty (revision 5; the owner's checkout is never consulted) | for the supervisor worktree, `Adopted(revision)` or the completion of a `restore` request that found the tree clean; for the review worktree, the completion of a `restore --review` request (reset to the revision under review and clean), since a review worktree's HEAD is never adopted |
 | `Protected(paths)` | a protected-digest compare finds a change the tranche does not permit (fix 1) | `release-protected`: re-digests and releases if the files match the recorded digest again; `release-protected --accept` records the current digest as the new baseline and releases |
 
-Clock ticks and notifier timeouts never release any hold. Revision 5
+Clock ticks and notifier timeouts never release any hold. Revision 3.1
 made one exception, a quota hold dropping a named window once its reset
-time passed; revision 5.1 does not adopt it (owner decision O4 in open
+time passed; revisions 5.1 and 5.2 do not adopt it (owner decision O4 in open
 items). A quota hold now ends only by a post-hold reading that allows,
 which after a reset means a reading of the new period, or by a waiver. An approval
 for one tranche and revision does not release a hold for another.
@@ -417,16 +426,32 @@ Unknown`, pure.
   (default Claude: five-hour and weekly; Codex: from live test L2) rather than
   the windows that happen to have readings (R-P1). With no observations
   the result is Unknown.
-- For each window, the reading used is the one with the latest
-  `observedAt`, whatever order readings arrive in; among readings with
-  equal `observedAt`, the highest `usedPercent` (R-P4).
-- That reading is usable when `now - observedAt <= freshness` (default 10
-  minutes) and either `resetsAt` is present and `now < resetsAt`, or
-  `resetsAt` is absent (then freshness alone limits it); and it belongs
-  to the window's current period (revision 5.1; see "Periods").
-- Allow iff every policy window has a usable reading with `usedPercent +
-  estimate(window) <= 100 - reserve(window)`. Hold if any usable reading
-  fails that test. Otherwise Unknown.
+- For each window, the reading used is the highest `usedPercent` among
+  the readings of the window's current period (revision 5.2; finding 4
+  of the re-review of 5.1). Revision 5.1 took the newest by `observedAt`,
+  so after a backward clock step an older, lower reading could win.
+  Under A3 (the provider's count never falls within a period) the
+  highest reading is the tightest bound, whatever order readings arrive
+  in and whatever the clocks did. A stale reading of the period still
+  counts toward that highest value: going stale makes a window Unknown,
+  and never lowers its reading.
+- The window is usable when its current period has at least one fresh
+  reading, and the period's recorded reset time, if any, has not passed
+  (`now < resetsAt` on the wall clock; a passed reset time only
+  tightens). Fresh means `nowMono - observedMono <= freshness` (default
+  10 minutes) on the monotonic clock, from a reading taken in the
+  current boot (revision 5.2; finding 4: a wall-clock age grows shorter
+  when the clock steps back). Every reading records `observedMono` from
+  `clock_gettime(CLOCK_MONOTONIC)` (on macOS it keeps counting during
+  sleep) and the boot's `kern.bootsessionuuid`; a reading without them,
+  or from another boot, is recorded and may raise the period's highest
+  reading, and is never fresh. That the monotonic clock is comparable
+  across processes on one boot is an assumption for L4 to confirm; the
+  man page promises only "an arbitrary point". The statusline line that
+  foreman asks the owner to add records both values.
+- Allow iff every policy window is usable and the level (see "Admission
+  rule") plus `estimate(window)` is at most the cap. Hold if a usable
+  window fails that test. Otherwise Unknown.
 - `estimate(window)` is per role and per window (R-P3): take the role's
   last five finished steps; among those measured in that window, the
   largest measured increase; if none of the five is measured in that
@@ -444,18 +469,22 @@ Unknown`, pure.
   ledger, where a spend-down can raise the cap for one period (see "Usage
   ledger").
 
-Clock basis (fix 9). `heldAt` and `now` are the supervisor's local wall
-clock. `observedAt` is the local wall clock of the process that took the
-reading: the statusline script when it ran, the supervisor when it read a
-`rate_limit_event` line or a Codex response. All run on the same Mac.
-Because a wall clock can step backwards, a reading counts as post-hold
-only if both `observedAt > heldAt` and its ledger `seq` is greater than
-the hold's `ledgerSeq`: the ledger's newest `seq`, read just before the
-hold is appended and recorded in it (revision 5.1; revision 5 compared a
-ledger position with a project-log position, which orders nothing).
-`resetsAt`
-comes from the provider and is compared with the local clock; skew is a
-restriction.
+Clock basis (fix 9; revision 5.2). Every reading records `observedAt`
+(the wall clock) and `observedMono` with the boot id (the monotonic
+clock) of the process that took it: the statusline script when it ran,
+the supervisor when it read a `rate_limit_event` line or a Codex
+response. All run on the same Mac. Freshness uses the monotonic clock
+only. A reading counts as post-hold only if its `observedMono` is later
+than the hold's `heldMono` in the same boot and its ledger `seq` is
+greater than the hold's `ledgerSeq`: the ledger's newest `seq`, read
+just before the hold is appended and recorded in it (revision 5.1;
+revision 5 compared a ledger position with a project-log position, which
+orders nothing; revision 5.2 replaces the wall-clock comparison, which a
+backward step can fool). After a reboot no reading is post-hold until a
+new one is taken. `resetsAt` comes from the provider and is compared
+with the wall clock only to make readings unusable, which tightens; a
+skewed or stepped clock can delay or hasten that, and it decides nothing
+else (rule P no longer reads a clock).
 
 Quota-hold release (R-S1, fix 8): see the holds table. A reading taken
 before the hold, even one appended after it (a late statusline line),
@@ -591,12 +620,23 @@ ordinary operation as well as at restart:
 | Crash between `Grant` and `Intended` | An orphan, as above. | Startup step 5, then every launch attempt |
 | Crash between `Finished` and `Charged`, or the charge write fails | `Finished` records `endedAt` and the token counts, so the settle step appends `Charged` from it. The unique key on `grantId` makes a repeated charge a no-op. A failed charge ends nothing else: the cycle goes on, and the next launch attempt (or the final settle step when `run` has no work left, below) retries. | Step 2 of the next launch attempt, startup, `ledger settle` |
 | Crash between `Intended` and `Finished` | Startup kills the process group and waits until it is gone (step 1), then charges the grant at its estimate with that `endedAt`; under A1 (see "Reconciling") the step used at most its estimate. The operation is still held `Uncertain` for its git effect, but the grant no longer waits for `reconcile`. | Startup step 5 |
-| The project's `run` is stopped for good with a grant open, including a crash mid-step that is never restarted (finding 7) | `ledger settle <project>` (owner command) takes that project's lock with `LOCK_NB`, is refused while a `run` holds it, kills the process group of every operation with `Launched` and no `Finished` exactly as startup step 1 does. If a group survives, it stops and reports. Otherwise it runs the settle step with the kill rule. Orphans are canceled. A `Finished` without `Charged` is charged. An `Intended` without `Finished` is charged at its estimate. The command appends no hold and runs no git command. The operation's git state waits for the project's next `run`, which holds it `Uncertain` as usual and finds the grant already charged. | On the owner's command; no timer settles a grant, because settling frees room and timers may only tighten |
+| The project's `run` is stopped for good with a grant open, including a crash mid-step that is never restarted (finding 7) | `ledger settle <project>` (owner command) takes that project's lock with `LOCK_NB` and is refused while a `run` holds it. Revision 5.2: it signals no process (the owner has not approved cross-instance termination; see "Proposal: cross-instance process termination (awaiting owner approval)"). It cancels orphans and charges each `Finished` without `Charged`. An `Intended` without `Finished` stays open, counted at its estimate, because its process may still run; the command lists it, with its recorded process group, so the owner can end the process by hand and restart the project. The command appends no hold and runs no git command. | On the owner's command; no timer settles a grant, because settling frees room and timers may only tighten |
 
 `run` also runs the settle step once more before it exits with no work
 left, so a charge that failed on the last step is retried; if the ledger
 stays unwritable it reports the open grants and exits, and `ledger
-settle` settles them later.
+settle` settles them later. A settle step whose own ledger write fails
+(busy timeout or another write error) writes nothing: at a launch
+attempt the attempt ends with nothing launched; at startup, step 5
+stops startup and reports; `ledger settle` reports and exits.
+
+What revision 5.2 leaves open without cross-instance termination. A
+project that crashed mid-step and is never restarted keeps that step's
+grant open, at its estimate, until the project starts again (startup
+step 1 kills its own recorded groups, step 5 charges the grant). While
+open it counts in every period, so it costs room and never costs safety.
+If the process is still running, its use is real and the open grant
+counts it; if it has ended, the grant overstates use until the restart.
 
 The settle step of project `j` reads `j`'s own log and the ledger, and
 never another project's log. Only `j`'s lock holder (or `ledger settle`
@@ -607,7 +647,10 @@ none can belong to an admission still in progress.
 Claim C20 states the result. Model check M5.1 (scope grants51, property
 LK) checks it with a crash at every point listed above, a lost race
 followed by a crash, failed cancel and charge writes, and `ledger settle`
-on a project that never restarts.
+on a project that never restarts; M5.2 (scope leaks52) adds two
+operations per project, crashes of both projects at any point, failed
+writes by the settle step itself, and `ledger settle` without
+termination.
 
 ### Reconciling readings, grants and charges (revision 5.1)
 
@@ -634,83 +677,115 @@ observed (this is an assumption to test; the design does not rely on it). Until 
 owner adopts a reflection rule on such evidence, **no reading reflects
 any grant**.
 
-Which grants count in a period (rule P). For provider `p`, window `w`,
-and the window's current period `k`, a grant `g` of `p` that is not
-canceled *counts in `k`* when any of these holds:
+Which grants count in a period (rule P, revision 5.2). For provider
+`p`, window `w` and the window's current period, a grant `g` of `p`
+*counts* when it is neither canceled nor retired. A grant is retired
+from window `w` only by an owner command, `ledger retire <provider>
+<window> --through <seq>`, which retires the charged grants with `seq`
+at most the given value, on the owner's word that their steps used
+nothing in the current period; the command is refused while any of
+those grants is open. Nothing else retires a grant: no scheduled reset
+time, no clock reading, no usage drop and no new period.
 
-- `g` was issued in period `k`;
-- `g` is open (its step may still be running, so it may use period `k`'s
-  allowance whatever period it was issued in);
-- `g` is charged and its `endedAt` is not provably before period `k`
-  began: period `k − 1` has a recorded reset time `R` and `endedAt +
-  resetTolerance ≤ R` is false, or period `k − 1` has no recorded reset
-  time (it was opened by a usage drop or by `ledger reset`).
+Why (blocking finding 1 of the re-review of revision 5.1). Revision
+5.1 stopped counting a charged step of period `k − 1` once its
+`endedAt` was at least `resetTolerance` before the scheduled reset time
+`R`. A provider that resets early breaks that: a step that ends after
+the real reset and before `R` uses the new period's allowance, the
+reading of the new period may not show it yet (A2), and it was no
+longer counted. A usage drop gave a second route: a delayed reading of
+the old period without `resetsAt` could become the current period's
+highest, the next genuine reading then looked like a drop, and the
+spurious period dropped every charged step. Under A2 (a reading's delay
+is unbounded) no reading and no clock value shows when the provider's
+real reset happened relative to a step's end, so revision 5.2 discards
+no charge on such evidence. Which evidence could let a charge stop
+counting automatically is owner decision O7, with the options and their
+costs under "Open items"; this rule is the most conservative of them.
 
-A grant from period `k − 2` or earlier counts in `k` only while open, or
-when the same test against period `k − 1`'s reset time fails. This
-answers finding 8: a step that spans a reset counts in the period whose
-allowance it may have used, in rule 1 and in rule 2 alike. Comparing
-`endedAt` (the Mac's clock) with the provider's reset time rests on clock
-skew below `resetTolerance`; that is a restriction, and it is the only
-place a clock decides anything here. It decides only which period a
-finished step counts in, and its failure direction is stated in the
-restrictions table.
+The level. With `r` the reading pacing uses (the highest of the current
+period; see "Pacing"),
 
-The level. With `r` the reading pacing uses (the newest usable one; see
-"Pacing"),
-
-    level(p, w) = r.usedPercent + Σ amount(g, w)  over grants g of p, from every project, that count in the current period
+    level(p, w) = r.usedPercent + Σ amount(g, w)  over grants g of p, from every project, that count
 
 where `amount` is the estimate for an open grant and the charged amount
 (the estimate, until an authoritative measurement exists) for a charged
 one. Grants of every project sharing the provider account count, because
 the reading is the account's.
 
-What the provider model assumes (owner's term 2). Model check M5.1 keeps
-the provider's count apart from foreman's ledger and checks admission
-safety against it:
+What the provider model assumes (owner's term 2 for revision 5.1, and
+A5 added in revision 5.2). Model checks M5.1 and M5.2 keep the
+provider's count apart from foreman's ledger and check admission safety
+against it:
 
 - A1, estimate bound: a step uses at most its estimate in each window.
   This is not known to hold, and nothing in the first version enforces
-  it (no per-run budget in quota units is known). With A1, the level is
-  never below what the provider will count for the reading's outside use
-  plus every admitted step. Without it, a step that overshoots by `x`
-  can take the provider's count `x` above the cap; M5.1's overshoot run
-  shows such a trace. L1 and L2 must measure how often steps exceed
-  their estimates (from readings that bracket a step with no other use).
+  it (no per-run budget in quota units is known). Safety rests on it.
+  Without it, a step that overshoots by `x` can take the provider's
+  count `x` above the cap; M5.1's overshoot run shows such a trace. The
+  estimate is the largest recent cost of the role, which makes an
+  overshoot less likely and does not prevent one. L1 and L2 must
+  measure how often steps exceed their estimates (from readings that
+  bracket a step with no other use).
 - A2, delay: a reading reports the provider's count as of some earlier
-  moment, by any delay, so it may omit any part of any step and any
-  outside use after that moment. Nothing is assumed about the length of
-  the delay.
+  moment (its as-of moment), by any delay, so it may omit any part of
+  any step and any outside use after that moment.
 - A3, monotone count within a period: the provider's count in a period
   never decreases, and a new period starts from what the provider says.
   A reading of an earlier period (its reset time earlier than the
   current period's by more than `resetTolerance`) is never used.
 - A4, reset times: a reading's reset time is the provider's, and the
-  Mac's clock is within `resetTolerance` of it (rule P and the reading's
-  usability depend on it).
-- Outside use the provider has counted after the reading was taken is
-  not seen by any rule; the reserve is what protects it.
+  Mac's clock is within `resetTolerance` of it. Revision 5.2 uses this
+  only to make readings unusable once a reset time passes, and to sort
+  readings into periods.
+- A5, the reserve (revision 5.2): the outside use the provider counts
+  after the as-of moment of the newest reading foreman has ingested is
+  at most the reserve, for as long as foreman holds a fresh reading.
+  Freshness bounds the time since a reading was observed, and A2 lets
+  its as-of moment be earlier, so freshness alone does not give A5; A5
+  needs a bound on the provider's delay as well, which L1 and L2 are to
+  estimate. M5.2's run without A5 (`--no-a5`) shows the trace: a
+  delayed reading arrives already missing two outside units, and two
+  launches on it take the provider's total above the account's limit.
 
-Admission safety in provider terms, as M5.1 checks it (property AS): at
-every launch foreman admits, the outside use the reading saw, plus
-everything foreman's admitted steps have used or may still use in the
-provider's current period, plus the new step's estimate, is at most the
-cap. With A1, rule P and the level above, this holds by a short argument
-(every step that used or may still use the current period counts at its
-estimate, and the reading's figure is at least the outside use it saw),
-and M5.1 checks it within its bounds.
+Admission safety in provider terms. M5.1 checked AS: at every launch,
+the outside use the reading saw, plus everything foreman's steps have
+used or may still use in the provider's current period, plus the new
+estimate, is at most the cap. Revision 5.2 checks the stronger property
+TC on the provider's total count: at every launch, the provider's count
+in its current period (outside use seen or not, and foreman's use), plus
+what every running step may still use, plus the new estimate, is at
+most the cap plus the outside use counted after the newest reading
+foreman has ingested, and that last term is capped at the reserve. With
+A5 the total stays within 100 percent. With A1, A5, rule P and the level
+above this holds by a short argument (every step that used or may still
+use the current period counts at its estimate, and the reading used is
+at least the provider's count at the newest as-of moment foreman has
+seen), and M5.2 checks it within its bounds. An overshooting step (A1
+broken) breaks it, and so does a reading whose delay hides more outside
+use than the reserve (A5 broken); later readings do not repair either:
+under A2 they may never show the excess in time, and launches admitted
+meanwhile are unsafe.
 
-What this costs. Every step is counted at its estimate for the whole
-period it may have used, and a reading that already shows it adds its
-use again. Near the end of a busy period the level approaches the
-reading plus foreman's estimates, roughly twice foreman's real use, so
-rule 1 refuses earlier: in the worst case foreman gets about half of its
-share of a window until a new period opens. Open grants also count in
-the next period. M5.1 counts how often a launch is refused only because
-of this double count (counter `refused_by_counting_finished_steps`).
-The cost falls only if the owner adopts a reflection rule backed by
-evidence (open items) or an authoritative per-run measurement is found.
+What this costs (revision 5.2, finding 3 of the re-review of 5.1).
+Every step counts at its estimate until the owner retires it, and a
+reading that already shows a step adds the step's real use again. Take
+one period with foreman's real use `u` and the sum of its estimates
+`E` (E ≥ u under A1). Near the cap the reading shows about `u` of
+foreman's use (plus outside use) and the level adds `E`, so rule 1
+refuses once `u + E` reaches foreman's room: foreman's real use is
+bounded by its share times `u / (u + E)`. That is half its share only
+when estimates are exact (`E = u`), and less when estimates exceed real
+use, which is the usual case, since an estimate is the largest of the
+role's last five steps: with estimates twice the real use, a third of
+the share. Grants still open when a period ends, and charged grants not
+yet retired, count in the next period too, which lowers the room there
+further; without `ledger retire`, charged grants accumulate across
+periods until no launch fits. M5.2 counts launches refused only because
+of charged grants (`refused_only_by_carried_charges`). The cost falls
+only if the owner adopts a reflection rule backed by evidence (O5), an
+automatic retirement rule (O7), or an authoritative per-run measurement
+is found.
 
 The level replaces revision 4's "newest reading plus this launch's
 estimate" in rule 1 of the admission rule, in ledger mode and in
@@ -726,18 +801,27 @@ some readings have none.
 
 - A new period opens when an ingested reading has a reset time later
   than the current period's by more than `resetTolerance` (default 5
-  minutes); when a reading of the current period shows usage lower than
-  that period's highest reading by more than `dropTolerance` (default 5
-  points); or on the owner command `ledger reset <provider> <window>`.
-  Each appends `PeriodOpened(provider, window, periodSeq, resetsAt?,
+  minutes), or on the owner command `ledger reset <provider> <window>`.
+  Revision 5.2: a usage drop opens no period. A reading of the current
+  period lower than its highest by more than `dropTolerance` (default 5
+  points) is recorded and shown by `status` as a possible reset; the
+  window keeps the period's highest reading, and the owner may confirm
+  the reset with `ledger reset`. A drop alone cannot tell a reset from a
+  delayed reading arriving late (the false drop of blocking finding 1),
+  so how a drop could open a period without the owner is decision O9.
+  Each opening appends `PeriodOpened(provider, window, periodSeq, resetsAt?,
   cause, mode)`, with `periodSeq` one more than the current one and
   `mode` the rate mode for the whole period (see "Measurement").
 - Period membership (revision 5.1, finding 4). A reading whose reset
   time is earlier than the current period's by more than
   `resetTolerance` belongs to an earlier period: it is recorded and never
   used, and it opens nothing. Any other reading that opens no period
-  belongs to the current one. A reading without `resetsAt` can open a
-  period only by a usage drop.
+  belongs to the current one, with or without `resetsAt`, and can only
+  raise that period's highest reading. A reading without `resetsAt`
+  opens no period. A reading observed (monotonic clock, same boot)
+  before a `ledger reset` never joins the period that command opens: it
+  is recorded and never used (revision 5.2; M5.2 found the trace, see
+  "Model check M5.2"). Opening a period retires no grant (rule P).
 - Opening a period loosens policy, since use starts over against every
   allocation and ceiling. Only a reading or an owner command opens one.
   The clock passing a reset time can only tighten: readings of the old
@@ -881,10 +965,10 @@ policy window `w` of `p`:
 
 1. Pacing (3.1, corrected in revision 5) allows with cap `cap(p, w)`:
    pacing has a usable reading `r` (otherwise the answer is Unknown) and
-   `level(p, w) + est(w) ≤ cap(p, w)`, where `level` counts the reading
-   and every grant of `p`, from every project, that counts in the
-   current period under rule P (see "Reconciling readings, grants and
-   charges"; revision 5.1). `cap(p, w)`
+   `level(p, w) + est(w) ≤ cap(p, w)`, where `level` counts the period's
+   highest reading and every grant of `p`, from every project, that
+   counts under rule P (see "Reconciling readings, grants and charges";
+   revisions 5.1 and 5.2). `cap(p, w)`
    is the level of a spend-down active for that window, and otherwise
    `100 − reserve(p, w)`.
 2. Allocation, only when `w` is in ledger mode for its current period
@@ -902,7 +986,9 @@ canceled grant; a `Charged` row frees nothing while charges are
 estimates. Rule 1 starts passing again through any of those or a new
 reading. Each is a ledger row. An instance notices another instance's
 commit through SQLite's `PRAGMA data_version`, which changes when another
-connection commits, and its scheduler runs again when the ledger's newest
+connection commits; it polls that value every `dataVersionPoll` (1
+second proposed, unapproved, under O3; nit 8 of the re-review of 5.1),
+a timer that only asks and decides nothing, and its scheduler runs again when the ledger's newest
 `seq` has changed (finding 2: a row id is numbered per table and cannot
 stand for the ledger's last change). Readings need a source, so while a
 project has a candidate waiting on rule 1 or 2 or under a quota hold, its
@@ -916,11 +1002,19 @@ ledger row, or the owner (waiver, spend-down, allocation change).
 Liveness in M4 and M5 assumes readings keep arriving; for Claude that
 assumption holds only while the owner uses Claude interactively.
 
-Admission bounds launches. Usage itself is unbounded: a running step can
-use more than its estimate, and assumption A1 ("Reconciling readings,
-grants and charges") then fails. The excess is not charged, since
-charges are estimates; it appears in later readings and makes every
-project's later steps wait.
+Admission bounds launches, and the reserve's safety holds only under
+assumptions A1 and A5 ("Reconciling readings, grants and charges").
+Usage itself is unbounded: a running step can use more than its
+estimate, and A1 then fails. M5.1's overshoot run shows the result: two
+launches each within the cap, one step using twice its estimate, and
+the provider's count above the cap. The excess is not charged, since
+charges are estimates. A later reading may show it, but under A2 there
+is no bound on when, so nothing repairs an overshoot: launches admitted
+before a reading shows it are admitted on a level that is too low, and
+they are unsafe. Likewise M5.2's run without A5 shows a delayed reading
+hiding outside use beyond the reserve. No admission rule prevents
+either without a per-run limit in quota units and a bound on reading
+delay.
 
 ### Spend-down override
 
@@ -1364,8 +1458,9 @@ accepted only for an opId that currently has an `Uncertain` hold and no
 pending request:
 
 All three act on the supervisor worktree and branch. None of them
-writes the ledger (revision 5.1): startup step 5 or `ledger settle` has
-already charged the operation's grant.
+writes the ledger (revision 5.1): startup step 5 has already charged
+the operation's grant (revision 5.2: `ledger settle` leaves a grant
+without `Finished` open, so startup step 5 charges it).
 
 - `discard`: a request (below) to `git reset --hard <baseRevision>` and
   `git clean -fd`; its completion appends `Reconciled(opId, discard)` and
@@ -1698,6 +1793,81 @@ refused for lack of room that a borrower took; no lease or refill timer
 loosens anything except as approved) and mutants, before the body
 changes.
 
+## Proposal: cross-instance process termination (awaiting owner approval)
+
+Nothing in this section is part of the design until the owner approves
+it. The owner ruled on 2026-11-15 that `ledger settle` may not kill
+another instance's process groups. Revision 5.1 had it do so with only
+`Launched(opId, pgid)` recorded, and the re-review of 5.1 (finding 2)
+showed why that is unsafe: a process group id is reused once the group
+is gone, so a kill days later can hit an unrelated process or another
+project's live agent, and nothing was written to the project's log, so
+its next startup would signal the same id again. The body of revision
+5.2 has `ledger settle` signal nothing. These are the requirements a
+proposal would have to meet.
+
+Process identity. macOS has no pidfd, so a pid or pgid alone never
+identifies a process over time. Two published ways to bind one:
+
+- The leader's pid plus its start time, read with `proc_pidinfo(pid,
+  PROC_PIDTBSDINFO)` (`pbi_start_tvsec`, `pbi_start_tvusec`), recorded
+  in `Launched` with the boot id. A process matches only if pid, start
+  time and boot id all match.
+- A per-operation marker file, `<stateDir>/ops/<opId>.lock`, opened by
+  the launched leader and held with `flock(LOCK_EX)` for its lifetime
+  (inherited by its children only if they keep the descriptor). A
+  process that holds the marker's lock is the operation's; the lock
+  vanishes with the last holder, so a reused pid cannot hold it. The
+  cost: it needs a small wrapper as the group leader, and a child that
+  closes inherited descriptors drops out of the test.
+
+Ownership and locking. Only the holder of the owning project's lock may
+signal that project's groups: `ledger settle <project>` takes the
+project's lock with `LOCK_NB` and is refused while a `run` holds it
+(lock contention means a live `run` owns the processes, which then
+settle them itself). The ledger and the project log are read under that
+lock, so no new `Launched` can appear meanwhile.
+
+Signaling. Before any signal, enumerate the group's members
+(`proc_listpids(PROC_PGRP_ONLY, pgid)`) and verify every member: under
+the first option, the leader by pid, start time and boot id, and each
+other member by a start time no earlier than the leader's and a parent
+chain into the group; under the second, each member holds the
+operation's marker lock (checked with `proc_pidinfo` file descriptor
+listing or by a `flock` probe that fails). On any mismatch, signal
+nothing, report the operation and the mismatching pids, and leave the
+grant open. Only then send `SIGKILL` to each verified pid (not to
+`-pgid`, which would reach members that joined after verification) and
+wait until none is left, with a timeout that stops and reports.
+
+Durable end record. Before signaling, append `EndRequested(opId,
+identity)` to the owning project's log; after the group is gone, append
+`Ended(opId, endedAt)` there, and only then charge the grant in the
+ledger. Startup step 1 skips every operation with `Ended`, so it never
+signals the same identity again, and treats an `EndRequested` without
+`Ended` as a kill to redo with the same verification.
+
+Failure and recovery cases a proposal must cover:
+
+- A crash during the kill: `EndRequested` without `Ended`; the next
+  `ledger settle` or startup verifies again and finishes, or reports a
+  mismatch.
+- A partial kill (some members gone, one survives the timeout): no
+  `Ended`; the grant stays open and the report lists the survivor.
+- Lock contention: the command is refused and signals nothing.
+- Reused identifiers: the identity check fails; the command signals
+  nothing and reports the operation; the owner decides whether the step's
+  process is gone and may append `Ended` with an explicit command.
+- A failed charge after `Ended`: the settle step retries it, as for any
+  `Finished` without `Charged`.
+
+Model work before approval: extend scope leaks52 with pid reuse, a crash
+between `EndRequested` and `Ended`, and a member that fails
+verification, with properties "no signal reaches a process outside the
+operation" and LK. M5.2's second leaks52 run (amendment 7) checked the
+revision-5.1 kill-and-charge rule without reuse; it is not evidence for
+this proposal.
+
 ## Provenance of components
 
 | Component | Source | Fidelity |
@@ -1764,7 +1934,7 @@ what that choice would cost:
 ## Claims ledger
 
 A model check backs a claim only for the rules it models, within its
-stated bounds. Passing M3, M4, M5 or M5.1 says nothing about a rule none
+stated bounds. Passing M3, M4, M5, M5.1 or M5.2 says nothing about a rule none
 of them models; each model's section lists what it leaves out. `bun run
 check` passing (TypeScript, ESLint and the prose gate) says nothing about
 the design; it does not clear a review finding.
@@ -1773,7 +1943,7 @@ the design; it does not clear a review finding.
 |---|---|---|
 | C1 | No launch happens while a request or a hold that blocks the step exists (a quota hold blocks only its provider's steps, revision 4), and every launch is made by the lock holder on an unchanged log position. | M3 (C1, K); M4 (C1) for quota holds per provider. |
 | C2 | An approval hold is released only by an approval for the same tranche and revision; a matching approval is never refused. Revision 4: a tranche's implement step launches only with an unused approval for that tranche (live, or its own pre-approval without `--stop-before`); a passing review creates the approval hold exactly when the next tranche is neither so approved nor started; `notConverged` always creates it. Revision 5: a `--stop-before` entry alone never starts its tranche; a removed entry starts nothing; a discarded implement step's approval is armed again. | M3 (C2, K); M4 (BK); M5 stages5 (SB, BR). Re-arming after a discard: argument (no model has both crashes and approvals). |
-| C3 | Ticks never release a hold and never turn Unknown into Allow; a quota hold is released only when every window it names has a newest post-hold allowing reading, or by a waiver (revision 5.1; the release at a passed reset time is owner decision O4, which this revision does not adopt). | M3 (C3, K), with readings arriving out of order. Pacing arithmetic: unit and property tests later, argument for now. |
+| C3 | Ticks never release a hold and never turn Unknown into Allow; a quota hold is released only when every window it names has a newest post-hold allowing reading (post-hold by the monotonic clock and the ledger `seq`, revision 5.2), or by a waiver (revision 5.1; the release at a passed reset time is owner decision O4, which this revision does not adopt). | M3 (C3, K), with readings arriving out of order. Monotonic post-hold test: argument. Pacing arithmetic: unit and property tests later, argument for now. |
 | C4 | Every launch is preceded by a durable intent; a crash with an operation unsettled produces an Uncertain hold for that opId at the next startup and no launch until it is reconciled; a reconciled operation is settled. | M3 (C4), crash at every point, including between `git commit` and `Committed`, and between a request's git effect and its completion. |
 | C5 | At most one operation is in flight. | M3 (C5), with two `run` instances and late appends. |
 | C6 | In a tranche, a correction is launched only after the 1st to `maxCorrectionRounds`-th change-requesting review; the review after the last correction that still requests changes ends the tranche in an approval hold, and nothing launches until that approval. | M3 (C6, C2). |
@@ -1784,14 +1954,14 @@ the design; it does not clear a review finding.
 | D | No launch while the recorded revision differs from the supervisor worktree's HEAD or that worktree is dirty; every launch's base is the recorded revision; git effects requested from the CLI (including `approve --base`) run only by the lock holder, with HEAD at the request's HEAD or target. | M3 (D, G), with amendment 8 for `--base`; mutants R10a, R10b. The model's HEAD and tree are the supervisor worktree's. |
 | C11 | Nothing the owner does in their own checkout, committed or not, enters a step's commit or a step's inputs; no supervisor process writes the owner's checkout or branches. | Argument: steps and shell git run only in the supervisor worktree with the recorded git directories, and the commit procedure moves only the supervisor branch. Worktree probes (owner's `main` and `git status` unchanged; branch protections). Not in M3, which has one tree. L3 and L4 to confirm with real agents. Exception: the shared common directory (protected digest). |
 | C12 | A tranche's work reaches the owner's branch only through a git command the owner runs; approval moves only the supervisor branch, and only through a `--base` request. | Argument from the text (no supervisor command writes the owner's refs); M3 amendment 8 for the request; worktree probes for the delivery commands. |
-| C13 | Reserve (restated in revision 5.1): no launch takes a window's level, which is the newest usable reading plus the amount of every grant of the provider, from every project, that counts in the current period under rule P, above the cap once its estimate is added, unless a spend-down sets the cap for that window's period or a waiver is armed; no reading is taken to reflect a grant; no launch uses a reading of a passed or earlier period, and Unknown never launches. Under assumptions A1-A4 ("Reconciling readings, grants and charges"), at every admitted launch the outside use the reading saw, plus all that foreman's admitted steps have used or may still use in the provider's current period, plus the new estimate, is at most the cap, counted in the provider's own terms. Without A1 an overshooting step can exceed the cap; outside usage since the reading is not seen. | M5.1 grants51 (AS against the monitor's own provider count, with delayed readings and a step spanning the reset; UK; DC restatement); the overshoot run shows AS failing without A1; M4 (RS) for spend-downs and periods; waivers: M3 (C7), M5 stages5 (WV). |
+| C13 | Reserve (restated in revision 5.2): no launch takes a window's level, which is the highest reading of the current period plus the amount of every grant of the provider, from every project, that is neither canceled nor retired, above the cap once its estimate is added, unless a spend-down sets the cap for that window's period or a waiver is armed; no reading is taken to reflect a grant; only the owner retires a grant; no launch uses a reading of a passed or earlier period or one observed before a `ledger reset` that opened the current period, and Unknown never launches. Under assumptions A1-A5 ("Reconciling readings, grants and charges"), at every admitted launch the provider's total count in its current period plus what running steps may still use plus the new estimate is at most the cap plus the outside use counted after the newest reading foreman has ingested, capped at the reserve (TC). Without A1 an overshooting step can exceed the cap (M5.1 overshoot run); without A5 a delayed reading can hide outside use beyond the reserve (M5.2 `--no-a5` run). | M5.2 periods52 (TC against the monitor's own provider count, with resets early and on schedule; with readings late, out of order or lacking a reset time; with a backward clock step; with Unknown; with outside use up to reserve + 1; mutants GA8, PA1-PA5, PA7, PA9-PA12 killed by TC); M5.1 grants51 (AS, revision 5.1's rule P); M4 (RS) for spend-downs and periods; waivers: M3 (C7), M5 stages5 (WV). |
 | C14 | Allocations: for a window in ledger mode with no active spend-down, no launch takes its project's use above the project's ceiling, or foreman's use above the sum of allocations. While the window is in fallback, allocations are not enforced. | M4 (AL). |
 | C15 | A spend-down is accepted only with a usable reading and when none is active. It is in effect only in the period it was recorded in and until `--cancel`; a loosening one also ends when that period's reset time passes, and a tightening one does not end on the clock (revision 5.1). A tightening spend-down keeps rule 2 in force. | M4 (SD, RS); M5 stages5 (SD5) for tightening levels and `--cancel`; M5.1 stages5 with the revision-5.1 end rule. |
-| C16 | Periods: only a reading or the owner's `ledger reset` opens a period; a timer only tightens. A grant counts in its own period and, under rule P, in a later period it may have used (revision 5.1; revision 5 counted it in its own period only). A reading of an earlier period is never used. | M4 (PD, through RS and AL); mutant PD2 killed; PD1 and SD2 equivalent (the stale-reading rule already blocks the window until a new period); M5.1 grants51 (AS with a step spanning the reset, mutant GB2). |
+| C16 | Periods: only a reading with a later reset time or the owner's `ledger reset` opens a period; a usage drop opens none (revision 5.2); a timer only tightens. Opening a period retires no grant; a grant counts until it is canceled or the owner retires it (revision 5.2). A reading of an earlier period is never used; a reading observed before a `ledger reset` never joins the period it opens. | M5.2 periods52 (TC; PA1, PA2, PA9, PA12 killed; PA6 safety-only equivalent); M4 (PD, through RS and AL) for the revision-4 rules. |
 | C17 | The review queue never exceeds its bound, and an implement step launches only with room for its result. A change request at the head unwinds exactly the tranches stacked above it, and their pre-approvals are armed again. | M4 (QB, UW, BK). |
 | C18 | Roles change only by an owner command; every launch's client follows the last owner-set roles, and its profile follows its role (editing for implementer and corrector, read-only for reviewer). | M4 (SW). |
 | C19 | The scheduler launches the first candidate in earliest-deadline order that is not under a quota hold for its provider and passes admission, refuses only when none passes, and creates at most one quota hold per attempt, for the first candidate refused by pacing. | M4 (ED, H1). |
-| C20 | Restated in revision 5.1. Admissions by different projects' instances are serialized by the ledger. After the settle step of every launch attempt of project `j`, at the end of every startup of `j`, and after every `ledger settle` of `j`, no grant of `j` is open (no step of `j` is in flight at those points); no grant is both charged and canceled; none is charged twice; none is charged while its process may still run. A lost race, a failed cancel or charge write, a crash at any point (including after a lost race and before its cancel) and a crash that is never followed by a restart therefore leave a grant open only until `j`'s next launch attempt, startup or `ledger settle`. While it is open it counts at its estimate. | M5.1 grants51 (LK, ND), with a crash at every point named, a lost race followed by a crash, failed cancel and charge writes, and `ledger settle` on a project that stays down; mutant GA9 killed by LK; serialization: argument from SQLite's `BEGIN IMMEDIATE`, modeled as an atomic admission; L4 for real crashes. |
+| C20 | Restated in revision 5.2. Admissions by different projects' instances are serialized by the ledger. After every settle step that succeeds, of every launch attempt of project `j` and at the end of every startup of `j`, no grant of `j` is open (no step of `j` is in flight at those points); after `ledger settle` of `j` only grants whose `Intended` has no `Finished` may stay open (no cross-instance termination); no grant is both charged and canceled; none is charged twice; none is charged while its process may still run. A lost race, a failed cancel, charge or settle write, a crash of either project at any point (including after a lost race and before its cancel) and a crash that is never followed by a restart therefore leave a grant open only until `j`'s next successful launch attempt or startup; while it is open it counts at its estimate. | M5.2 leaks52 (LK, ND) with two operations per project, both projects crashing at any point, every kind of failed write including the settle step's own, and `ledger settle` without termination (see "Model check M5.2" for the mutants); M5.1 grants51 for one operation per project with spending; serialization: argument from SQLite's `BEGIN IMMEDIATE`, modeled as an atomic admission; L4 for real crashes. |
 | C21 | Rates are used only after convergence; a window's mode is fixed for each period from the fit in the ledger, so every instance sees the same mode; in fallback, admission is rule 1 alone. | Argument; unit and property tests of the fit later (RLS against a batch least-squares oracle on generated data). M4 models convergence as a one-way event that applies at once; the per-period mode is not modeled. |
 | L | From every reachable state some sequence of events reaches a launch or an approval release. | M3 liveness and strict liveness; M4 liveness (with credit for states where a provider has used its one modeled reset). |
 
@@ -2145,8 +2315,9 @@ as killed only by AS, LK, ND or liveness, never by a restatement check
 level (GA1); a charged step taken as reflected by the reading (GA2,
 revision 5's reflection test at its loosest); an open grant counted only
 in its own period (GB1); a step spanning the reset not carried (GB2,
-revision 5's rule); startup charging before the kill (GB4, AS's
-"charged while its process may still spend"). Killed by
+revision 5's rule); startup charging before the kill (GB4; the check that kills it is
+tagged AS in check51.py but is ND's condition, no charge while the
+process may still run; corrected in revision 5.2, nit 8). Killed by
 LK: startup not charging a finished step (GA5); no settle step at
 ordinary attempts (GA9, which M5 missed: a failed write now leaves a
 grant open in ordinary operation); startup not canceling orphans (GA10);
@@ -2183,17 +2354,114 @@ margin is abstracted to exact times); the `seq` order (the model's
 ledger is one atomic store); a project that launches twice; stale
 readings; Codex; waivers in scope grants51.
 
+### Model check M5.2 (revision 5.2)
+
+`research/model/check52.py` and `research/model/mutate52.py`, outputs
+`research/model/check52-run.txt` and `research/model/mutate52-run.txt`;
+check4.py, check5.py and check51.py and their outputs are unchanged.
+Grammar and bounds are fixed in the file's header; eight amendments
+follow it, each labeled with its before and after results. Passing M5.2
+supports only the rules it models, within its bounds. Two scopes, run
+one at a time; one combined model did not fit in memory.
+
+- Scope periods52 (owner requirement 2): one provider and window, two
+  projects with one operation each (amendment 1: two for project 0 did
+  not fit), U = 3, reserve 1, cap 2, estimate 1. Provider resets on
+  schedule or early (one in all); a backward clock step; readings with
+  or without a reset time, at most two, ingested late and in either
+  order; staleness on the monotonic clock; outside use up to reserve +
+  1 = 2 units; the owner's `ledger retire` and `ledger reset`. Property
+  TC (see "Reconciling readings, grants and charges"), computed from the
+  monitor's own record of the provider's count and outside use.
+- Scope leaks52 (owner requirement 3): M5.1's grant lifecycle with two
+  operations per project, both projects crashing at any point, a lost
+  race (project 1), failed cancel, charge and settle-step writes, and
+  `ledger settle` without termination (amendment 7); no units are spent
+  (amendment 6), so it checks LK and ND and not the provider count.
+
+| Scope | States | Launch transitions | Violations | Liveness / strict | Coverage counters (all above zero) |
+|---|---|---|---|---|---|
+| periods52 (run 6) | 1,347,706 | 52,386 | none | 0 / 37,713 | launches after an early reset 32,724; with a carried charge 920; after a backward clock step 36,802; with outside use above the reserve 24,646; on a delayed reading 28,052; with an older snapshot still pending 16,640; refusals while Unknown 155,862 and only because of carried charges 13,188; earlier-period readings dropped 113,848; out-of-order ingests 157,632; false drops kept in the period 16,936; readings without a reset time 244,954 |
+| leaks52 (fourth run) | 838,192 | 160,834 | none | 0 / 0 | launches of a second operation or after a lost race 117,934; with another project's grant open 108,282; failed settle writes at a launch attempt 143,150, at startup 116,204 and at `ledger settle` 75,228; crashes after a lost race 5,212; `ledger settle` 173,664 |
+
+Strict liveness in periods52 counts states where no snapshot is left,
+which no rule can leave; in leaks52, with no reset, the one-reset credit
+covers every state, so strict liveness is the meaningful figure there,
+and it is 0. Peak memory: leaks52 1.8 GB; periods52 was not measured in
+its final run (run 3, before the search was slimmed, reached 3.1 GB).
+
+Runs that found something. Run 4 of periods52 found a TC violation that
+showed A5 missing from the design: a delayed reading arrived already
+missing two outside units (amendment 4; `--no-a5` reproduces it in six
+steps). Run 5 found a design defect: after `ledger reset`, a delayed
+reading of the same provider period, lower than one already ingested,
+became the new period's highest. Revision 5.2 now refuses readings
+observed before the command (amendment 5, "Periods").
+
+Mutation test: 24 mutants of the model parts only, killed only by a
+property or by liveness (leaks52 with `--safety-only`). Each mutant that
+survives has exactly one classification, printed by `mutate52.py`.
+
+| Mutant | Result | Classification if missed |
+|---|---|---|
+| PA1 revision 5.1's rule P (scheduled reset time decides) | killed by TC | |
+| PA2 a usage drop opens a period | killed by TC | |
+| PA3 newest reading by wall stamp | killed by TC | |
+| PA4 highest among fresh readings only | killed by TC | |
+| PA5 freshness on the wall clock | killed by TC | |
+| PA6 an earlier period's reading joins | missed | safety-only equivalent: it can only raise the period's highest reading, so it refuses more |
+| GA8 Unknown treated as Allow | killed by TC | |
+| PA7 freshness ignored | killed by TC | |
+| PA8 a reading usable after its reset time passed | missed | safety-only equivalent under A5: the old reading plus every unretired grant still bounds the new period; it costs only liveness |
+| PA9 every charged step retired at a new period | killed by TC | |
+| PA10 open grants left out | killed by TC | |
+| PA11 charged grants left out (reflection) | killed by TC | |
+| PA12 readings observed before `ledger reset` join | killed by TC | |
+| GA4 no cancel after a lost race | missed | safety-only equivalent: the next settle step cancels the orphan; in the text the open grant can cause a spurious Quota hold |
+| GA5 startup does not charge a finished step | killed by LK | |
+| GA6 charged again on redo | killed by ND | |
+| GA9 no settle step at ordinary attempts | killed by LK | |
+| GA10 startup does not cancel orphans | killed by LK | |
+| GA11 no Uncertain hold at startup | missed | separate coverage: M3 (C4) checks the git state the hold protects |
+| GA12 orphan test by opId | missed | equivalent: every grant has a fresh opId in the written design |
+| GB4 startup charges before the kill | killed by ND | |
+| GB5 `ledger settle` charges a step that may still run | killed by ND | |
+| GL1 a failed settle write does not end the attempt | killed by strict liveness | |
+| GL2 a startup whose settle write fails goes on | killed by LK | |
+
+No mutant is classified missing coverage. GA8 is killed by TC, a safety
+property, because TC charges foreman for outside use no reading excuses.
+Mutants of M5.1 not repeated here keep their M5.1 results (GA1, GA2,
+GB1, GB2 for revision 5.1's rule P; GA7 is replaced by PA8). The stages
+mutants of M5 were not rerun; their rules are unchanged.
+
+Not covered by M5.2: rule 2 and allocations with the period rules; two
+windows; a late reset and a forward clock step (amendment 3; argued:
+both only make readings unusable); a third reading in one run
+(amendment 2); outside use of reserve + 2; a project's second launch
+against its own carried charge in periods52 (leaks52 has second
+launches, without units); a process spending after its instance crashed
+with two operations (M5.1 covers one); the `seq` order; clock skew
+within `resetTolerance`; spend-downs and waivers with the new period
+rules; the monotonic clock across processes (L4); `ledger retire` given
+wrongly by the owner (the model takes the owner's word as true).
+
+check51.py's header text below its amendments still describes M5.1's
+scope before amendment 2 (nit 7 of the re-review of 5.1); the
+amendments above it govern, and the file stays unedited under the
+owner's requirement 9 for revision 5.2.
+
 ## Restrictions table
 
 | Restriction | Why believed harmless | Challenge example |
 |---|---|---|
 | One operation in flight; one `run` instance | The workflow is sequential | The user wants a review of tranche N while N+1 is implemented; refused by design |
 | Observation unusable after `resetsAt` | The user's other work may start a new window | Supervisor idles overnight; every first launch needs a waiver or a fresh observation |
-| A reading lacking `resetsAt` is usable on freshness alone | Freshness is 10 minutes, shorter than any window | A window resets two minutes after the reading; the reading overstates usage (safe direction) |
+| A reading lacking `resetsAt` is usable on freshness alone | Freshness is 10 minutes, shorter than any window | A window resets two minutes after the reading; the reading overstates the new period's use, which only refuses launches. That is the safe direction only under A1 and A5 |
 | Window set from policy; readings add none | A missing reading must not read as Allow | Codex adds a window; until policy lists it, it is not checked |
 | Estimate from the last five steps per role and window | Steps of one role are similar in cost | A large tranche after small ones overshoots the reserve |
 | Quota hold released only by post-hold readings of the windows it names | A reading from before the hold cannot know the limit was hit | The user's session reports usage just before the hold, low; the hold stays until a newer reading |
-| `resetsAt` compared with the local clock | Providers and the Mac both use network time | A skewed clock releases a rate-limit hold early; the next launch attempt still runs pacing |
+| `resetsAt` compared with the local wall clock (revision 5.2: it only makes readings unusable or sorts them into periods) | Providers and the Mac both use network time; a passed reset time only tightens | The clock runs ahead or steps forward; readings become unusable before the provider resets and launches wait for a reading of the new period. A backward step keeps a reading usable past the reset; M5.2 checks that TC still holds (A5 and rule P bound it) |
 | Waiver lasts one launch attempt, across restarts | A waiver is consent for one launch | The user waives, then an approval hold refuses the next attempt; the user must waive again |
 | Read-only review still needs reconciliation | Simplicity in the first version (F1 deferred) | A crash during a review always waits for the user, though replay would be safe |
 | Drift and dirty trees hold until `adopt` or `restore` | The user decides what a change to the supervisor worktree means (F2 deferred) | A commit lands on the supervisor branch mid-tranche; the run waits for `adopt` |
@@ -2214,17 +2482,20 @@ readings; Codex; waivers in scope grants51.
 | Shell commits, agents cannot | Gives each step a revision and Op-Id | An agent that needs history rewriting cannot do it |
 | One ledger for every instance on the Mac, one account per provider (revision 4) | Readings and resets are per account | Two Claude logins on one Mac would mix readings; not supported |
 | A lender is not protected within a period | Ceilings bound each borrower; the reserve is never borrowed | Project A borrows its full ceiling in the morning; project B finds its allocation partly used for the rest of the period (the lease proposal would change this, if approved) |
-| Admission counts every step at its estimate for each period it may have used, and no reading reflects a step (revision 5.1) | Counting a step twice only delays launches; leaving it out could break the reserve, and no evidence of reflection exists | Late in a busy period the reading already shows foreman's steps and the level adds them again; foreman gets about half its share until the next period |
+| Admission counts every step at its estimate until the owner retires it, and no reading reflects a step (revisions 5.1 and 5.2) | Counting a step twice only delays launches; leaving it out could break the reserve, and nothing shows that a reading reflects a step or when the provider really reset | Late in a busy period the reading already shows foreman's steps and the level adds them again; foreman's real use is bounded by its share times u/(u + E), a third of the share when estimates are twice the real use; after a reset the previous period's charges still count until `ledger retire` |
 | Charges are estimates until a run report gives an authoritative measurement in quota units (revision 5.1) | Token counts and dollar costs do not measure subscription allowance | A step that used far less than its estimate still counts at the estimate for the rest of its period |
 | Assumption A1: a step uses at most its estimate (revision 5.1) | The estimate is the largest recent cost of the role; L1 and L2 measure how often it is exceeded | A step twice its estimate takes the provider's count past the cap; M5.1's overshoot run shows the trace |
-| Rule P compares a step's `endedAt` with the provider's reset time (revision 5.1) | Both clocks follow network time; the test uses `resetTolerance` as a margin | The Mac's clock runs ten minutes slow; a step that ended after the reset is taken to have ended before it, and its use in the new period is not counted |
-| After a period with no recorded reset time, every finished step of that period counts in the next (revision 5.1) | Such periods come only from a usage drop or `ledger reset` | A provider omits reset times; each new period starts with the previous period's steps counted, until the owner raises the cap with a loosening spend-down |
-| A ledger write that keeps failing leaves grants open (revision 5.1) | An open grant counts at its estimate, which is the safe direction | The ledger disk is full; grants stay open, other projects wait, and `run` reports the open grants when it exits |
+| Only the owner retires a charged grant (revision 5.2; revision 5.1 compared a step's `endedAt` with the scheduled reset time) | A scheduled reset time, a clock value or a usage drop does not show when the provider really reset (early resets, A2) | The owner forgets `ledger retire` for a week; charges accumulate and every launch is refused until the owner retires them (O7 lists automatic options) |
+| A reading observed before a `ledger reset` never joins the period it opens (revision 5.2) | A delayed reading of the same provider period could otherwise become the new period's highest and hide use an ingested reading showed (M5.2 run 5) | The owner resets just after a real reset; a genuine new-period reading taken a minute before the command is ignored, and the window waits for the next reading |
+| A ledger write that keeps failing leaves grants open (revision 5.1) | An open grant counts at its estimate, which overstates use only under A1 | The ledger disk is full; grants stay open, other projects wait, and `run` reports the open grants when it exits |
+| `ledger settle` signals no process; a grant without `Finished` stays open until its project restarts (revision 5.2) | Cross-instance termination is not approved | A project crashed mid-step and its owner never restarts it; its grant counts at its estimate in every period until the restart or until the proposal is approved |
+| Freshness on the monotonic clock of the current boot (revision 5.2) | A wall-clock age shrinks when the clock steps back | A statusline script that does not record `observedMono` and the boot id gives readings that are never fresh; after a reboot every window is Unknown until a new reading |
+| Assumption A5: outside use after the newest reading's as-of moment fits in the reserve (revision 5.2) | Freshness bounds time since observation; the provider's delay is assumed short | The provider's figure lags by an hour while the owner works heavily; the reading misses more than the reserve, and launches on it can take the account past its limit (M5.2 `--no-a5`) |
 | A waiting Claude step wakes only on a reading, a ledger row or the owner | Claude has no read without a model turn (E2) | The owner stops using Claude interactively overnight; a Claude step refused by rule 1 waits for a waiver |
 | `backlog remove` is refused for a started tranche | Removal stays free of git effects | With bound 2, the owner wants a stacked tranche gone; they wait for the approval hold or abandon |
 | Allocations are not enforced while a window is in fallback, and the mode changes only at a new period | Per-project charges need converged rates; the reserve still bounds every launch | Early on, one busy project uses most of foreman's share before the fit converges; after convergence, the rest of that period stays in fallback |
 | Rates are biased when outside usage coincides with steps | The elapsed-hours term absorbs steady outside usage | The owner works only while steps run; rates overstate foreman's cost, which charges projects more and understates the residual |
-| A usage drop opens a period | Providers reset usage to zero | A provider corrects a reading down by more than `dropTolerance`; a period opens early and allocations start over, while rule 1 still uses the real reading |
+| A usage drop opens no period (revision 5.2) | A drop cannot tell a reset from a delayed reading (false drop) | A provider without reset times resets; the window keeps the old highest reading until the owner runs `ledger reset` (O9 lists automatic options) |
 | One operation at a time per project, even with a review worktree | Keeps C5 and the model; projects still run in parallel | In a single project Codex idles while Claude implements |
 | Stacking can discard approved work (bound 2) | Bounded by the queue bound; the commits stay in the log and reflog | Tranche N's review asks for changes; tranche N+1, already implemented on top, is unwound and redone |
 | A pre-approved tranche's base is the previous tranche's result | An approval names what it approves | The owner delivers mid-backlog; the next pre-approved tranche does not see the delivered commit unless its entry was `--stop-before` |
@@ -2386,6 +2657,60 @@ Decisions the owner still needs to make:
     period counts in the next. The cost of the second is up to a whole
     period of reduced room after such a reset; an owner who knows the
     reset happened can raise the cap with a loosening spend-down.
+- Revision 5.2 adds owner decisions O7-O9 and keeps O1-O6 open; it
+  adopts none of them. Where the body needed a choice, it takes the most
+  conservative option and lists the others here.
+  - O7, what lets a charged grant stop counting without the owner.
+    Revision 5.2's body: nothing; only `ledger retire` retires a grant.
+    Options, with their costs:
+    (a) keep the body (owner only). Cost: charges accumulate across
+    periods, so the owner must retire them after every reset or launches
+    stop.
+    (b) the new period's own reset time: under a new assumption A6 (a
+    period lasts exactly the window's length W, so the period with reset
+    time `R_k` began at `R_k − W`, also after an early reset), a charged
+    grant with `endedAt + resetTolerance ≤ R_k − W` used nothing in
+    period `k` and is retired when a reading with `R_k` opens it. Cost:
+    A6 must hold for each provider and window (L1, L2), and the Mac's
+    clock decides again, within `resetTolerance`; nothing is retired in
+    a period opened by `ledger reset` or without a reset time.
+    (c) a bounded provider delay `D` (a new assumption on A2): a charged
+    grant is retired once a reading of a later period, observed at least
+    `D` after the grant's `endedAt`, exists. Cost: `D` must be measured
+    and is a policy value; a provider delay longer than `D` breaks
+    safety.
+    (d) an as-of time or a per-request counter from the provider, if L1
+    or L2 finds one. Cost: none known in safety; it exists only if a
+    provider supplies it.
+    Revision 5.1's rule (the previous period's scheduled reset time) is
+    not an option: an early reset breaks it (blocking finding 1).
+  - O8, the `ledger retire` command itself: its form (`--through <seq>`,
+    per provider and window) and that it rests on the owner's word. The
+    body needs some owner path while O7 is open; the owner may prefer
+    another form.
+  - O9, how a usage drop could open a period without the owner.
+    Revision 5.2's body: it cannot; a drop is shown by `status` and the
+    owner confirms with `ledger reset`. Options: (a) keep the body; cost:
+    a provider that omits reset times needs the owner after every reset.
+    (b) a drop confirmed by two readings observed (monotonic) at least
+    `freshness` apart, both below the old highest by more than
+    `dropTolerance`, with no higher reading in between. Cost: a delayed
+    reading can still repeat, so this rests on a bounded delay as in
+    O7(c); allocations and loosening spend-downs would start over on
+    that evidence. (c) treat a drop as a reset only when the provider
+    also reports a later reset time, which is the body's rule for
+    readings with reset times. Revision 5.1's single-drop rule is not an
+    option (the false drop of blocking finding 1).
+  - The reduced usable share (unchanged decision, corrected figure):
+    foreman's real use is bounded by its share times `u / (u + E)`; see
+    "What this costs" under "Reconciling readings, grants and charges".
+  - Cross-instance process termination: see "Proposal: cross-instance
+    process termination (awaiting owner approval)". Not adopted.
+  - New values under O3: `dataVersionPoll` (1 second proposed).
+  - New, for L1 and L4: whether the statusline script can record
+    `observedMono` and the boot id, and whether `CLOCK_MONOTONIC` agrees
+    across processes on one boot; without both, statusline readings are
+    never fresh under revision 5.2.
 - The suggestion statistic for the feedback loop (see "Pacing").
 - The default `<stateDir>` and supervisor branch name.
 
@@ -3006,3 +3331,130 @@ elapsed time or clock jump counts as reflection; charges are always the
 estimate; O1 to O4 remain open; queue default 1, single-transaction
 admission and the unique key are unchanged; historical text preserved.
 Unverified: whether real providers reset early.
+
+## How revision 5.2 answers the re-review
+
+Each row names a finding of "Re-review 2026-11-15 (revision 5.1)" or one
+of the owner's requirements for revision 5.2, the sections changed, and
+the check behind the change, or why it stays open. A passing model check
+supports only the rules it models, within its bounds ("Model check
+M5.2" lists what it leaves out), and `bun run check` passing does not
+establish that the design is ready.
+
+| Item | Change | Check, or why open |
+|---|---|---|
+| Finding 1 (blocking): rule P undercounts after an early reset or a drop-opened period | "Reconciling": rule P counts every grant not canceled or retired; only the owner's `ledger retire` retires one. "Periods": a usage drop opens no period; a reading observed before `ledger reset` never joins the period it opens. Automatic retirement and drop confirmation are proposals O7 and O9 | M5.2 periods52, TC with early resets, late readings that arrive out of order, and false drops; PA1 (revision 5.1's rule) and PA2 (a drop opens a period) killed by TC |
+| Finding 2: `ledger settle` kills without process identity | `ledger settle` signals nothing ("Grant lifecycle"); the requirements are in "Proposal: cross-instance process termination (awaiting owner approval)" | Body: M5.2 leaks52 (LK after `ledger settle` allows only steps that may still run; GB5 killed by ND). Proposal: not modeled; the model work it needs is listed there |
+| Finding 3: worst-case share understated | "What this costs": share times u/(u + E); a third when estimates are twice real use; open and unretired grants lower the next period's room. Restrictions row corrected | Argument (arithmetic in the text); counter `refused_only_by_carried_charges` |
+| Finding 4: newest reading by `observedAt`; wall-clock freshness | "Pacing": the highest `usedPercent` of the period's readings; freshness and post-hold on the monotonic clock with the boot id; "Clock basis" | PA3 (newest by wall stamp), PA5 (wall-clock freshness), PA7 (freshness ignored) killed by TC. Cross-process monotonic clock: L4 |
+| Finding 5: no safety property guards Unknown; GA8 survives | Property TC on the provider's total count; outside use up to reserve + 1; assumption A5 stated | GA8 killed by TC in periods52, a safety property and not a restatement |
+| Finding 6: wording implies readings repair an overshoot | "Admission rule" now states A1 and A5, M5.1's overshoot run and M5.2's `--no-a5` run, and that launches admitted before a reading shows an excess are unsafe; A1's bullet says the estimate does not prevent overshoot; two restrictions rows say "safe direction only under A1 (and A5)" | Text |
+| Nit 7: stale text | Restrictions row on `resetsAt` rewritten; "Revision 3.1 made one exception" under "Holds"; check51.py's header noted under "Model check M5.2" (the file stays unedited, requirement 9) | Text |
+| Nit 8: GB4's killer; settle-write failures; `data_version` polling | M5.1 section corrected (ND's condition); check52 tags it ND; settle-step write failures modeled (RunSF, StartSF, LedgerSettleSF); `dataVersionPoll` proposed at 1 second under O3 | leaks52 (GB4 killed by ND; GL1, GL2 killed) |
+| Requirement 1: repair without adopting O5 or O6 | Most conservative option in the body (owner-only retirement, no drop-opened periods); O7 and O9 list the options with costs. O5 and O6 stay open; O6's revision-5.1 rule is replaced in the body by the stricter one, and O6 itself stays unadopted | periods52 TC |
+| Requirement 2: model cases and TC | periods52 covers early resets, late readings that arrive out of order, false drops, a backward clock step, readings without reset times and Unknown. It adds TC, allows outside use of reserve + 1, and checks the new reading selection and freshness | periods52 run 6: no violation, liveness 0; GA8 killed by TC |
+| Requirement 3: accumulating leaks | leaks52: two operations per project, separate from periods52, each with its limits stated | leaks52 fourth run: no violation, strict liveness 0 |
+| Requirement 4: usable share and wording | As findings 3 and 6 | Text |
+| Requirement 5: classify surviving mutants | "Model check M5.2" table and `mutate52.py` output: PA6, PA8, GA4 safety-only equivalent; GA11 separate coverage; GA12 equivalent; none missing coverage | `research/model/mutate52-run.txt` |
+| Requirement 6: cross-instance termination stays unapproved | Proposal section with identity, locking, signaling, end record and failure cases; body text no longer has `ledger settle` kill; what that leaves open is under "Grant lifecycle" | Proposal not modeled |
+| Requirement 7: nits | As nits 7 and 8 | |
+| Requirement 8: decisions stay open | O1-O9, the reduced share and termination listed under "Open items"; none adopted. New: O7, O8 (`ledger retire`'s form), O9, `dataVersionPoll`, the statusline's monotonic stamp | Text |
+| Requirement 9: history preserved; new model files | Historical reviews and rulings unchanged; check4.py, check5.py, check51.py, mutate5.py, mutate51.py and their outputs unchanged; check52.py, mutate52.py and their outputs added | `git diff` shows no change to those files |
+| Requirement 10: status, this table, prose gate | Header says revision 5.2 and that it awaits re-review | `tell_lint.py` on new text; `bun run check` |
+
+Still open after revision 5.2: whether A1 and A5 hold (L1, L2); whether
+`CLOCK_MONOTONIC` is comparable across processes (L4); O1-O9; the
+termination proposal; and every item under "Not covered by M5.2".
+
+## Re-review 2026-11-15 (revision 5.2)
+
+An independent reviewer (Opus, fresh context, read-only) found revision
+5.2 not ready, with two blocking findings. It replayed both traces with
+check52.py's own `p_decide`, `p_events` and `pm_check`; the coordinator
+reran both replays and saw the same results (the written rule and the
+PA6 mutant each give a TC violation; the unmodified model refuses). The
+replays and their outputs are kept in research/model/review52-2026-11-15.
+
+Blocking:
+
+1. The rule for readings after `ledger reset` breaks TC under A1-A5.
+   "Periods" excludes a reading observed (monotonic clock) before the
+   command; check52.py excludes by snapshot index (`idx <= s["lobs"]`),
+   and `Snap` is the provider's capture, so the model orders by as-of
+   moment, which foreman cannot observe. Amendment 5's claim that
+   snapshot indices stand for observation order is false. Trace: Reset,
+   Outside, Snap(B, with reset time, 1 unit), Outside, Snap(A, no reset
+   time, 2 units), Ingest A, LedgerReset, Ingest B (observed after the
+   command, so it joins under the written rule), Run: level 1 + 1 within
+   cap 2, launch; provider count 2 plus estimate 1 exceeds cap plus
+   min(unseen, reserve) = 2. A1 and A5 hold. Fix: a period opened by
+   `ledger reset` uses the highest of every reading ingested since the
+   last period-opening reading, or stays unusable until a reading with a
+   later reset time arrives; model observation separately from capture.
+2. The model enforces a stronger A5 than the text: its Ingest guard
+   blocks every pending reading after more than the reserve of outside
+   use, while the text's A5 constrains only the newest ingested reading,
+   and under A2 an old reading may arrive at any time. PA6 is therefore
+   misclassified as safety-only equivalent: a joined old reading also
+   sets freshness. Trace: Snap1 (period 0), Reset, Snap2, Ingest 2,
+   Stale, Outside, Outside, Ingest 1 (joins, refreshes freshness), Run 0,
+   Run 1; the second launch breaks TC (4 > 3). A5 is also circular ("for
+   as long as foreman holds a fresh reading"). Fix: state A5 on the
+   provider side (delay at most D; outside use in any interval of length
+   freshness + D at most the reserve), guard only the newest reading,
+   rerun and reclassify PA6 and PA8. A live test can measure the lag from
+   a known outside request to the reading that shows it.
+
+Should fix:
+
+3. `ledger retire` rests on an attestation no one can make under A2; in
+   practice the owner will retire at the scheduled reset, which is 5.1's
+   unsound rule done by hand. C13 and TC say "under A1-A5" without it.
+   Add it as an assumption and say no sound criterion exists under A2.
+   State the cost in numbers: with cap 70 and estimate 15, each
+   five-hour reset stops launches until the owner retires, so an
+   unattended night gets about one period.
+4. The monotonic clock is sound on macOS (`CLOCK_MONOTONIC` continues
+   through sleep; consistent across processes; `kern.bootsessionuuid`
+   exists), but Bun's `process.hrtime.bigint()` counts from process
+   start and a shell statusline script cannot read `CLOCK_MONOTONIC`.
+   Name the call (FFI or a helper binary), forbid hrtime and
+   `performance.now` in Bun, and add this to L4.
+5. The estimate rule ("a usable reading before it and one after it") and
+   the feedback loop do not say which clock orders readings against
+   steps; a backward wall-clock step shrinks the measured increase and
+   the estimate, making A1 likelier to fail. Use the monotonic clock and
+   ledger `seq`.
+6. Stale text: "What frees room" still lists a new period and omits
+   `ledger retire`; `use` still speaks of a step that "may have run into"
+   this period; borrowed allocation "stays used for the rest of" the
+   period is now true until a retire.
+7. Startup recovery step 1 sends SIGKILL to the recorded `-pgid` with no
+   identity check; 5.2's answer for a never-restarted project is to
+   restart it, possibly days later. Apply the proposal's identity check
+   or record the hazard as open.
+8. NIT. Termination proposal: when the leader has died and children are
+   reparented, the leader and parent-chain checks always fail, so a
+   common orphan can never be ended; the check-then-signal window should
+   be named. Otherwise confined to its section and sound on locking,
+   crash between `EndRequested` and `Ended`, partial kill and contention.
+9. NIT. O6 still describes 5.1's rule as live; the M5.2 heading "all
+   above zero" sits over a leaks52 run with seven zero counters;
+   check52.py's grammar header still lists `ClockPass` and three outside
+   units.
+
+Mutant spot checks: PA6 wrong (finding 2); PA8 acceptable only under the
+circular A5; GA4 safety-only equivalent, correct; GA12 equivalent,
+correct; GA11 separate coverage, plausible (unverified that M3 includes
+this startup path). Amendments' losses are stated accurately; none drops
+a case in requirement 2; requirement 3 is met in part (leaks52 spends no
+units, and periods52 has no second launch against a project's own
+carried charge), both stated.
+
+Found sound: TC tracks the provider's whole count independently of the
+ledger at every launch; the `--no-a5` trace reproduces; rule P discards
+nothing on a scheduled reset, drop or new period; a drop opens no period;
+highest-reading selection is sound under A3; termination is not adopted
+in the body; O1-O9, the usable share and termination stay open; review
+and ruling sections are unchanged; the usable-share formula and the
+overshoot wording meet requirement 4.

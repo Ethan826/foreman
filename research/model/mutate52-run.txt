@@ -1,0 +1,39 @@
+== python3 -I mutate52.py  (periods52 mutants of this run kept; its leaks52 mutants ran on the pre-amendment-7 model and were stopped and discarded; 2026-11-15 18:30, after check52 amendment 6)
+[periods52] PA1 revision 5.1's rule P: a charged step that ended before the old scheduled reset time stops counting at a new period: KILLED by TC [] []
+[periods52] PA2 a usage drop opens a period (revision 5.1), and the period's readings start over: KILLED by TC [] []
+[periods52] PA3 the newest reading by wall-clock stamp is used instead of the highest: KILLED by TC [] []
+[periods52] PA4 the period's reading is the highest among fresh readings only (a stale reading leaves the period): KILLED by TC [] []
+[periods52] PA5 freshness on the wall clock (a backward step makes stale readings fresh again): KILLED by TC [] []
+[periods52] PA6 a reading of an earlier period (by reset time) joins the current one: MISSED, safety-only equivalent: an earlier period's reading can only raise the period's highest reading, which refuses more launches; it never admits one the design refuses ['liveness: states with no path to a launch, an owner release or the end: 0'] ['scope periods52: states explored: 1343891; launch transitions: 52026; finished states: 422618; bounded states: 400383; 28s']
+[periods52] GA8 no reading taken as zero use (Unknown as Allow): KILLED by TC [] []
+[periods52] PA7 freshness ignored (a stale reading stays usable): KILLED by TC [] []
+[periods52] PA8 a reading stays usable after the clock passes its period's reset time: MISSED, safety-only equivalent: after the reset time passes, the reading of the old period is still bounded by A5 and every unretired grant still counts, so admitting on it stays within TC; the rule costs liveness only. In the full design it also guards a reading taken as usable across a long gap with no reset time; A5 covers that only if the delay bound holds ['liveness: states with no path to a launch, an owner release or the end: 0'] ['scope periods52: states explored: 1360958; launch transitions: 60630; finished states: 429610; bounded states: 404494; 27s']
+[periods52] PA9 every charged step stops counting at any new period (revision 5's own-period rule): KILLED by TC [] []
+[periods52] PA10 open grants left out of the level: KILLED by TC [] []
+[periods52] PA11 charged grants left out of the level (a reading taken to reflect them): KILLED by TC [] []
+[periods52] PA12 a reading observed before `ledger reset` joins the period it opens: KILLED by TC [] []
+
+== python3 -I mutate52.py GA4 GA5 GA6 GA9 GA10 GA11 GA12 GB5 GB4 GL1 GL2  (2026-11-15 18:33, after check52 amendment 7)
+[leaks52] GA4 no cancel after a lost race: MISSED, safety-only equivalent: the next settle step cancels the orphan; the immediate cancel frees room sooner, and in the text a lost race left open can cause a spurious Quota hold, which the model does not see ['strict liveness (no credit for BOUNDED): 0 states'] ['scope leaks52: states explored: 848582; launch transitions: 172084; finished states: 41964; bounded states: 806618; 34s']
+[leaks52] GA5 startup does not charge Finished-without-Charged: KILLED by LK [] []
+[leaks52] GA6 a grant is charged again on redo: KILLED by ND [] []
+[leaks52] GA9 no settle step at ordinary launch attempts: KILLED by LK [] []
+[leaks52] GA10 startup does not cancel unnamed grants: KILLED by LK [] []
+[leaks52] GA11 no Uncertain hold at startup: MISSED, separate coverage: the Uncertain hold protects git state, which M3 checks (C4); no ledger quantity changes ['strict liveness (no credit for BOUNDED): 0 states'] ['scope leaks52: states explored: 792432; launch transitions: 156198; finished states: 41964; bounded states: 750468; 32s']
+[leaks52] GA12 orphan test by operation (opId) instead of grantId: MISSED, equivalent: every grant has a fresh opId in the written design, so the opId and grantId tests agree ['strict liveness (no credit for BOUNDED): 0 states'] ['scope leaks52: states explored: 838192; launch transitions: 160834; finished states: 41964; bounded states: 796228; 34s']
+[leaks52] GB5 ledger settle charges Intended-without-Finished without killing it (the process may still run): KILLED by ND [] []
+[leaks52] GB4 startup charges without killing the process first: KILLED by ND [] []
+Traceback (most recent call last):
+  File "/Users/ethan/Desktop/foreman/research/model/mutate52.py", line 136, in <module>
+    assert t.count(a) == 1, (name, t.count(a), a)
+AssertionError: ('GL1 a failed settle write does not end the launch attempt (admission goes on)', 0, '        if k != "RunSF": g_kill(s, j, out)\n        return s, out + [("settlefail", j)]')
+rc=1
+
+== python3 -I mutate52.py GL1 GL2  (2026-11-15 18:35, rerun: their patterns named the pre-amendment-7 kill line)
+[leaks52] GL1 a failed settle write does not end the launch attempt (admission goes on): ERROR TypeError: list indices must be integers or slices, not NoneType [] []
+[leaks52] GL2 a startup whose settle write fails goes on running: KILLED by LK [] []
+rc=0
+
+== python3 -I mutate52.py GL1  (2026-11-15 18:36, after amendment 8)
+[leaks52] GL1 a failed settle write does not end the launch attempt (admission goes on): KILLED by liveness ['strict liveness (no credit for BOUNDED): 3060 states'] ['scope leaks52: states explored: 1034682; launch transitions: 268520; finished states: 42099; bounded states: 992583; 42s']
+rc=0
