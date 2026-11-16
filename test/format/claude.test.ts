@@ -9,8 +9,9 @@ import {
 
 // Fixtures are hand-written from the field names the design and decision
 // record cite (result subtype, session_id, is_error, rate_limit_event's
-// rate_limit_info, system/api_retry). They are not captured output; the
-// inner shape of rate_limit_info is unknown until live test L1.
+// rate_limit_info, system/api_retry). They are not captured output. The
+// shape of rate_limit_info that live test L1 observed is tested in
+// claude-rate-limit.test.ts; extra fields such as this fixture's are kept.
 const resultFixture = {
   type: "result",
   subtype: "success",
@@ -19,7 +20,7 @@ const resultFixture = {
 }
 const rateLimitFixture = {
   type: "rate_limit_event",
-  rate_limit_info: { anything: "unknown until L1" },
+  rate_limit_info: { anything: "an extra field" },
 }
 const apiRetryFixture = { type: "system", subtype: "api_retry" }
 
@@ -48,7 +49,7 @@ describe("Claude result object (--output-format json)", () => {
 })
 
 describe("Claude stream-json events", () => {
-  it("decodes rate_limit_event with an opaque rate_limit_info", () => {
+  it("decodes rate_limit_event and keeps unknown rate_limit_info fields", () => {
     expect(Result.isSuccess(decodeClaudeRateLimitEvent(rateLimitFixture))).toBe(
       true,
     )
