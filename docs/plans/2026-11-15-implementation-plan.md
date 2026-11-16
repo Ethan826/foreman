@@ -273,7 +273,9 @@ authorized by the owner with a 100k-token cap) of `653f477..b9b27fe`
 under src/ and test/. Verdict: the code matches revision 6.1's rules on
 every input traced; nothing blocking; `bun run test` (201) and
 `bun run check` pass; no casts, assertions, disables or skipped tests.
-Open findings (not yet fixed; the owner decides when):
+Findings 1 to 4 were fixed inline on 2026-11-16 under the owner's
+60k-token cap (commits added8c, 867f038 and the oracle commit after them);
+nits 5 and 6 stay open. The findings as reported:
 
 1. Should fix. Readings are never filtered by provider:
    `currentPeriod`, `measuredIncrease` (`stampedIn`) and
@@ -803,8 +805,16 @@ L1-style readings bracket steps, so `e` need not stay 15.
   new owner question (O15). L1 did not measure an implement step's real
   use; L1b would.
 
-Choice 1 stays the provisional baseline; the decision remains the
-owner's.
+Owner rulings 2026-11-16 on these: choice 1 stays through the first
+runtime milestone, to be revisited with representative measurements;
+choice 4's reflection assumption is not adopted. O15: a one-point minimum
+estimate per provider and window for version 1, applied to admission and
+reservations alike (Policy `minEstimatePoints`), with observed zero
+increases kept in measurement records; it prevents zero reservations and
+is not a bound on use. O14: the tolerance-based period rule is accepted
+as a pacing heuristic with its possible downward adjustment documented
+(src/features/periods.ts); a period change never retires a reservation;
+this does not establish Codex's reset semantics.
 
 Owner ruling 2026-11-16: Part A runs now, inline, with a 300k-token
 total cap including verification and records, checkpointed before the

@@ -80,6 +80,8 @@ Details the flowchart leaves out:
 - With no monotonic clock (`nowMono` none) no window is usable. Until the owner decides how foreman reads that clock (O11), every launch is Unknown and needs a waiver.
 - A stale reading still raises the period's highest reading.
 - A provider whose policy lists no windows is Unknown, never Allow. The default Codex policy lists none until the owner decides how Codex's reset times open periods (O14).
+- `pace` builds each window's period from the asked provider's readings only; window names are shared across providers.
+- The estimate used at admission is never below `minEstimatePoints` (1 point, owner ruling O15).
 - Which grants count is the caller's decision. `pace` keeps only the asked provider's grants and sums each window's points.
 - The wall clock enters only through `now < resetsAt`, which tightens as time passes.
 
