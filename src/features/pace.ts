@@ -3,25 +3,6 @@
 // foreman's launches and reservations given those records. It does not
 // bound the provider's count, a step's real use, or the reserve.
 //
-// Rules:
-// 1. The windows checked are the provider's windows in policy (R-P1). A
-//    provider with no policy windows is Unknown, never Allow.
-// 2. A window is usable when its current period (the asked provider's
-//    readings of that window only) exists, the period's
-//    freshest stamp and `nowMono` come from the same boot with
-//    0 <= nowMono - freshest <= freshness, and the period's reset time is
-//    absent or still ahead of the wall clock (`now < resetsAt`). With no
-//    monotonic clock (`nowMono` none, owner decision O11) no window is
-//    usable, so every launch is Unknown and needs a waiver.
-// 3. The level of a window is the period's highest reading plus the points
-//    of every counting grant for that window (`level`). Which grants count
-//    is decided by the caller (plan Task B2); pacing never filters them
-//    beyond provider and window.
-// 4. Allow iff every window is usable and level + estimate <= cap, with
-//    the estimate never below minEstimatePoints (O15). Hold if
-//    a usable window fails that test. Otherwise Unknown. Hold and Unknown
-//    carry the windows without a usable allowing reading, in policy order.
-//
 // The wall clock enters only through `now < resetsAt`, which can only
 // tighten as time passes. A new period can lower the reading term; it
 // frees no accounting room.
@@ -34,16 +15,40 @@ import { Window } from "../domain/window.ts"
 import type { Observation } from "../domain/observation.ts"
 import { currentPeriod, type WindowPeriod } from "./periods.ts"
 
+/** Every policy window is usable and has room for the estimate. */
 export class Allow extends Schema.TaggedClass<Allow>()("Allow", {}) {}
+/**
+ * At least one usable window has no room for the estimate. `windows` lists
+ * every window without a usable allowing reading, in policy order.
+ */
 export class Hold extends Schema.TaggedClass<Hold>()("Hold", {
   windows: Schema.Array(Window),
 }) {}
+/**
+ * No usable window fails, but some window is unusable, or the provider has
+ * no policy windows. `windows` lists the unusable windows in policy order
+ * (empty when the provider has none). A launch then needs a waiver.
+ */
 export class Unknown extends Schema.TaggedClass<Unknown>()("Unknown", {
   windows: Schema.Array(Window),
 }) {}
 
+/** The answer of {@link pace}. */
 export type PaceDecision = Allow | Hold | Unknown
 
+/**
+ * What {@link pace} decides from.
+ *
+ * - `readings`: the ledger's readings in seq order (any provider).
+ * - `now`: the wall clock in epoch milliseconds, used only for
+ *   `now < resetsAt`.
+ * - `nowMono`: the monotonic clock now; `Option.none()` when no monotonic
+ *   clock is available (O11).
+ * - `estimate`: the next step's estimate in points per window.
+ * - `counting`: the points of the grants that count; the caller decides
+ *   which grants count (plan Task B2).
+ * - `cap`: the cap in points per window, usually {@link defaultCap}.
+ */
 export interface PaceInput {
   readonly readings: ReadonlyArray<Observation>
   readonly now: number
@@ -55,6 +60,11 @@ export interface PaceInput {
   readonly cap: (window: Window) => number
 }
 
+/**
+ * A window's level in points: the period's highest reading plus the points
+ * of every grant in `counting` for `window`. It filters grants by window
+ * only, so the caller passes one provider's grants ({@link pace} does).
+ */
 export const level = (
   period: WindowPeriod,
   counting: ReadonlyArray<GrantPoints>,
@@ -68,6 +78,10 @@ export const level = (
     ),
   )
 
+/**
+ * The default cap for a provider window: 100 minus the window's reserve
+ * percent. A window not listed in the provider's policy gets 100.
+ */
 export const defaultCap =
   (policy: Policy, provider: Client) =>
   (window: Window): number =>
@@ -80,6 +94,11 @@ export const defaultCap =
       { onNone: () => 0, onSome: Struct.get("reservePercent") },
     )
 
+/**
+ * True when both stamps exist, come from the same boot, and
+ * `0 <= now - freshest <= freshness` in microseconds (both bounds
+ * inclusive). A missing stamp on either side gives false.
+ */
 const isFresh = (
   freshest: Option.Option<MonoStamp>,
   nowMono: Option.Option<MonoStamp>,
@@ -99,6 +118,11 @@ const isFresh = (
     () => false,
   )
 
+/**
+ * A period is usable when its freshest stamp is fresh and its reset time
+ * is absent or still ahead of the wall clock (`now < resetsAt`). With no
+ * monotonic clock no period is usable, so every launch is Unknown.
+ */
 const isUsable = (input: PaceInput, period: WindowPeriod): boolean =>
   isFresh(period.freshest, input.nowMono, input.policy.freshnessMillis) &&
   Option.match(period.resetsAt, {
@@ -108,6 +132,12 @@ const isUsable = (input: PaceInput, period: WindowPeriod): boolean =>
 
 type Judgment = "allows" | "fails" | "unusable"
 
+/**
+ * Judges one window: "unusable" when it has no current period or the
+ * period is not usable; otherwise "allows" when level + estimate <= cap,
+ * with the estimate raised to `minEstimatePoints` if lower (O15), and
+ * "fails" when not.
+ */
 const judge =
   (input: PaceInput, counting: ReadonlyArray<GrantPoints>) =>
   (window: Window): Judgment =>
@@ -126,6 +156,15 @@ const judge =
       },
     })
 
+/**
+ * Decides whether foreman may launch a step on `provider` (design
+ * "Admission rule", rule 1). It checks exactly the provider's policy
+ * windows (R-P1) and counts only that provider's grants.
+ *
+ * Allow when every window is usable and level + estimate <= cap. Hold when
+ * any usable window fails that test. Otherwise Unknown, which includes a
+ * provider with no policy windows.
+ */
 export const pace = (input: PaceInput): PaceDecision => {
   const counting = Arr.filter(
     input.counting,

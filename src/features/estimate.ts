@@ -1,29 +1,11 @@
-// Estimate per role and window (design "Pacing", `estimate(window)`, R-P3).
-//
-// A step is measured in a window when a usable reading observed before the
-// step started and one observed after it ended both have a reset time and
-// share it (no reset in between). "Before" and "after" compare the
-// readings' monotonic stamps with the step's own monotonic start and end in
-// the same boot, never the wall clock. The reading before is the latest
-// one at or before the start, the reading after the earliest one at or
-// after the end.
-//
-// "Usable" is read strictly (owner ruling 2026-11-16): both bracketing
-// readings must be fresh relative to their own step boundary. The reading
-// before must be at most `freshness` older than the step's start, and the
-// reading after at most `freshness` newer than the step's end. Fewer steps
-// are measured, so more fall back to `initialEstimate`.
+// Estimate per role and window (design "Pacing", `estimate(window)`, R-P3;
+// "Measurement").
 //
 // A measured increase is an observation of the provider's count across the
 // step, not authoritative per-step usage: readings are whole points,
 // reported with a delay, and include anything else that used the account
-// during the step.
-//
-// The estimate is the largest measured increase among the role's last five
-// finished steps, else `initialEstimate`, and never below
-// `minEstimatePoints` (owner ruling O15). A measured increase of 0 stays 0
-// in `measuredIncrease`; only the estimate is floored. A running agent can still use
-// more than its estimate; nothing here bounds real use.
+// during the step. A running agent can still use more than its estimate;
+// nothing here bounds real use.
 import { Array as Arr, Option, Order } from "effect"
 import type { MonoStamp } from "../domain/clock.ts"
 import type { Client } from "../domain/clients.ts"
@@ -32,12 +14,18 @@ import type { Policy } from "../domain/policy.ts"
 import type { Role } from "../domain/roles.ts"
 import type { Window } from "../domain/window.ts"
 
+/** A step's role and its monotonic start and end stamps. */
 export interface StepSpan {
   readonly role: Role
   readonly startMono: MonoStamp
   readonly endMono: MonoStamp
 }
 
+/**
+ * A finished step as the estimate sees it: its role and its measured
+ * increase per window, in points. `Option.none()` means the step was not
+ * measured in that window.
+ */
 export interface FinishedStep {
   readonly role: Role
   readonly increase: (window: Window) => Option.Option<number>
@@ -48,6 +36,12 @@ interface Stamped {
   readonly micros: number
 }
 
+/**
+ * The readings of `provider` and `window` that have a monotonic stamp
+ * from the step's boot, paired with their stamp in microseconds. If the
+ * step's start and end stamps come from different boots, no reading
+ * qualifies.
+ */
 const stampedIn = (
   readings: ReadonlyArray<Observation>,
   provider: Client,
@@ -74,11 +68,13 @@ const bySeq = Order.mapInput(Order.Number, (s: Stamped) => s.reading.seq)
 const latestBefore = Order.combine(byMicros, bySeq)
 const earliestAfter = Order.combine(byMicros, Order.flip(bySeq))
 
+/** True when the stamp lies in `[from, to]` microseconds, both ends inclusive. */
 const within =
   (from: number, to: number) =>
   (s: Stamped): boolean =>
     s.micros >= from && s.micros <= to
 
+/** The reading `pick` chooses from a non-empty list; `Option.none()` for an empty one. */
 const pickBy =
   (pick: (xs: Arr.NonEmptyReadonlyArray<Stamped>) => Stamped) =>
   (xs: ReadonlyArray<Stamped>): Option.Option<Observation> =>
@@ -87,6 +83,25 @@ const pickBy =
 const latest = pickBy((xs) => Arr.max(xs, latestBefore))
 const earliest = pickBy((xs) => Arr.min(xs, earliestAfter))
 
+/**
+ * The increase in `usedPercent`, in points, of one provider window across
+ * a step, or `Option.none()` when the step is not measured in that window.
+ *
+ * The reading before is the latest one at or before the step's start; the
+ * reading after is the earliest one at or after its end. "Before" and
+ * "after" compare monotonic stamps from the step's boot, never the wall
+ * clock; ties are broken by ledger seq, the later-ingested reading winning.
+ *
+ * Both readings must be usable, read strictly (owner ruling 2026-11-16):
+ * the reading before at most `freshnessMillis` older than the start, the
+ * reading after at most `freshnessMillis` newer than the end, both bounds
+ * inclusive. Fewer steps are measured, so more fall back to
+ * `initialEstimate`. Both readings must also have a reset time, and the
+ * two must be equal (no reset in between).
+ *
+ * A fall in usage gives 0. A measured 0 stays 0 here; only the estimate
+ * is floored.
+ */
 export const measuredIncrease = (
   step: StepSpan,
   readings: ReadonlyArray<Observation>,
@@ -107,6 +122,16 @@ export const measuredIncrease = (
     return Math.max(0, after.usedPercent - before.usedPercent)
   })
 
+/**
+ * The estimate in points for the next step of `role` in a window (R-P3).
+ *
+ * It looks at the role's last five finished steps (the last five of
+ * `finished` with that role, so `finished` must be in finishing order).
+ * If any of them was measured in the window, the estimate is the largest
+ * measured increase, raised to `minEstimatePoints` if lower (O15).
+ * Otherwise it is `initialEstimate`, which this function does not floor;
+ * pacing applies the floor again at admission.
+ */
 export const estimate =
   (finished: ReadonlyArray<FinishedStep>, role: Role, policy: Policy) =>
   (window: Window): number => {

@@ -1,18 +1,11 @@
 // A usage reading (design "Pacing" and its definitions table).
-// `resetsAt` may be absent (R-P4): the encoded key is optional and decodes
-// to an Option, so absence inside the core is Option.none().
-//
-// Clocks: `observedAt` is the wall clock at observation, kept for display
-// only. `observedMono` is the monotonic stamp at observation; a reading
-// without one is never fresh. `seq` is the ledger sequence number assigned
-// at ingestion. Freshness says how recently foreman observed a reading,
-// never when the provider captured it.
 import { Record, Schema } from "effect"
 import { Client } from "./clients.ts"
 import { MonoStamp } from "./clock.ts"
 import { LedgerSeq } from "./ids.ts"
 import { Window } from "./window.ts"
 
+/** Where a reading came from. */
 export const ObservationSources = {
   ClaudeRateLimitEvent: "claudeRateLimitEvent",
   ClaudeStatusline: "claudeStatusline",
@@ -20,11 +13,29 @@ export const ObservationSources = {
   CodexAppServer: "codexAppServer",
 } as const
 
+/** Schema for a reading source, one of {@link ObservationSources}. */
 export const ObservationSource = Schema.Literals(Record.values(ObservationSources))
+/** A reading source, one of the values of {@link ObservationSources}. */
 export type ObservationSource = typeof ObservationSource.Type
 
 const epochMillis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
+/**
+ * One usage reading of a provider window.
+ *
+ * - `usedPercent`: the provider's reported use, 0 to 100 percent.
+ * - `resetsAt`: the window's reset time in epoch milliseconds. It may be
+ *   absent (R-P4); the encoded key is optional and decodes to
+ *   `Option.none()`.
+ * - `observedAt`: the wall clock at observation, in epoch milliseconds,
+ *   kept for display only.
+ * - `observedMono`: the monotonic stamp at observation. A reading without
+ *   one is never fresh.
+ * - `seq`: the ledger sequence number assigned at ingestion.
+ *
+ * Freshness says how recently foreman observed a reading, never when the
+ * provider captured it.
+ */
 export const Observation = Schema.Struct({
   provider: Client,
   window: Window,
@@ -37,4 +48,5 @@ export const Observation = Schema.Struct({
   seq: LedgerSeq,
   source: ObservationSource,
 })
+/** One usage reading; see {@link Observation}. */
 export type Observation = typeof Observation.Type

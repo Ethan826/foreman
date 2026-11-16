@@ -2,23 +2,6 @@
 // definitions table under "Pacing"). Readings are folded in ledger seq
 // order; nothing here reads a clock.
 //
-// Rules:
-// 1. The first reading opens period 1 with itself as the highest reading.
-// 2. A reading whose reset time is later than the period's by more than
-//    resetTolerance opens the next period, with itself as the highest.
-// 3. A reading whose reset time is earlier than the period's by more than
-//    resetTolerance belongs to an earlier period: it is listed in
-//    `earlier` and changes nothing else.
-// 4. Any other reading joins and can only raise the highest reading. A
-//    usage drop opens nothing: a join lower than the highest by more than
-//    dropTolerance is listed in `drops` for display.
-// 5. A join with a reset time into a period that has none records that
-//    reset time and opens nothing (implementation plan, Review Focus 1:
-//    the design leaves this case open; joining is the cautious choice).
-// 6. `freshest` is the joining reading's monotonic stamp with the greatest
-//    micros in the boot of the latest stamped reading. A reading without a
-//    stamp never sets it, and a stamp from a newer boot replaces it.
-//
 // A new period lowers the reading term of the level; it frees no
 // accounting room and retires no reservation (grants still count until
 // canceled or retired).
@@ -37,6 +20,21 @@ import type { Observation } from "../domain/observation.ts"
 import type { Policy } from "../domain/policy.ts"
 import type { Window } from "../domain/window.ts"
 
+/**
+ * The current period of one provider window, as folded from its readings.
+ *
+ * - `periodSeq`: the period's number, from 1.
+ * - `resetsAt`: the period's reset time in epoch milliseconds;
+ *   `Option.none()` until some member reading carries one.
+ * - `highest`: the highest `usedPercent` among the period's readings.
+ * - `freshest`: the greatest monotonic stamp among the period's readings
+ *   in the boot of the latest stamped one; `Option.none()` when no member
+ *   reading has a stamp.
+ * - `drops`: seqs of readings that joined lower than `highest` by more
+ *   than `dropTolerancePoints`, for display only.
+ * - `earlier`: seqs of readings that belong to an earlier period and were
+ *   otherwise ignored.
+ */
 export interface WindowPeriod {
   readonly periodSeq: PeriodSeq
   readonly resetsAt: Option.Option<number>
@@ -46,6 +44,7 @@ export interface WindowPeriod {
   readonly earlier: ReadonlyArray<LedgerSeq>
 }
 
+/** A new period numbered `periodSeq`, with `reading` as its only member and highest reading. */
 const opened = (periodSeq: PeriodSeq, reading: Observation): WindowPeriod => ({
   periodSeq,
   resetsAt: reading.resetsAt,
@@ -55,6 +54,12 @@ const opened = (periodSeq: PeriodSeq, reading: Observation): WindowPeriod => ({
   earlier: [],
 })
 
+/**
+ * The freshest stamp after a reading joins. A reading without a stamp
+ * leaves it unchanged. A stamp from a different boot replaces it, on the
+ * assumption that a reading later in seq order comes from a newer boot;
+ * within a boot the greater micros wins.
+ */
 const fresher = (
   current: Option.Option<MonoStamp>,
   stamp: Option.Option<MonoStamp>,
@@ -73,6 +78,12 @@ const fresher = (
 
 type Relation = "later" | "earlier" | "same"
 
+/**
+ * How a reading's reset time relates to the period's: "later" or
+ * "earlier" when they differ by more than `tolerance` milliseconds,
+ * otherwise "same". When either reset time is absent the answer is
+ * "same", so the reading joins.
+ */
 const relation = (
   period: WindowPeriod,
   reading: Observation,
@@ -84,6 +95,13 @@ const relation = (
       delta > tolerance ? "later" : delta < -tolerance ? "earlier" : "same",
   })
 
+/**
+ * The period after `reading` joins it. The highest reading can only rise.
+ * A period without a reset time takes the reading's (implementation plan,
+ * Review Focus 1: the design leaves this case open; joining is the
+ * cautious choice). A reading lower than the highest by more than
+ * `dropTolerancePoints` is listed in `drops`; a usage drop opens nothing.
+ */
 const joined = (
   period: WindowPeriod,
   reading: Observation,
@@ -99,6 +117,19 @@ const joined = (
       : period.drops,
 })
 
+/**
+ * Folds one reading into the current period of its window (design
+ * "Periods"):
+ *
+ * 1. With no period yet, the reading opens period 1.
+ * 2. A reading whose reset time is later than the period's by more than
+ *    `resetToleranceMillis` opens the next period, with itself as the
+ *    highest.
+ * 3. A reading whose reset time is earlier by more than that belongs to an
+ *    earlier period: it is listed in `earlier` and changes nothing else.
+ * 4. Any other reading joins (see `joined`), including one without a
+ *    reset time or one into a period that has none.
+ */
 export const ingestReading = (
   current: Option.Option<WindowPeriod>,
   reading: Observation,
@@ -118,9 +149,14 @@ export const ingestReading = (
     },
   })
 
-// Window names are shared across providers, so the fold keeps only the
-// readings of the named provider and window; a Codex reading never touches
-// a Claude period.
+/**
+ * The current period of `provider`'s `window`, or `Option.none()` when
+ * there is no reading of it. Window names are shared across providers, so
+ * the fold keeps only the readings of the named provider and window; a
+ * Codex reading never touches a Claude period. It folds `readings` in the
+ * order given and does not sort them; the caller passes them in ledger
+ * seq order.
+ */
 export const currentPeriod = (
   readings: ReadonlyArray<Observation>,
   provider: Client,

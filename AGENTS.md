@@ -87,6 +87,15 @@ the entry in `docs/dependency-intake.md`, and tell the owner.
 Ralph (MIT) was studied and none of it was copied. Write adapters independently and
 record conceptual provenance. Waxwing is not a dependency or submodule.
 
+## Documentation
+
+Every exported declaration in `src/` has a TSDoc comment (`/** ... */`)
+that says what it is or does, its units and edge cases where they matter,
+and the design rule it implements. So does substantial private code: a
+helper with a rule in it, though a one-line adapter needs none. File-level
+`//` comments do not count. `test/docs/tsdoc.test.ts` fails on an exported
+declaration without TSDoc; private code rests on review.
+
 ## Writing
 
 American spelling. Run the humanizer skill on README prose. `bun run prose`
