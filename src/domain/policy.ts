@@ -3,6 +3,8 @@
 // Defaults confirmed by the user on 2026-11-14: reserve 30 percent of the
 // five-hour window and 40 percent of the weekly window, freshness 10
 // minutes, initialEstimate 15 points. The reserve stays configurable.
+// Revision 4's defaults, confirmed by the owner: resetTolerance 5 minutes
+// and dropTolerance 5 points (design "Defaults", "Periods").
 //
 // Each provider's windows carry their own reserve, so a listed window
 // always has one.
@@ -38,6 +40,8 @@ export const Policy = Schema.Struct({
   providers: Schema.Record(Client, ProviderPolicy),
   freshnessMillis: Schema.Int.check(Schema.isGreaterThan(0)),
   initialEstimate: percent,
+  resetToleranceMillis: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  dropTolerancePoints: percent,
 })
 export type Policy = typeof Policy.Type
 
@@ -53,4 +57,6 @@ export const defaultPolicy: Policy = {
   },
   freshnessMillis: 10 * 60 * 1000,
   initialEstimate: 15,
+  resetToleranceMillis: 5 * 60 * 1000,
+  dropTolerancePoints: 5,
 }

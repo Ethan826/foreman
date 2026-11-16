@@ -1,6 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Option } from "effect"
+import { Option, Result, Schema } from "effect"
 import { Clients } from "../../src/domain/clients.ts"
+import { LedgerSeq } from "../../src/domain/ids.ts"
 import type { Observation } from "../../src/domain/observation.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import type { Window } from "../../src/domain/window.ts"
@@ -19,6 +20,10 @@ const reading = (patch: Partial<Observation> = {}): Observation => ({
   usedPercent: 10,
   resetsAt: Option.some(now + 60 * minute),
   observedAt: now - minute,
+  observedMono: Option.none(),
+  seq: Result.getOrElse(Schema.decodeUnknownResult(LedgerSeq)(1), () =>
+    expect.unreachable("fixture seq"),
+  ),
   source: "claudeStatusline",
   ...patch,
 })

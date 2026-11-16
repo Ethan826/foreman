@@ -1,14 +1,16 @@
-// A usage reading (design "Pacing": `{provider, window, usedPercent,
-// resetsAt, observedAt, source}`). `resetsAt` may be absent (R-P4): the
-// encoded key is optional and decodes to an Option, so absence inside the
-// core is Option.none().
-// Times are epoch milliseconds on the supervisor's local clock.
+// A usage reading (design "Pacing" and its definitions table).
+// `resetsAt` may be absent (R-P4): the encoded key is optional and decodes
+// to an Option, so absence inside the core is Option.none().
 //
-// The design also lists `ingestedSeq`; it matters to quota-hold release
-// (a runtime and event-log concern), not to pace, so it is left out here.
-// TODO(design "Pacing", "Clock basis"): add it with the event log.
+// Clocks: `observedAt` is the wall clock at observation, kept for display
+// only. `observedMono` is the monotonic stamp at observation; a reading
+// without one is never fresh. `seq` is the ledger sequence number assigned
+// at ingestion. Freshness says how recently foreman observed a reading,
+// never when the provider captured it.
 import { Record, Schema } from "effect"
 import { Client } from "./clients.ts"
+import { MonoStamp } from "./clock.ts"
+import { LedgerSeq } from "./ids.ts"
 import { Window } from "./window.ts"
 
 export const ObservationSources = {
@@ -31,6 +33,8 @@ export const Observation = Schema.Struct({
   ),
   resetsAt: Schema.OptionFromOptionalKey(epochMillis),
   observedAt: epochMillis,
+  observedMono: Schema.OptionFromOptionalKey(MonoStamp),
+  seq: LedgerSeq,
   source: ObservationSource,
 })
 export type Observation = typeof Observation.Type

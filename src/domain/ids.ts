@@ -26,3 +26,17 @@ export const Revision = Schema.String.check(
   Schema.isPattern(/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/),
 ).pipe(Schema.brand("Revision"))
 export type Revision = typeof Revision.Type
+
+// Ledger order and periods (design "Where the ledger lives", "Periods").
+// A `seq` is assigned inside the ledger's write transaction, so seq order is
+// commit order across every table. Both start at 1.
+const positiveInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))
+
+export const LedgerSeq = positiveInt.pipe(Schema.brand("LedgerSeq"))
+export type LedgerSeq = typeof LedgerSeq.Type
+
+export const PeriodSeq = positiveInt.pipe(Schema.brand("PeriodSeq"))
+export type PeriodSeq = typeof PeriodSeq.Type
+
+export const GrantId = slug.pipe(Schema.brand("GrantId"))
+export type GrantId = typeof GrantId.Type

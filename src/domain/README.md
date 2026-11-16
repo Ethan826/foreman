@@ -1,12 +1,12 @@
 # Domain
 
-Plain data and validators. They cover what the other layers pass around: identifiers, clients, roles, steps, outcomes, usage observations, windows, pacing policy. Back to [how it works](../../docs/how-it-works.md).
+Plain data and validators. They cover what the other layers pass around: identifiers, clients, roles, steps, outcomes, usage observations, windows, pacing policy, monotonic stamps, grants and holds. Back to [how it works](../../docs/how-it-works.md).
 
 May import: nothing.
 
 Domain sits at the center of the layer table in `eslint.rules.js`, so every other layer can depend on it and it depends on none of them. Outside `effect`, it imports nothing, which keeps it free of process, file and clock code and easy to test.
 
-Conventions: each closed vocabulary (clients, roles, windows, observation sources, commit refusals) is a named `as const` object, and its schema derives from that object. Schemas and their types share a name. Times are epoch milliseconds on the supervisor's local clock. [`holds.ts`](holds.ts) is empty; hold types will go there once the design is approved.
+Conventions: each closed vocabulary (clients, roles, windows, observation sources, commit refusals) is a named `as const` object, and its schema derives from that object. Schemas and their types share a name. Wall-clock times are epoch milliseconds, used for display and for `now >= resetsAt` only. Freshness and ordering use [`clock.ts`](clock.ts) (`MonoStamp`: monotonic microseconds with a boot id) and the ledger's `LedgerSeq`. [`holds.ts`](holds.ts) declares the six holds of the design's table, and [`grant.ts`](grant.ts) the points a counting grant adds to a window.
 
 The diagrams show type names and the main relations. They do not show every field or its constraints; read the source for those.
 

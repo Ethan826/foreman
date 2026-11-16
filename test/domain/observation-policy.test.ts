@@ -10,6 +10,7 @@ const base = {
   window: "fiveHour",
   usedPercent: 12.5,
   observedAt: 1_000,
+  seq: 1,
   source: "claudeStatusline",
 }
 
