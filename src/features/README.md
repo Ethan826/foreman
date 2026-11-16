@@ -1,17 +1,45 @@
 # Features
 
-Pure decision functions. Only pacing exists, and it is provisional until the design is approved. Back to [how it works](../../docs/how-it-works.md).
+Pure decision functions: period membership (`periods.ts`) and pacing (`pace.ts`). They follow design revision 6.1. Back to [how it works](../../docs/how-it-works.md).
 
 May import: `domain`.
 
-Features is a pure core layer. It may import Domain and nothing else of ours, Format included, so a decision never depends on how input was decoded or where it came from. The lint table also bars Node and Bun imports. `pace` therefore has no access to the clock or the file system; the caller passes `now`, the observations and the estimate.
+Features is a pure core layer. It may import Domain and nothing else of ours, Format included, so a decision never depends on how input was decoded or where it came from. The lint table also bars Node and Bun imports. Nothing here reads a clock or a file; the caller passes the wall-clock `now`, the monotonic `nowMono`, the readings and the grants.
 
-## pace
+Admission is pacing over foreman's own records. It bounds foreman's launches and reservations given those records. It does not bound the provider's count, a step's real use or the reserve.
 
-`pace(observations, now, policy, provider, estimate)` returns one of three decisions, each a tagged class.
+## Periods
+
+`currentPeriod(readings, policy)` folds one provider window's readings in ledger `seq` order into a `WindowPeriod`. Only a reading whose reset time is later than the period's by more than `resetTolerance` opens the next period. A usage drop opens nothing, and a reading of an earlier period is set aside. The period keeps the highest reading and the freshest monotonic stamp.
 
 ```mermaid
 classDiagram
+    class WindowPeriod {
+        periodSeq
+        resetsAt
+        highest
+        freshest
+        drops
+        earlier
+    }
+```
+
+## pace
+
+`pace(input)` returns one of three decisions, each a tagged class. `level(period, counting, window)` is the period's highest reading plus the points of every counting grant for the window. `defaultCap` is `100 - reserve`.
+
+```mermaid
+classDiagram
+    class PaceInput {
+        periods
+        now
+        nowMono
+        policy
+        provider
+        estimate
+        counting
+        cap
+    }
     class PaceDecision {
         <<union>>
     }
@@ -27,18 +55,16 @@ classDiagram
     PaceDecision <|-- Unknown
 ```
 
-`Hold` and `Unknown` each hold the policy windows that lack a usable reading that allows, in policy order. The flowchart shows how the decision is reached.
+`Hold` and `Unknown` each hold the policy windows that lack a usable reading that allows, in policy order.
 
 ```mermaid
 flowchart TD
-    start["observations, now, policy, provider, estimate"] --> byProvider["Keep readings of the asked provider"]
-    byProvider --> perWindow["For each window listed in the provider's policy"]
-    perWindow --> any{"Any reading<br/>of this window?"}
+    start["PaceInput"] --> perWindow["For each window listed in the provider's policy"]
+    perWindow --> any{"Current period?"}
     any -- no --> unusable["Unusable"]
-    any -- yes --> newest["Take the newest by observedAt.<br/>Ties go to the highest usedPercent."]
-    newest --> usable{"Usable? Age between 0 and freshness,<br/>and resetsAt absent or now before resetsAt"}
+    any -- yes --> usable{"Fresh: same boot as nowMono and at most<br/>freshness old by the monotonic clock;<br/>and resetsAt absent or now before it?"}
     usable -- no --> unusable
-    usable -- yes --> fits{"usedPercent + estimate<br/>at most 100 - reserve?"}
+    usable -- yes --> fits{"highest + counting grants + estimate<br/>at most cap?"}
     fits -- yes --> allows["Allows"]
     fits -- no --> fails["Fails"]
     allows --> decide{"Judgments for all windows"}
@@ -51,8 +77,8 @@ flowchart TD
 
 Details the flowchart leaves out:
 
-- The newest reading decides even when it is unusable. An older reading is never used in its place.
-- A reading stamped after `now` is unusable (owner ruling, 2026-11-14).
-- A provider whose policy lists no windows is Unknown, never Allow. The default Codex policy lists none until live test L2.
-- `Allows`, `Fails` and `Unusable` are internal judgments and are not exported.
-- `estimate` is a parameter. How it is computed from finished steps belongs to the shell.
+- With no monotonic clock (`nowMono` none) no window is usable. Until the owner decides how foreman reads that clock (O11), every launch is Unknown and needs a waiver.
+- A stale reading still raises the period's highest reading.
+- A provider whose policy lists no windows is Unknown, never Allow. The default Codex policy lists none until the owner decides how Codex's reset times open periods (O14).
+- Which grants count is the caller's decision. `pace` keeps only the asked provider's grants and sums each window's points.
+- The wall clock enters only through `now < resetsAt`, which tightens as time passes.

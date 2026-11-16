@@ -1,52 +1,35 @@
-// provisional: revision 3 of the design may change pacing rules
+// Pure pacing decision (design revision 6.1, "Pacing" and "Admission
+// rule", rule 1). Admission is pacing over foreman's own records: it bounds
+// foreman's launches and reservations given those records. It does not
+// bound the provider's count, a step's real use, or the reserve.
 //
-// Pure pacing decision, design "Pacing (S3, S4)":
-// `pace(observations, now, policy, provider, estimate) -> Allow | Hold |
-// Unknown`.
+// Rules:
+// 1. The windows checked are the provider's windows in policy (R-P1). A
+//    provider with no policy windows is Unknown, never Allow.
+// 2. A window is usable when its current period exists, the period's
+//    freshest stamp and `nowMono` come from the same boot with
+//    0 <= nowMono - freshest <= freshness, and the period's reset time is
+//    absent or still ahead of the wall clock (`now < resetsAt`). With no
+//    monotonic clock (`nowMono` none, owner decision O11) no window is
+//    usable, so every launch is Unknown and needs a waiver.
+// 3. The level of a window is the period's highest reading plus the points
+//    of every counting grant for that window (`level`). Which grants count
+//    is decided by the caller (plan Task B2); pacing never filters them
+//    beyond provider and window.
+// 4. Allow iff every window is usable and level + estimate <= cap. Hold if
+//    a usable window fails that test. Otherwise Unknown. Hold and Unknown
+//    carry the windows without a usable allowing reading, in policy order.
 //
-// Rules implemented (all from "Pacing"):
-// 1. Only readings of the asked provider count.
-// 2. The windows checked are the provider's windows listed in policy, not
-//    the windows that happen to have readings (R-P1). With no readings the
-//    result is Unknown.
-// 3. Per window the reading used is the one with the latest observedAt,
-//    whatever order readings arrive in; among equal observedAt, the highest
-//    usedPercent (R-P4). The newest reading decides even when it is
-//    unusable; an older reading is never used in its place.
-// 4. A reading is usable when 0 <= now - observedAt <= freshness and either
-//    resetsAt is absent or now < resetsAt. A reading stamped after `now` is
-//    unusable (owner ruling, 2026-11-14: clock skew could make a stale
-//    reading look fresh). Design revision 3 defines the clock basis.
-// 5. Allow iff every policy window has a usable reading with
-//    usedPercent + estimate(window) <= 100 - reserve(window). Hold if any
-//    usable reading fails that test. Otherwise Unknown.
-//
-// Choices the design text leaves open (confirm in review):
-// - A provider whose policy lists no windows is Unknown, never Allow, so
-//   that "every window allows" cannot hold vacuously (the default Codex
-//   policy lists none until live test L2).
-// - Hold and Unknown carry the policy windows without a usable allowing
-//   reading, in policy order: the `windows` of a Quota hold ("Holds", Quota
-//   row).
-//
-// Not here: `estimate` itself (R-P3, built from finished-step records by the
-// shell's event fold) is a parameter.
-import {
-  Array as Arr,
-  Data,
-  Number,
-  Option,
-  Order,
-  Predicate,
-  Schema,
-  Struct,
-  pipe,
-} from "effect"
-import { constTrue } from "effect/Function"
-import type { Observation } from "../domain/observation.ts"
-import type { Policy, WindowPolicy } from "../domain/policy.ts"
+// The wall clock enters only through `now < resetsAt`, which can only
+// tighten as time passes. A new period can lower the reading term; it
+// frees no accounting room.
+import { Array as Arr, Number, Option, Schema, Struct } from "effect"
 import type { Client } from "../domain/clients.ts"
+import type { MonoStamp } from "../domain/clock.ts"
+import type { GrantPoints } from "../domain/grant.ts"
+import type { Policy } from "../domain/policy.ts"
 import { Window } from "../domain/window.ts"
+import type { WindowPeriod } from "./periods.ts"
 
 export class Allow extends Schema.TaggedClass<Allow>()("Allow", {}) {}
 export class Hold extends Schema.TaggedClass<Hold>()("Hold", {
@@ -58,85 +41,103 @@ export class Unknown extends Schema.TaggedClass<Unknown>()("Unknown", {
 
 export type PaceDecision = Allow | Hold | Unknown
 
-// The judgment of one policy window.
-type Judgment = Data.TaggedEnum<{
-  Allows: { readonly window: Window }
-  Fails: { readonly window: Window }
-  Unusable: { readonly window: Window }
-}>
-const Judgment = Data.taggedEnum<Judgment>()
+export interface PaceInput {
+  readonly periods: (window: Window) => Option.Option<WindowPeriod>
+  readonly now: number
+  readonly nowMono: Option.Option<MonoStamp>
+  readonly policy: Policy
+  readonly provider: Client
+  readonly estimate: (window: Window) => number
+  readonly counting: ReadonlyArray<GrantPoints>
+  readonly cap: (window: Window) => number
+}
 
-const newestThenHighest: Order.Order<Observation> = Order.combine(
-  Order.mapInput(Order.Number, (reading: Observation) => reading.observedAt),
-  Order.mapInput(Order.Number, (reading: Observation) => reading.usedPercent),
-)
+export const level = (
+  period: WindowPeriod,
+  counting: ReadonlyArray<GrantPoints>,
+  window: Window,
+): number =>
+  period.highest +
+  Number.sumAll(
+    Arr.map(
+      Arr.filter(counting, (grant) => grant.window === window),
+      Struct.get("points"),
+    ),
+  )
 
-const isUsable =
-  (now: number, freshnessMillis: number) => (reading: Observation) => {
-    const beforeReset = (resetsAt: number) => now < resetsAt
-    return (
-      Number.between(now - reading.observedAt, {
-        minimum: 0,
-        maximum: freshnessMillis,
-      }) &&
-      Option.match(reading.resetsAt, { onNone: constTrue, onSome: beforeReset })
+export const defaultCap =
+  (policy: Policy, provider: Client) =>
+  (window: Window): number =>
+    100 -
+    Option.match(
+      Arr.findFirst(
+        policy.providers[provider].windows,
+        (entry) => entry.window === window,
+      ),
+      { onNone: () => 0, onSome: Struct.get("reservePercent") },
     )
-  }
 
-const judgeReading =
-  (now: number, policy: Policy, entry: WindowPolicy, points: number) =>
-  (reading: Observation): Judgment => {
-    const { window } = entry
-    if (!isUsable(now, policy.freshnessMillis)(reading))
-      return Judgment.Unusable({ window })
-    return reading.usedPercent + points <= 100 - entry.reservePercent
-      ? Judgment.Allows({ window })
-      : Judgment.Fails({ window })
-  }
+const isFresh = (
+  freshest: Option.Option<MonoStamp>,
+  nowMono: Option.Option<MonoStamp>,
+  freshnessMillis: number,
+): boolean =>
+  Option.getOrElse(
+    Option.zipWith(
+      freshest,
+      nowMono,
+      (seen, now) =>
+        seen.bootId === now.bootId &&
+        Number.between(now.micros - seen.micros, {
+          minimum: 0,
+          maximum: freshnessMillis * 1000,
+        }),
+    ),
+    () => false,
+  )
 
-const judgeWindow =
-  (
-    observations: ReadonlyArray<Observation>,
-    now: number,
-    policy: Policy,
-    estimate: (window: Window) => number,
-  ) =>
-  (entry: WindowPolicy): Judgment => {
-    const isOfWindow = (reading: Observation) => reading.window === entry.window
-    const judgeNewest = (ofWindow: Arr.NonEmptyReadonlyArray<Observation>) =>
-      judgeReading(now, policy, entry, estimate(entry.window))(
-        Arr.max(ofWindow, newestThenHighest),
-      )
-    return pipe(
-      Arr.filter(observations, isOfWindow),
-      Arr.match({
-        onEmpty: () => Judgment.Unusable({ window: entry.window }),
-        onNonEmpty: judgeNewest,
-      }),
-    )
-  }
+const isUsable = (input: PaceInput, period: WindowPeriod): boolean =>
+  isFresh(period.freshest, input.nowMono, input.policy.freshnessMillis) &&
+  Option.match(period.resetsAt, {
+    onNone: () => true,
+    onSome: (resetsAt) => input.now < resetsAt,
+  })
 
-export const pace = (
-  observations: ReadonlyArray<Observation>,
-  now: number,
-  policy: Policy,
-  provider: Client,
-  estimate: (window: Window) => number,
-): PaceDecision => {
-  const isOfProvider = (reading: Observation) => reading.provider === provider
-  const ofProvider = Arr.filter(observations, isOfProvider)
+type Judgment = "allows" | "fails" | "unusable"
+
+const judge =
+  (input: PaceInput, counting: ReadonlyArray<GrantPoints>) =>
+  (window: Window): Judgment =>
+    Option.match(input.periods(window), {
+      onNone: () => "unusable",
+      onSome: (period) => {
+        if (!isUsable(input, period)) return "unusable"
+        return level(period, counting, window) + input.estimate(window) <=
+          input.cap(window)
+          ? "allows"
+          : "fails"
+      },
+    })
+
+export const pace = (input: PaceInput): PaceDecision => {
+  const counting = Arr.filter(
+    input.counting,
+    (grant) => grant.provider === input.provider,
+  )
   const judged = Arr.map(
-    policy.providers[provider].windows,
-    judgeWindow(ofProvider, now, policy, estimate),
+    input.policy.providers[input.provider].windows,
+    ({ window }) => ({ window, judgment: judge(input, counting)(window) }),
   )
   const notAllowing = Arr.map(
-    Arr.filter(judged, Predicate.not(Predicate.isTagged("Allows"))),
+    Arr.filter(judged, (j) => j.judgment !== "allows"),
     Struct.get("window"),
   )
-  if (Arr.some(judged, Predicate.isTagged("Fails")))
+  if (Arr.some(judged, (j) => j.judgment === "fails"))
     return new Hold({ windows: notAllowing })
-  const noWindows = Arr.isReadonlyArrayEmpty(judged)
-  if (noWindows || Arr.isReadonlyArrayNonEmpty(notAllowing))
+  if (
+    Arr.isReadonlyArrayEmpty(judged) ||
+    Arr.isReadonlyArrayNonEmpty(notAllowing)
+  )
     return new Unknown({ windows: notAllowing })
   return new Allow({})
 }
