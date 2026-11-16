@@ -1,16 +1,20 @@
 # Agent supervisor: short design
 
-2026-11-14. Status: DRAFT. Revision 6 (awaiting re-review), 2026-11-15.
+2026-11-14. Status: DRAFT. Revision 6.1 (awaiting re-review), 2026-11-15.
 Revision 6 applies the owner's ruling recorded in
 [the admission contract](2026-11-15-admission-contract.md): admission is
 pacing over foreman's own records; a safety guarantee in provider
 terms is outside the design. It bounds foreman's launches and reservations, given its records;
 it does not keep the provider's count below the cap or preserve the
-reserve. At the defaults, without the owner's `ledger retire`, foreman
-makes at most 4 Claude launches on the five-hour window until a retire
-(about 2 per period), about 2 to 4 in an unattended night, and at most 4
-in a weekend on the weekly window ("Unattended launches", under
-"Admission rule"). The conditional-safety analysis is research only
+reserve. Until the owner approves a clock mechanism (O11), no reading
+is fresh, so every launch is Unknown and needs a waiver. After that, at
+the defaults and without the owner's `ledger retire`, the accounting
+ceiling is 4 Claude launches on the five-hour window until a retire
+(about 2 per period) and 4 in a weekend on the weekly window. Expected
+launches are fewer: Claude readings come from the
+statusline during the owner's own use and stay fresh for 10 minutes, so
+an unattended night probably gets about one launch ("Unattended
+launches", under "Admission rule"). The conditional-safety analysis is research only
 ("Research: conditional admission safety (not a design claim)"). "How
 revision 6 answers the admission contract", at the end, maps each ruling
 point and contract item to its change. The re-review of revision 5.2
@@ -60,8 +64,8 @@ Labels used throughout, by where each is defined:
   M5.2 have sections under the claims ledger).
 - Revision 5.1: rule P is under "Reconciling readings, grants and
   charges" (its assumptions A1-A4 moved to the research section in
-  revision 6); owner decisions O1-O6 are under "Open
-  items"; properties AS, LK and ND are M5.1's.
+  revision 6); owner decisions O1-O5 and O7 onward are under "Open
+  items" (O6 removed in revision 6); properties AS, LK and ND are M5.1's.
 - Revision 5.2: rule P is restated under "Reconciling readings, grants
   and charges"; owner decisions O7-O9 are under "Open items"; property
   TC is M5.2's.
@@ -459,14 +463,17 @@ Definitions (from the admission contract; each names its clock):
 | Observation | Foreman (stream line, Codex response) or the statusline script receives the reading and records `observedMono`, the boot id and `observedAt`. | `CLOCK_MONOTONIC` plus `kern.bootsessionuuid`; the wall clock for display only |
 | Ingestion | The ledger write that gives the reading its `seq`. | Ledger `seq` |
 | Freshness | `nowMono − observedMono ≤ F` (F = 10 minutes), same boot | Monotonic |
-| Period membership | A later reset time (by more than `resetTolerance`) opens a period, an earlier one is dropped, and anything else joins the current period. | Provider reset time against the Mac wall clock (A4) |
+| Period membership | A later reset time (by more than `resetTolerance`) opens a period, an earlier one is dropped, and anything else joins the current period. | Provider reset times compared with each other; the Mac wall clock enters only through `now ≥ resetsAt` (A4) |
 
 Freshness measures how recently foreman observed a reading. It says
 nothing about when the provider captured it: a fresh reading may report
 a count taken at any earlier time, and no reading includes that time. The
-wall clock enters in two places only, both of which can only tighten: a
-reading whose reset time has passed (`now ≥ resetsAt`) is unusable, and
-reset times sort readings into periods.
+wall clock enters in one place only, and it can only tighten: a reading
+whose reset time has passed (`now ≥ resetsAt`) is unusable. Opening a
+period compares provider reset times with each other; the Mac clock
+plays no part. A reading with a later reset time opens a period and may lower the
+reading term of the level; that is the one way readings can loosen
+pacing, and "What frees room" lists it.
 
 - An observation is `{provider, window, usedPercent, resetsAt,
   observedAt, observedMono, bootId, seq, source}`. `resetsAt` may be
@@ -488,7 +495,9 @@ reset times sort readings into periods.
   never fresh. How foreman and the statusline script read the monotonic
   clock is a proposal (see "Proposal: clock acquisition (awaiting owner
   approval)"); that the clock agrees across processes on one boot is
-  unverified and belongs to L4.
+  unverified and belongs to L4. Until the owner approves a mechanism
+  (O11), no reading is fresh, every window is Unknown and every launch
+  needs a waiver.
 - Allow iff every policy window is usable and the level (see
   "Reconciling readings, grants and charges") plus `estimate(window)` is
   at most the cap. Hold if a usable window fails that test. Otherwise
@@ -560,8 +569,9 @@ Observation sources:
   responds; (c) `/usage` as a prompt, only if live test L1 shows it
   spends nothing.
 
-Because Claude has no confirmed preflight read (E2), the first Claude
-launch after a quiet period may be Unknown. The supervisor then holds,
+Until the owner approves a clock mechanism (O11), every launch is
+Unknown. After that, because Claude has no confirmed preflight read (E2),
+the first Claude launch after a quiet period may be Unknown. The supervisor then holds,
 and the user can `waive` one launch. Unknown never becomes Allow by
 waiting.
 
@@ -955,9 +965,12 @@ A step of project `j` for provider `p` may launch only if, for every
 policy window `w` of `p`:
 
 1. Pacing allows with cap `cap(p, w)`: pacing has a usable reading `r`
-   (otherwise the answer is Unknown) and `level(p, w) + est(w) ≤ cap(p,
+   (otherwise the answer is Unknown; until the owner approves a clock
+   mechanism, O11, no reading is usable and every launch needs a waiver)
+   and `level(p, w) + est(w) ≤ cap(p,
    w)`. The level is the highest reading of the current period plus the
-   estimate of every unretired, uncanceled grant of `p`, from every
+   amount of every unretired, uncanceled grant of `p` (its estimate while
+   open, its charged amount once charged), from every
    project (see "Reconciling readings, grants and charges"). `cap(p, w)`
    is the level of a spend-down active for that window, and otherwise
    `100 − reserve(p, w)`.
@@ -973,7 +986,7 @@ scheduler tries its next candidate, and if none passes the project waits.
 What admission bounds and what it does not (revision 6). Given foreman's
 records, admission bounds foreman's own launches and reservations: no
 launch other than a waived one is admitted unless the highest usable
-reading of the current period, plus the estimate of every grant that
+reading of the current period, plus the amount of every grant that
 counts, plus this launch's estimate, is within the cap. A grant stops
 counting only when it is canceled (its step never launched) or the owner
 retires it. Admission does not bound:
@@ -992,7 +1005,13 @@ The research section states the assumptions under which the provider's
 count would stay within the cap, and the counterexamples to the weaker
 versions; none of them is adopted.
 
-Unattended launches (from the admission contract; figures at the
+Unattended launches (from the admission contract). These figures are
+accounting ceilings; expected launches are fewer. They apply only after
+the owner approves a clock mechanism (O11); until then every launch is
+Unknown and needs a waiver, so the unattended figure is zero. Freshness
+lowers them further for Claude, whose readings come from the statusline
+during the owner's own use and stay fresh for 10 minutes: an unattended
+night probably gets about one Claude launch. Figures at the
 defaults: five-hour cap 100 − 30 = 70, weekly cap 100 − 40 = 60,
 estimate 15). A launch needs `r + 15n + 15 ≤ cap`, where `n` counts
 unretired grants across all projects and periods, and `r` is the
@@ -1002,8 +1021,9 @@ window's reading:
   until the owner issues `ledger retire`, however many periods pass.
   Within one period, with sequential steps whose real use equals the
   estimate, 2 launches; at half the estimate, 3.
-- An unattended night: about 2 to 4 Claude launches, mostly in the
-  first period.
+- An unattended night: an accounting ceiling of about 2 to 4 Claude
+  launches, mostly in the first period; with freshness, probably about
+  one.
 - Weekly window: `n ≤ (45 − r_w)/15`, so 4 launches at `r_w = 0`, 3 at
   15, 2 at 30, none above 45. This applies to a whole weekend, so a
   weekend gets at most 4 Claude launches, and fewer once the owner's own
@@ -1735,8 +1755,8 @@ replies, for example).
 ## Defaults
 
 Every default the design names, in one place (the owner's ruling on
-revision 4 confirmed those of revision 4; the rows marked revision 5 are
-new and need the owner's confirmation). All are configuration.
+revision 4 confirmed those of revision 4; rows added since then need the
+owner's confirmation). All are configuration.
 
 | Setting | Default | Where |
 |---|---|---|
@@ -1987,7 +2007,7 @@ O12.
 | Next tranche's base chosen at approval and applied as a lock-holder request | None found; the restore request with another target, carried by the approval | Invented composition of two rules above; flagged; M3 amendment 8 |
 | Shared usage ledger; admission as one `BEGIN IMMEDIATE` transaction that reads the totals and appends a grant (revision 4) | SQLite transactions (writers serialized by the database lock); escrow reservations (O'Neil, 1986) | Adapted: grant and intent live in two databases, joined by the settle step (revision 5) |
 | Grant lifecycle: cancel after a lost race, settle step at every launch attempt and startup, charge redone from `Finished` (revision 5) | Write-ahead logging with idempotent redo (ARIES); unique key as the idempotency guard | Adapted; the composition is ours; flagged |
-| Admission level: reading plus every grant that counts in the period under rule P, with no reflection (revision 5.1) | Escrow accounting (O'Neil, 1986): every reservation counts until its period ends | Faithful escrow plus the reading; retirement only by the owner's attestation (revision 5.2) is ours, simple; flagged. Revision 5's reflection test is removed |
+| Admission level: reading plus every grant that counts in the period under rule P, with no reflection (revision 5.1) | Escrow accounting (O'Neil, 1986): every reservation counts until its period ends | Adapted (revision 6.1): reservations stay counted across periods and end only by cancel or the owner's attestation (`ledger retire`, revision 5.2), which is ours, simple; flagged. The reading term is added to the escrow. Revision 5's reflection test is removed |
 | Ledger order by a `seq` column assigned inside `BEGIN IMMEDIATE` (revision 5.1) | A log sequence number assigned under the single writer lock (ARIES); SQLite's write lock serializes writers | Faithful |
 | Allocations with borrowing ceilings; a reserve no project borrows | Names from the hierarchical token bucket's rate and ceil (Devera, 2002) | Invented: HTB borrows spare bandwidth that refills, while here a borrower takes a per-period budget the lender may need later; flagged; no lender protection (see the lease proposal) |
 | Periods keyed by reset time, opened only by a reading with a later reset time (revision 6) | None found | Invented; flagged |
@@ -2035,12 +2055,16 @@ properties and live in "Research: conditional admission safety (not a
 design claim)". What still backs a revision-6 claim: every M3 and M4
 property cited below; M5 stages5's SB, BR, WV and SD5; M5.1 grants51's
 LK and ND and its stages5 rerun (SD5); M5.2 leaks52's LK and ND. These
-are properties of foreman's own records and decisions. Research only:
+are properties of foreman's own records and decisions, with one
+qualification: M5 stages5 models the reading as the exact provider count
+(check51.py, `used = Σ spend + out`), so SD5 checks the spend-down gating
+against an idealized reading; the revision-6 level is unchecked there. Research
+only:
 M5.1's AS and its overshoot run; M5.2 periods52's TC, its `--no-a5` run
 and the mutants killed only by TC (GA8, PA1-PA5, PA7, PA9-PA12), and the
 classifications of PA6 and PA8. M5 grants' RS5, DC and QR checked
-revision 5's reflection rule, which is gone, and back nothing now; the
-restatement checks DC, K and UK are not evidence for any claim. Where a
+revision 5's reflection rule, which is gone, and back nothing now; no
+restatement check (DC, K or UK) is evidence for any claim. Where a
 claim below says "argument only", no check backs it yet, and the open
 items list the check it needs.
 
@@ -2068,7 +2092,7 @@ items list the check it needs.
 | C19 | The scheduler launches the first candidate in earliest-deadline order that is not under a quota hold for its provider and passes admission, refuses only when none passes, and creates at most one quota hold per attempt, for the first candidate refused by pacing. | M4 (ED, H1). |
 | C20 | Restated in revision 5.2. Admissions by different projects' instances are serialized by the ledger. After every settle step that succeeds, of every launch attempt of project `j` and at the end of every startup of `j`, no grant of `j` is open (no step of `j` is in flight at those points); after `ledger settle` of `j` only grants whose `Intended` has no `Finished` may stay open (no cross-instance termination); no grant is both charged and canceled; none is charged twice; none is charged while its process may still run. A lost race, a failed cancel, charge or settle write, a crash of either project at any point (including after a lost race and before its cancel) and a crash that is never followed by a restart therefore leave a grant open only until `j`'s next successful launch attempt or startup; while it is open it counts at its estimate. | M5.2 leaks52 (LK, ND) with two operations per project, both projects crashing at any point, every kind of failed write including the settle step's own, and `ledger settle` without termination (see "Model check M5.2" for the mutants); M5.1 grants51 for one operation per project with spending; serialization: argument from SQLite's `BEGIN IMMEDIATE`, modeled as an atomic admission; L4 for real crashes. Revision 6: LK and ND are properties of foreman's own records and still back this claim. ND's "none is charged while its process may still run" assumes startup step 1's kill reaches the step's process and nothing else; with its identity hazard (O12) that part is argument plus L4. |
 | C21 | Rates are used only after convergence; a window's mode is fixed for each period from the fit in the ledger, so every instance sees the same mode; in fallback, admission is rule 1 alone. | Argument; unit and property tests of the fit later (RLS against a batch least-squares oracle on generated data). M4 models convergence as a one-way event that applies at once; the per-period mode is not modeled. |
-| C22 | Unattended launches (revision 6, from the admission contract): at the defaults (five-hour cap 70, weekly cap 60, estimate 15), with no `ledger retire`, waiver or spend-down, foreman admits at most 4 launches of a provider on the five-hour window in total, however many periods pass (2 per period when real use equals the estimate, 3 at half); and on the weekly window 4 at a weekly reading of 0, 3 at 15, 2 at 30 and none above 45. | Argument only: arithmetic on `r + 15n + 15 ≤ cap` (admission contract, "Retirement and unattended cost"). Open check: unit tests with these figures as fixtures (O13). |
+| C22 | Unattended launches (revision 6, from the admission contract; revision 6.1: these are accounting ceilings that apply only after O11, before which every launch needs a waiver, and freshness lowers them further for Claude): at the defaults (five-hour cap 70, weekly cap 60, estimate 15), with no `ledger retire`, waiver or spend-down, foreman admits at most 4 launches of a provider on the five-hour window in total, however many periods pass (2 per period when real use equals the estimate, 3 at half); and on the weekly window 4 at a weekly reading of 0, 3 at 15, 2 at 30 and none above 45. | Argument only: arithmetic on `r + 15n + 15 ≤ cap` (admission contract, "Retirement and unattended cost"). Open check: unit tests with these figures as fixtures (O13). |
 | L | From every reachable state some sequence of events reaches a launch or an approval release. | M3 liveness and strict liveness; M4 liveness (with credit for states where a provider has used its one modeled reset). |
 
 ### Model check M3
@@ -3812,3 +3836,19 @@ lifecycle, periods and "What frees room" agree apart from findings 2 and
 AS; LK, ND, WV and SB check foreman's own records; startup step 1 states
 its hazard and the proposals are confined to their sections; `ledger
 reset`'s removal is put to the owner as O10; no new invented machinery.
+
+## How revision 6.1 answers the re-review
+
+Applied by the coordinator; no model or research file changed.
+
+| Finding | Change |
+|---|---|
+| 1 | O11's consequence (every launch is Unknown and needs a waiver until a clock mechanism is approved) is stated in the header, in Pacing's usability bullet, in rule 1, in "Liveness" and in the unattended block. The unattended figures, the header and C22 are labeled accounting ceilings that apply only after O11; freshness lowers them further for Claude (probably about one launch in an unattended night). |
+| 2 | Pacing says the wall clock enters only through `now ≥ resetsAt`, which tightens. Opening a period compares reset times with each other and may lower the reading term; it is the one loosening path through readings. The membership row of the definitions table says the same. |
+| 3 | Provenance marks the admission level Adapted: reservations stay counted across periods and end only by cancel or `ledger retire`. |
+| 4 | Rule 1 and "What admission bounds" use `amount`, defined as the estimate while open and the charged amount once charged. |
+| 5 | The label legend points to O1-O5 and O7 onward and says O6 was removed. |
+| 6 | The claims ledger notes that M5 stages5 models the reading as exact, so SD5 backs the gating logic against an idealized reading. |
+| 7 | The Defaults intro says rows added since revision 4 need confirmation. |
+
+A passing `bun run check` does not establish design readiness.
