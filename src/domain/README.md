@@ -1,6 +1,6 @@
 # Domain
 
-Plain data and validators. They cover what the other layers pass around: identifiers, clients, roles, steps, outcomes, usage observations, windows, pacing policy, monotonic stamps, grants and holds. Back to [how it works](../../docs/how-it-works.md).
+Plain data and validators for what the other layers pass around. These include identifiers, clients, roles, steps and outcomes. Usage observations, windows and the pacing policy are here too, as are monotonic stamps, grants and holds. Back to [how it works](../../docs/how-it-works.md).
 
 May import: nothing.
 
