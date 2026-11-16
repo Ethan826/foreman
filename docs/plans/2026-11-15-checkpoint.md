@@ -38,7 +38,9 @@ Where the foreman work stands, for the next session.
    6.1 with the C13 oracle, C16 timer properties and C22 fixtures, and
    the estimate per role and window. Commit 5c0e2da went in with the
    prose gate failing (a command chain that did not stop on failure);
-   c0cee4f fixed it.
+   c0cee4f fixed it, and both stay in history. Part A's token use is
+   unknown: roughly estimated at 200k, not verified to be within the
+   300k cap.
 8. Waiting on the owner: the accounting choice (deferred until L1 and L2
    reported; the arithmetic is to be rechecked before it is presented),
    O14 (Codex reset times roll forward while idle), approval of Part B,

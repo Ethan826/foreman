@@ -548,8 +548,10 @@ Result 2026-11-16 (research/live/results-2026-11-16.md): positive.
 `rate_limit_event.rate_limit_info.unifiedWindows` gives `utilization` and
 `resetsAt` for `five_hour` and `seven_day` on an ordinary run; `/usage`
 made no turn and reported zero tokens once (still treated as possibly
-consuming); readings have whole-point resolution; command 2 used at most
-one point, confounded by the owner's concurrent session.
+consuming); readings have whole-point resolution; the five-hour reading
+moved by one point across command 2, which with rounding, delayed
+reporting and the owner's concurrent session sets no strict upper bound
+on what that call used.
 
 ### C2: L2 package (Codex usage windows), for approval; front of the sequence
 
