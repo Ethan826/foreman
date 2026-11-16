@@ -31,6 +31,20 @@ Where the foreman work stands, for the next session.
    [the implementation plan](2026-11-15-implementation-plan.md): its
    "Sequence" section gives the order (L1 and L2 packages for approval
    first, then Part A, the accounting decision, Part B, L3 and L4).
+6. Done 2026-11-16: live tests L1 and L2 ran under the owner's approval
+   and both came back positive (research/live/results-2026-11-16.md).
+7. Done 2026-11-16: Part A (Tasks A1 to A4) ran inline under a
+   300k-token cap: Domain types, period membership, `pace` to revision
+   6.1 with the C13 oracle, C16 timer properties and C22 fixtures, and
+   the estimate per role and window. Commit 5c0e2da went in with the
+   prose gate failing (a command chain that did not stop on failure);
+   c0cee4f fixed it.
+8. Waiting on the owner: the accounting choice (deferred until L1 and L2
+   reported; the arithmetic is to be rechecked before it is presented),
+   O14 (Codex reset times roll forward while idle), approval of Part B,
+   and whether the Claude decoder in `src/format/claude.ts` should take
+   the `unifiedWindows` shape L1 found (Format decoders are in the
+   authorized slice; it was not in Part A's task list).
 
 ## Rules to remember
 
