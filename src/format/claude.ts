@@ -26,7 +26,7 @@
 //   system/api_retry: session_id
 // Unknown extra fields are ignored. Any other event type fails to decode;
 // the shell decides what an undecodable line means.
-import { Array as Arr, Option, Record, Schema } from "effect"
+import { Array as Arr, Option, pipe, Record, Schema } from "effect"
 import { type Window, Windows } from "../domain/window.ts"
 
 // The wire tags of the events decoded here.
@@ -120,30 +120,36 @@ export interface ClaudeWindowReading {
 const toPercent = (fraction: number): number =>
   Math.round(fraction * 10_000) / 100
 
+const secondsToMillis = (seconds: number): number => seconds * 1000
+
+// The reading for one tracked window, if the entry is present, valid and
+// has a utilization.
+const readingFor =
+  (windows: Record.ReadonlyRecord<string, unknown>) =>
+  ([wire, window]: readonly [string, Window]): Option.Option<ClaudeWindowReading> =>
+    Option.gen(function* () {
+      const entry = yield* pipe(
+        Record.get(windows, wire),
+        Option.flatMap(decodeUnifiedWindow),
+      )
+      const fraction = yield* Option.fromNullishOr(entry.utilization)
+      return {
+        window,
+        usedPercent: toPercent(fraction),
+        resetsAt: pipe(
+          Option.fromNullishOr(entry.resetsAt),
+          Option.map(secondsToMillis),
+        ),
+      }
+    })
+
 export const claudeWindowReadings = (
   event: ClaudeRateLimitEvent,
 ): ReadonlyArray<ClaudeWindowReading> => {
-  const windows = Option.flatMap(
+  const windows = pipe(
     Option.fromNullishOr(event.rate_limit_info),
-    (info) => Option.fromNullishOr(info.unifiedWindows),
+    Option.flatMap((info) => Option.fromNullishOr(info.unifiedWindows)),
+    Option.getOrElse(() => ({})),
   )
-  return Arr.getSomes(
-    Arr.map(wireWindow, ([wire, window]) =>
-      Option.flatMap(
-        Option.flatMap(
-          Option.flatMap(windows, Record.get(wire)),
-          decodeUnifiedWindow,
-        ),
-        (entry) =>
-        Option.map(Option.fromNullishOr(entry.utilization), (fraction) => ({
-          window,
-          usedPercent: toPercent(fraction),
-          resetsAt: Option.map(
-            Option.fromNullishOr(entry.resetsAt),
-            (seconds) => seconds * 1000,
-          ),
-        })),
-      ),
-    ),
-  )
+  return Arr.getSomes(Arr.map(wireWindow, readingFor(windows)))
 }
