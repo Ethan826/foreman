@@ -74,47 +74,38 @@ const bySeq = Order.mapInput(Order.Number, (s: Stamped) => s.reading.seq)
 const latestBefore = Order.combine(byMicros, bySeq)
 const earliestAfter = Order.combine(byMicros, Order.flip(bySeq))
 
+const within =
+  (from: number, to: number) =>
+  (s: Stamped): boolean =>
+    s.micros >= from && s.micros <= to
+
+const pickBy =
+  (pick: (xs: Arr.NonEmptyReadonlyArray<Stamped>) => Stamped) =>
+  (xs: ReadonlyArray<Stamped>): Option.Option<Observation> =>
+    Arr.isReadonlyArrayNonEmpty(xs) ? Option.some(pick(xs).reading) : Option.none()
+
+const latest = pickBy((xs) => Arr.max(xs, latestBefore))
+const earliest = pickBy((xs) => Arr.min(xs, earliestAfter))
+
 export const measuredIncrease = (
   step: StepSpan,
   readings: ReadonlyArray<Observation>,
   provider: Client,
   window: Window,
   policy: Policy,
-): Option.Option<number> => {
-  const freshness = policy.freshnessMillis * 1000
-  const stamped = stampedIn(readings, provider, window, step)
-  const before = Option.map(
-    Arr.match(
-      Arr.filter(
-        stamped,
-        (s) =>
-          s.micros <= step.startMono.micros &&
-          step.startMono.micros - s.micros <= freshness,
-      ),
-      { onEmpty: () => Option.none(), onNonEmpty: (xs) => Option.some(Arr.max(xs, latestBefore)) },
-    ),
-    (s) => s.reading,
-  )
-  const after = Option.map(
-    Arr.match(
-      Arr.filter(
-        stamped,
-        (s) =>
-          s.micros >= step.endMono.micros &&
-          s.micros - step.endMono.micros <= freshness,
-      ),
-      { onEmpty: () => Option.none(), onNonEmpty: (xs) => Option.some(Arr.min(xs, earliestAfter)) },
-    ),
-    (s) => s.reading,
-  )
-  return Option.flatMap(Option.all([before, after]), ([b, a]) =>
-    Option.flatMap(Option.all([b.resetsAt, a.resetsAt]), ([rb, ra]) =>
-      rb === ra
-        ? Option.some(Math.max(0, a.usedPercent - b.usedPercent))
-        : Option.none(),
-    ),
-  )
-}
+): Option.Option<number> =>
+  Option.gen(function* () {
+    const freshness = policy.freshnessMillis * 1000
+    const start = step.startMono.micros
+    const end = step.endMono.micros
+    const stamped = stampedIn(readings, provider, window, step)
+    const before = yield* latest(Arr.filter(stamped, within(start - freshness, start)))
+    const after = yield* earliest(Arr.filter(stamped, within(end, end + freshness)))
+    const resetBefore = yield* before.resetsAt
+    const resetAfter = yield* after.resetsAt
+    if (resetBefore !== resetAfter) return yield* Option.none()
+    return Math.max(0, after.usedPercent - before.usedPercent)
+  })
 
 export const estimate =
   (finished: ReadonlyArray<FinishedStep>, role: Role, policy: Policy) =>
