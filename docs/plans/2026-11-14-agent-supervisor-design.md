@@ -1,6 +1,8 @@
 # Agent supervisor: short design
 
-2026-11-14. Status: DRAFT. Revision 6.1 (awaiting re-review), 2026-11-15.
+2026-11-14. Status: APPROVED by the owner on 2026-11-15 at revision 6.1
+(see "Owner ruling 2026-11-15: design approved" at the end). Open items
+stay open; implementation needs separate approval.
 Revision 6 applies the owner's ruling recorded in
 [the admission contract](2026-11-15-admission-contract.md): admission is
 pacing over foreman's own records; a safety guarantee in provider
@@ -3867,3 +3869,23 @@ yields no usable reading before L1, in the header and the unattended
 block. One nit was applied: a dangling parenthesis in the unattended
 block. A second nit, the placement of "(A4)" in the definitions row,
 reads correctly as written and is unchanged.
+
+## Owner ruling 2026-11-15: design approved
+
+- The owner approved the design at revision 6.1 (commit a34e28d), after
+  the revision-6 re-review and the follow-up check of the 6.1 diff. The
+  review history above is kept as it is.
+- The approval does not decide any open item. O1 to O5, O7 to O13, the
+  reduced usable share, cross-instance termination and startup signaling
+  stay open exactly as "Open items" lists them.
+- Readiness leases and cross-instance termination are deferred. Startup's
+  unchecked process-group kill is not to be implemented.
+- The restrictive accounting ceilings are not an accepted product
+  requirement. The practical accounting choices and their consequences
+  for unattended use go to the owner together for a decision.
+- O13's ordinary correctness tests belong in the implementation plan; no
+  renewed provider-safety proof campaign is requested.
+- No further broad design revision or re-review is requested.
+- Implementation, live tests that make model calls, and pushes each need
+  the owner's separate approval. L1 and L2 come early, with bounded
+  commands, expected evidence and costs presented for approval first.

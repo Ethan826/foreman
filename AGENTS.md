@@ -7,10 +7,10 @@ before the next tranche. It paces launches against the user's
 subscription windows, renews context with every step, and keeps durable
 checkpoints.
 
-Status (2026-11-14): the design is in revision and not yet approved. The
-owner approved a first code slice only: project setup, Domain types,
-Format decoders and the pure pacing function (provisional until the
-design is approved). Runtime, process control, git handling,
+Status (2026-11-15): the owner approved the design at revision 6.1; its
+open items stay open. Implementation is approved only for the first code
+slice: project setup, Domain types, Format decoders and the pure pacing
+function. Runtime, process control, git handling,
 permissions, storage and recovery code are not approved. `bun run check`
 (tsc, ESLint and the prose gate) and `bun run test` must pass before any commit.
 
