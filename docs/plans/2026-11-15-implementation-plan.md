@@ -1,0 +1,675 @@
+# Foreman implementation plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use subagent-plan-execution (recommended) or inline-plan-execution to implement this plan task by task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+2026-11-15. Status: proposed, not approved. Nothing in this plan is
+authorized by being written down. Part A restates work the owner already
+authorized; Part B needs the owner's approval before any task starts;
+Part C waits on a named decision or live test. Live tests that make model
+calls need their own approval, given separately for each.
+
+**Goal:** Build foreman, the personal supervisor described by the
+approved design, in an order where every task is testable on its own and
+the live tests that decide whether unattended use is worthwhile run
+first.
+
+**Architecture:** Decision core under a technology shell (skill
+`decision-core-architecture`): pure, total Domain and Features; Format
+for decoding; Runtime in Effect for SQLite, processes, git, the clock and
+notification; Program wires capabilities; the facade is the CLI. State
+lives in two SQLite stores (each project's append-only event log, and the
+shared usage ledger) and passes through pure folds.
+
+**Tech Stack:** TypeScript 5.9.3, Effect 4.1.4, Bun 1.3.6 (with
+`bun:sqlite` once its intake record is approved), Vitest 5.1.0 with
+`@effect/vitest`, ESLint house rules in `eslint.rules.js`.
+
+**Spec:** `docs/plans/2026-11-14-agent-supervisor-design.md`, approved at
+revision 6.1 (commit a34e28d; see its "Owner ruling 2026-11-15: design
+approved"), and `docs/plans/2026-11-15-admission-contract.md` (owner
+ruling: admission is pacing; the clock helpers, `bun:ffi` and the
+signaling procedure are proposals). Executors read the design section a
+task names; the plan does not restate it.
+
+## Global Constraints
+
+- Admission is pacing over foreman's own records. No code, comment, test
+  name or doc may claim that admission keeps provider usage below the cap
+  or preserves the reserve (admission contract, owner ruling).
+- Defaults (design "Defaults"): reserve 30 percent (five-hour) and 40
+  percent (weekly); freshness 10 minutes; `initialEstimate` 15 points;
+  `busy_timeout` 5 seconds; `resetTolerance` 5 minutes; `dropTolerance` 5
+  points; `maxCorrectionRounds` 2; `reviewQueueBound` 1 (2 allowed per
+  project); `backlogMax` 3; λ 0.99; `minPairs` 10; `maxRelError` 0.2;
+  `capFactor` 1.5; `swapThreshold` 20 points. `readInterval`, `fitLag` and
+  `dataVersionPoll` have no value (O3): code takes them as configuration
+  with no default and refuses to start a feature that needs one unset.
+- Until the owner approves a clock mechanism (O11), Runtime supplies no
+  monotonic stamp, no reading is fresh and every launch is Unknown. The
+  pure code takes the stamp as `Option` and is complete without O11.
+- Startup's unchecked process-group kill is not implemented (owner
+  ruling). No code signals a process group recorded by an earlier run.
+- No readiness leases (O1) and no cross-instance termination: both are
+  deferred.
+- Timers and notification timeouts never release a hold, never turn
+  Unknown into Allow and never loosen policy.
+- Closed vocabularies are named `as const` objects in Domain; no other
+  file retypes their strings (AGENTS.md, "Closed vocabularies").
+- Inject implementations; never select behavior with a flag.
+- No bypass permission flag for either client.
+- No lint-disable comments, casts, non-null assertions, skipped tests or
+  new allowlist entries. `bun run check` and `bun run test` pass before
+  every commit.
+- Stage explicit paths only. Commit with the noreply address. Never push
+  without the owner's explicit OK for that push.
+- Saved live-test outputs use normalized paths: no home-directory path,
+  user name or account identifier in any committed file.
+
+## Provenance
+
+Carried from the design's "Provenance of components"; the owner's
+approval of revision 6.1 covers each flagged line, with the evidence the
+design cites (model checks M3 to M5.2 within their stated bounds, the git
+and worktree probes, argument where the claims ledger says so).
+
+- State as a fold over an append-only log: event sourcing (Fowler, 2005). Faithful. Tasks B5, B6.
+- Compare-and-append on log position: optimistic concurrency control (Kung and Robinson, 1981). Faithful. Task B5.
+- Single-instance lock: `flock(2)`. Faithful. Task B5.
+- Intent before effect, reconcile on restart: write-ahead logging (ARIES, 1992). Adapted (no automatic redo of agent steps). Tasks B12, B14, B15.
+- Pure decide over events: functional core, imperative shell; decider pattern. Faithful. All Features tasks.
+- Per-reason holds, each with its own release: invented composition, flagged, approved with the design; M3 (C1 to C3). Task B6.
+- Pacing against windows with a reserve: invented, flagged; claims only a bound over foreman's records. Tasks A2, A3.
+- Quota release by a post-hold reading or a waiver: invented, flagged; M3 (C3). Task B6.
+- Estimate as maximum of recent measured costs: sliding-window maximum. Faithful. Task A4.
+- Waiver bound to the next launch attempt: invented, flagged; M3 (C7). Task B7.
+- Shared ledger, admission in one `BEGIN IMMEDIATE` transaction, escrow grants (O'Neil, 1986): adapted; M5.1, M5.2 (LK, ND). Tasks B1 to B3.
+- Ledger order by `seq` under the writer lock (ARIES LSN): faithful. Task B1.
+- Admission level, reading plus counting grants: escrow accounting, adapted (revision 6.1); argument only, O13 tests in A3. Task A3.
+- Periods opened only by a later reset time; timers only tighten: invented, flagged; argument only, O13 tests in A2. Task A2.
+- Spend-down ending with its period: invented, flagged; M4, M5 (SD5). Task B7.
+- Scheduler order by provider reset time: invented heuristic, flagged; M4 (ED, H1). Task B9.
+- Review queue with bound and backpressure: bounded buffer (Dijkstra, 1965). Faithful. Task B8.
+- Stacking and unwinding: invented composition, flagged; M4 (QB, UW). Task B8 (bound 2 only).
+- Pre-approved backlog: invented, flagged; M4 (BK), M5 (SB, BR). Task B10.
+- Drift check, restore, commit through a temporary index and `update-ref` with the old value; worktrees; pinned git directories; environment hardening: faithful use of git, shown by the probes. Task B11.
+- Protected-change detection: Tripwire-style digests (Kim and Spafford, 1994). Adapted. Task B11.
+- Agent containment by process group: POSIX process groups. Faithful for the in-session kill; startup's kill is replaced by a signal-0 probe (Task B14, a judgment call for the owner).
+- Allocations with borrowing ceilings: invented, flagged, no lender protection; M4 (AL). Task B17.
+- Rates by recursive least squares (Plackett, 1950; Ljung and Söderström, 1983): faithful for the fit; noise estimate, convergence test and pair selection invented, flagged. Task B17.
+
+## Review Focus
+
+- A reading whose period has no recorded reset time, followed by one that
+  has a reset time: the design does not say whether it opens a period.
+  Expected: it joins the current period and records the reset time
+  (conservative: the reading term cannot fall). Pinned in Task A2.
+- Wall-clock jumps (sleep, NTP step, manual change): freshness uses only
+  the monotonic stamp in the same boot, and the wall clock may only make a
+  reading unusable (`now ≥ resetsAt`). Pinned in Task A3 (a wall clock set
+  back an hour never turns Unknown into Allow).
+- Two instances racing on one ledger file: one `BEGIN IMMEDIATE` waits up
+  to `busy_timeout`, and a timeout launches nothing. Pinned in Task B3
+  with two connections to one temporary file.
+- A ledger write that fails midway through a settle step: nothing is
+  written and the attempt launches nothing. Pinned in Task B3.
+- A process group id from an earlier run that now belongs to an unrelated
+  process: startup sends no signal and holds. Pinned in Task B14.
+
+---
+
+## Sequence
+
+The parts below group work by what authorizes it. The order to run it
+in is:
+
+1. L1 and L2 packages (Part C, C1 and C2), each after the owner approves
+   its commands and cost. Their results decide whether unattended
+   operation is worthwhile (see "Accounting choices for decision") and
+   change Part A's decoder and policy defaults.
+2. Part A (authorized), with L1 and L2 results folded in where they
+   arrived.
+3. The owner's accounting decision (O7 with the choices below) and the
+   approval of Part B.
+4. Part B in task order. B1 to B10 need no live test. B11 to B16 touch
+   git, processes and permissions.
+5. L3 after B16 and before any real target repository is used; L4 after
+   B14 and B15.
+6. Part C items as their decisions arrive.
+
+---
+
+## Part A: work already authorized
+
+Authorized (AGENTS.md): project setup, Domain types, Format decoders and
+the pure pacing function, plus docs. What exists at 76c899f:
+
+- Setup: `package.json` with exact pins, lockfile, `tsconfig.json`,
+  ESLint house rules with must-fail fixtures, vendored prose linter, CI,
+  the onion diagram and its drift test, the stability tripwire.
+- Domain: `clients.ts`, `roles.ts`, `ids.ts`, `outcomes.ts`,
+  `observation.ts`, `window.ts`, `policy.ts`; `holds.ts` is empty.
+- Format: `src/format/claude.ts`, `src/format/codex.ts`, with tests.
+- Features: `src/features/pace.ts`, marked provisional. It implements
+  revision 3's rule (newest reading by `observedAt`, freshness by wall
+  clock, `usedPercent + estimate ≤ 100 − reserve`), not revision 6.1's.
+
+What remains to bring it in line with revision 6.1 (design "Pacing",
+"Reconciling readings, grants and charges", "Periods"): four tasks.
+
+### Task A1: Domain types for revision 6.1
+
+**Files:**
+- Create: `src/domain/clock.ts`, `src/domain/period.ts`, `src/domain/grant.ts`
+- Modify: `src/domain/observation.ts`, `src/domain/policy.ts`, `src/domain/holds.ts`, `src/domain/ids.ts`, `src/domain/README.md`, `eslint.rules.js` (closed-vocabulary string list only, if a new vocabulary's strings must be banned elsewhere)
+- Test: `test/domain/clock-period-grant.test.ts`, `test/domain/holds.test.ts`, `test/domain/observation-policy.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `BootId` (branded non-empty string), `MonoStamp = { bootId: BootId, micros: number }` (non-negative integer microseconds of `CLOCK_MONOTONIC`; microseconds keep uptimes of years inside 2^53).
+  - `LedgerSeq` (branded integer ≥ 1), `PeriodSeq` (branded integer ≥ 1), `GrantId` (branded slug).
+  - `Observation` gains `observedMono: Option<MonoStamp>` (optional key) and `seq: LedgerSeq`. `observedAt` stays, documented as display only.
+  - `GrantPoints = { grantId: GrantId, provider: Client, window: Window, points: number }`: the amount one counting grant adds to one window.
+  - `Policy` gains `resetToleranceMillis` (default 5 minutes) and `dropTolerancePoints` (default 5).
+  - `HoldKinds` vocabulary (`approval`, `quota`, `uncertain`, `failure`, `drift`, `protected`) and one `Schema.TaggedClass` per hold with the design's payload: `Quota { provider, windows, heldMono: Option<MonoStamp>, ledgerSeq: LedgerSeq }`, `Drift { worktree: WorktreeKind, expected, head, dirty }` with `WorktreeKinds = { Supervisor, Review }`, and the rest as the holds table gives them. `Hold` is their union.
+  - `GrantCancelCauses = { LostRace: "lostRace", Orphan: "orphan" }`.
+
+- [ ] **Step 1: Write the failing tests.** Decode round trips for each new type; `Observation` without `observedMono` decodes to `Option.none()`; a `MonoStamp` with negative or fractional `micros` is refused; `defaultPolicy.resetToleranceMillis === 300_000` and `dropTolerancePoints === 5`; each hold class decodes from its encoded form and `HoldKinds` values equal the tags.
+- [ ] **Step 2: Run** `bun run test test/domain` and confirm the new tests fail on missing exports.
+- [ ] **Step 3: Implement** the types above. Remove the TODO in `holds.ts` and in `observation.ts`. Update the class diagram in `src/domain/README.md` so every class it names is exported (`test/docs/readmes.test.ts`).
+- [ ] **Step 4: Run** `bun run check && bun run test`. Expected: PASS.
+- [ ] **Step 5: Commit** the files listed above: `feat(domain): types for revision 6.1 pacing, grants and holds`.
+
+### Task A2: Period membership (pure)
+
+**Files:**
+- Create: `src/features/periods.ts`
+- Test: `test/features/periods.test.ts`
+
+**Interfaces:**
+- Consumes: `Observation`, `Policy`, `PeriodSeq` (A1).
+- Produces:
+  - `WindowPeriod = { periodSeq: PeriodSeq, resetsAt: Option<number>, highest: number, freshest: Option<MonoStamp>, drops: ReadonlyArray<LedgerSeq>, earlier: ReadonlyArray<LedgerSeq> }`
+  - `ingestReading(current: Option<WindowPeriod>, reading: Observation, policy: Policy): WindowPeriod`
+  - `currentPeriod(readings: ReadonlyArray<Observation>, policy: Policy): Option<WindowPeriod>`: folds one provider-window's readings in `seq` order.
+
+Rules (design "Periods" and the definitions under "Pacing"): the first
+reading opens period 1. A reading whose `resetsAt` is later than the
+period's by more than `resetTolerance` opens the next period with that
+reading as its highest. One earlier by more than `resetTolerance` goes to
+`earlier` and changes nothing else. Any other reading joins and can only
+raise `highest`; a join lower than `highest` by more than `dropTolerance`
+is listed in `drops`. A join with `resetsAt` into a period with none
+records the reset time and opens nothing (Review Focus 1). `freshest` is
+the joining reading's `observedMono` with the greatest `micros` in the
+newest boot seen; a reading without a stamp never sets it.
+
+- [ ] **Step 1: Write the failing tests**, including these property tests (fast-check through `@effect/vitest`, generated readings with `seq` order):
+  - `highest` never decreases within one `periodSeq` (C16: a drop opens nothing).
+  - Only a later reset time beyond `resetTolerance` increments `periodSeq` (C16).
+  - A reading listed in `earlier` never changes `highest`, `periodSeq` or `freshest` (C16: a reading of an earlier period is never used).
+  - Example: readings `[30, 10 with the same resetsAt]` give `highest 30` and one drop.
+- [ ] **Step 2: Run** `bun run test test/features/periods.test.ts`; expected FAIL (module missing).
+- [ ] **Step 3: Implement** with `Arr.reduce`; no other state.
+- [ ] **Step 4: Run** `bun run check && bun run test`; expected PASS.
+- [ ] **Step 5: Commit** `src/features/periods.ts`, `test/features/periods.test.ts`: `feat(features): period membership for revision 6`.
+
+### Task A3: `pace` and `level` to revision 6.1, with O13's checks of C13 and C22
+
+**Files:**
+- Modify: `src/features/pace.ts`, `src/features/README.md`
+- Test: `test/features/pace.test.ts` (rewrite), create `test/features/pace-oracle.test.ts`, `test/features/unattended.test.ts`
+
+**Interfaces:**
+- Consumes: A1 types, `WindowPeriod` (A2).
+- Produces:
+  - `level(period: WindowPeriod, counting: ReadonlyArray<GrantPoints>, window: Window): number`: `highest` plus the points of every counting grant for that window. The caller decides which grants count (Task B2); `pace` never filters.
+  - `PaceInput = { periods: (window: Window) => Option<WindowPeriod>, now: number, nowMono: Option<MonoStamp>, policy: Policy, provider: Client, estimate: (window: Window) => number, counting: ReadonlyArray<GrantPoints>, cap: (window: Window) => number }`
+  - `pace(input: PaceInput): PaceDecision` with `PaceDecision` unchanged (`Allow | Hold | Unknown`, windows in policy order).
+  - `defaultCap(policy: Policy, provider: Client): (window: Window) => number`, returning `100 − reserve`. A spend-down's cap arrives through `cap` (Task B7).
+
+Rule: per policy window, usable iff the period exists, `freshest` and
+`nowMono` share a boot and `nowMono.micros − freshest.micros ≤ freshness`,
+and `resetsAt` is absent or `now < resetsAt`. With `nowMono = none`
+nothing is usable (O11). Allow iff every window is usable and
+`level + estimate ≤ cap`; Hold if a usable window fails; otherwise
+Unknown; a provider with no policy windows is Unknown.
+
+- [ ] **Step 1: Write the failing tests.**
+  - Example tests replacing revision 3's: newest-by-`observedAt` no longer decides; a stale reading still raises `highest`; `nowMono = Option.none()` gives Unknown for every window; another boot's stamp is never fresh.
+  - `pace-oracle.test.ts` (C13): an independent brute-force oracle written as loops over the raw readings and grants, compared with `pace` on generated inputs (readings with up to three periods, up to six grants, both windows). At least 1,000 runs; the oracle must not import `periods.ts`.
+  - Property: raising `now` and `nowMono` with everything else fixed never turns Hold or Unknown into Allow (timers only tighten, C16).
+  - Property: setting the wall clock back (smaller `now`, same `nowMono`) never turns Unknown into Allow unless the only failing condition was `now ≥ resetsAt` (Review Focus 2).
+  - `unattended.test.ts` (C22), fixtures at the defaults, five-hour cap 70, weekly cap 60, estimate 15: with `r = 0`, `n = 0..3` Allow and `n = 4` Hold on the five-hour window; a fold through three five-hour periods where each step's real use equals the estimate and no grant is retired admits launches 1, 2 in period 1, 3 in period 2, 4 in period 3, and nothing after; at half the estimate, 3 in period 1; weekly: 4 launches at `r_w = 0`, 3 at 15, 2 at 30, 1 at 45, none at 46.
+- [ ] **Step 2: Run** `bun run test test/features`; expected FAIL on the new signature.
+- [ ] **Step 3: Implement** the signature above. Remove the "provisional" header and rewrite the comment block to cite revision 6.1's rules. Update the flowchart and class diagram in `src/features/README.md`.
+- [ ] **Step 4: Run** `bun run check && bun run test`; expected PASS.
+- [ ] **Step 5: Commit** the files listed: `feat(features): pace to revision 6.1 with level, oracle and unattended fixtures`.
+
+### Task A4: Estimate per role and window (pure)
+
+**Files:**
+- Create: `src/features/estimate.ts`
+- Test: `test/features/estimate.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `StepSpan = { role: Role, startMono: MonoStamp, endMono: MonoStamp }`
+  - `measuredIncrease(step: StepSpan, readings: ReadonlyArray<Observation>, window: Window, policy: Policy): Option<number>`: the bracketing rule under "Pacing" (`estimate(window)`): a usable reading observed before the start and one after the end, both with the same `resetsAt`, same boot.
+  - `estimate(finished: ReadonlyArray<{ role: Role, increase: (window: Window) => Option<number> }>, role: Role, policy: Policy): (window: Window) => number`: the largest measured increase among the role's last five finished steps, else `initialEstimate`.
+
+- [ ] **Step 1: Write the failing tests:** no measured step gives 15; a bracket across a reset is unmeasured; a bracket from another boot is unmeasured; only the last five of the role count; the sixth-oldest large step is ignored.
+- [ ] **Step 2: Run** and confirm FAIL.
+- [ ] **Step 3: Implement.**
+- [ ] **Step 4: Run** `bun run check && bun run test`; PASS.
+- [ ] **Step 5: Commit** both files: `feat(features): estimate per role and window`.
+
+Docs for Part A: the orientation docs were updated to revision 6.1 with
+this plan; Tasks A1 and A3 update the Domain and Features READMEs.
+
+---
+
+## Part B: settled design, implementation needs the owner's approval
+
+Eighteen tasks. Each is testable alone; Runtime tasks test against
+temporary SQLite files and disposable git repositories created by the
+test, never the owner's repositories and never a model.
+
+Before B1: a dependency-intake record for `bun:sqlite` (built into Bun
+1.3.6; no new package) in `docs/dependency-intake.md`, approved with Part B.
+
+### Task B1: Ledger store and `seq`
+
+**Files:** Create `src/domain/ledger.ts` (row types: `Grant`, `Charged`, `GrantCanceled`, `ReadingRow`, `PeriodOpened`, `Reserve`, `Allocation`, `SpendDown`, `SpendDownCanceled`, `Retirement`, `RateUpdated`, each with `seq: LedgerSeq`; capability type `LedgerStore`), `src/runtime/ledger-sqlite.ts`, `src/runtime/README.md` update; test `test/runtime/ledger-sqlite.test.ts`.
+
+**Interfaces:** Produces `LedgerStore = { transact: <A>(body: (tx: LedgerTx) => Effect<A, LedgerError>) => Effect<A, LedgerBusy | LedgerError>, ... }` where `LedgerTx` offers `read(): LedgerSnapshot` and `append(rows): ReadonlyArray<LedgerSeq>`; `openLedger(path: string, busyTimeoutMillis: number): Effect<LedgerStore, LedgerError, Scope>`. WAL mode; every write is one `BEGIN IMMEDIATE`; `seq` from the one-row `ledgerSeq` table; unique keys on `charges.grantId` and `grantCancellations.grantId`, and a grant in at most one of the two (checked in the transaction).
+
+- [ ] Tests first: `seq` is gap-free and totally ordered across tables; a rolled-back transaction leaves no row and no gap; a second charge of one grant is a no-op; charge after cancel is refused; two connections on one temporary file serialize, and a lock held past `busy_timeout` returns `LedgerBusy` with nothing written (Review Focus 3).
+- [ ] Run, see FAIL; implement; run `bun run check && bun run test`; commit the listed files: `feat(runtime): shared ledger store with seq ordering`.
+
+### Task B2: Which grants count (pure)
+
+**Files:** Create `src/features/counting.ts`; test `test/features/counting.test.ts`.
+
+**Interfaces:** `RetirementRule = (grant: GrantView, window: Window, snapshot: LedgerSnapshot) => boolean` (true: retired); `ownerOnly: RetirementRule` (retired only by a `Retirement` row covering the grant's `seq`); `counting(snapshot: LedgerSnapshot, provider: Client, rule: RetirementRule): ReadonlyArray<GrantPoints>` (open grants at their estimate, charged at the charged amount, canceled and retired excluded). The rule is injected so the accounting decision ("Accounting choices for decision") changes one value in Program, not a flag.
+
+- [ ] Tests first: canceled grants count nothing; open and charged grants count across periods (C16: a new period frees nothing); a property test that `counting` under `ownerOnly` never drops a grant without a `Retirement` row; grants of every project count.
+- [ ] Implement; check and test; commit: `feat(features): counting grants with an injected retirement rule`.
+
+### Task B3: Admission, cancel, charge and settle in the ledger
+
+**Files:** Create `src/features/settle.ts` (pure: `settleActions(log: ProjectLogView, snapshot: LedgerSnapshot, project: ProjectId): ReadonlyArray<SettleAction>` where `SettleAction = CancelOrphan | ChargeFromFinished | ChargeAtEstimate`), `src/runtime/admission.ts` (`admit(store, request: AdmissionRequest): Effect<Admitted | Refused, LedgerBusy | LedgerError>` reads the snapshot, runs `pace` and rule 2 inside one transaction and appends `Grant`; `cancel`, `charge`, `settle`); tests `test/features/settle.test.ts`, `test/runtime/admission.test.ts`.
+
+**Interfaces:** Consumes B1, B2, A3. `AdmissionRequest = { project, opId, provider, estimate per window, nowMono, now, waiverId: Option }`. Charges are always at the estimate (no authoritative measurement exists). Settle runs at every launch attempt (step 2) and at startup (step 5).
+
+- [ ] Tests first (C20, O13 grant lifecycle as fixtures over a recorded event sequence, asserting every intermediate ledger state): orphan grant (no `Intended` names it) is canceled `orphan`; lost race cancels `lostRace` at once; `Finished` without `Charged` is charged once, and a repeated settle is a no-op; a settle whose write fails writes nothing and launches nothing (Review Focus 4); after a successful settle no grant of the project is open except under the startup rule of B14; a property test over generated crash points that no grant is both charged and canceled, none charged twice.
+- [ ] Implement; check and test; commit: `feat: grant admission, cancel, charge and settle`.
+
+### Task B4: `ledger settle` (owner command, no signal)
+
+**Files:** `src/features/settle.ts` (add `ownerSettle`), `src/runtime/project-lock.ts` (`tryLock(path): Effect<LockHandle, LockHeld>` with `LOCK_NB`), test `test/runtime/ledger-settle.test.ts`.
+
+- [ ] Tests first: refused while a `run` holds the lock; cancels orphans and charges each `Finished`; an `Intended` without `Finished` stays open and is listed with its recorded pgid; no process is signaled and no git command runs.
+- [ ] Implement; check and test; commit: `feat: ledger settle without signaling`.
+
+### Task B5: Project event log, lock and compare-and-append
+
+**Files:** Create `src/domain/events.ts` (the project log's event union: `Intended`, `Launched`, `Finished`, `Committed`, `NothingToCommit`, `CommitRefused`, `CommitFailed`, `Approved`, `Waived`, `Released`, `Adopted`, `Reconciled`, the request and completion events, `ReviewQueued`, `PreApproved`, `Unwound`, `LedgerBound`, `WorktreeIntended`, `WorktreeCreated`, `Rebased`, hold creation events), `src/runtime/project-log.ts` (`append(expectedPosition, events): Effect<Position, PositionMoved>`, `readFrom(position)`), `src/runtime/project-lock.ts` (the `flock` holder); tests `test/domain/events.test.ts`, `test/runtime/project-log.test.ts`.
+
+- [ ] Tests first: decode round trip of every event; an append at a stale position fails with `PositionMoved` and writes nothing; a second lock holder is refused; `LedgerBound` with another path stops startup.
+- [ ] Implement; check and test; commit: `feat: project event log with compare-and-append`.
+
+### Task B6: Holds (pure fold and release rules)
+
+**Files:** Create `src/features/holds.ts` (`holdsOf(events): ReadonlyArray<Hold>`, `blocks(hold, provider): boolean`, `quotaReleased(hold: Quota, readings, policy, cap): boolean`); test `test/features/holds.test.ts`.
+
+- [ ] Tests first (C1, C2, C3): each hold is released only by its own event; an approval for another tranche or revision releases nothing; a quota hold blocks only its provider; a reading observed before the hold, or ingested before its `ledgerSeq`, or from another boot never releases it; a passed reset time never releases it (O4 not adopted); a property test that appending clock-only events (none exist in the log; the fold has no time input) cannot change the hold set.
+- [ ] Implement; check and test; commit: `feat(features): holds and their release rules`.
+
+### Task B7: Waivers and spend-down
+
+**Files:** `src/features/waiver.ts` (armed waiver: consumed or expired by launch-attempt steps 3 to 7), `src/features/spend-down.ts` (`activeSpendDown(snapshot, provider, window, now): Option<SpendDown>`, `capFor(...)` feeding `PaceInput.cap`); tests beside them.
+
+- [ ] Tests first (C7, C15): a waived launch still takes a grant at its estimate; a waiver expires on any refusal; a spend-down needs a usable reading and none active; a loosening one ends at the period's reset time, a tightening one only at a new period or `--cancel`; rule 2 is skipped only under a loosening one.
+- [ ] Implement; check and test; commit: `feat(features): waivers and spend-down`.
+
+### Task B8: Review queue (default bound 1)
+
+**Files:** `src/features/review-queue.ts` (`queueOf(events)`, `implementAllowed(queue, bound): boolean`, `unwindTargets(queue, headOutcome)`); test `test/features/review-queue.test.ts`.
+
+- [ ] Tests first (C17): with bound 1 an implement step launches only on an empty queue and nothing is ever stacked; a correction's commit replaces its tranche's entry at the head; with bound 2, a change request at the head unwinds exactly the tranches above it and re-arms their pre-approvals.
+- [ ] Implement; check and test; commit: `feat(features): review queue with bound and unwinding`.
+
+### Task B9: Scheduler (pure)
+
+**Files:** `src/features/schedule.ts`: `schedule(project: ProjectView, ledger: LedgerSnapshot, ctx: ScheduleContext): Launch | HoldQuota | Wait`; test `test/features/schedule.test.ts`.
+
+- [ ] Tests first (C19, H1): candidates ordered by provider reset time of the longest policy window, unknown last, ties to the review; a candidate under a quota hold for its provider is skipped; at most one quota hold per attempt, for the first candidate refused by rule 1; rule-2 refusals create no hold; the correction is the only candidate when rounds remain; `maxCorrectionRounds` 2 ends in `notConverged` (C6).
+- [ ] Implement; check and test; commit: `feat(features): scheduler`.
+
+### Task B10: Pre-approved backlog (without `backlog remove`)
+
+**Files:** `src/features/backlog.ts` (`backlogOf(events)`, `approvalFor(tranche, events)`); test beside it.
+
+- [ ] Tests first (C2 revision 4 and 5 parts): `--stop-before` alone never starts its tranche; at most `backlogMax` 3 entries; a discarded implement step's approval is armed again; a passing review creates the approval hold exactly when the next tranche is neither pre-approved nor started.
+- [ ] Implement; check and test; commit: `feat(features): pre-approved backlog`.
+
+`backlog remove` waits on O2 (Part C).
+
+### Task B11: Git and worktree handling
+
+**Files:** `src/runtime/git.ts` (clean git environment with the recorded `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `-c` overrides), `src/runtime/worktree.ts` (supervisor worktree creation as intent, effect, completion; review worktree `--lock --detach`; startup check), `src/runtime/protected.ts` (digest walk and compare), `src/runtime/commit.ts` (temporary index, `commit-tree` with `Op-Id` trailer, `update-ref HEAD <new> <base>`); tests in `test/runtime/` against repositories the test creates in a temporary directory.
+
+- [ ] Tests first (D, C9 git part, C11, C12): a planted hook, filter, fsmonitor and signing program write no marker file during any shell git command; `update-ref` with a stale base is refused and the owner's branch and checkout are unchanged; the commit ignores the worktree's index; a protected change creates the `Protected` outcome before any git command; the owner's checkout is byte-identical after a full commit cycle.
+- [ ] Implement; check and test; commit, one commit per file pair.
+
+### Task B12: Step runner (in-session process control)
+
+**Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
+
+- [ ] Tests first: the child is a group leader; on its exit the runner signals that same group once, before reporting `Finished`, and a grandchild `sleep` is gone afterwards; a fixture stream with a `result` error classifies as the matching outcome; an undecodable line is `Unclassified`.
+- [ ] Implement; check and test; commit.
+
+Note: Bun reaps the leader when it exits, so the leader's zombie cannot pin the group id; between the leader's exit and the group signal an empty group's id could in principle be reused. This in-session signal is in the approved design (Operations step 3) and is not startup's kill; the owner may want it reviewed with O12.
+
+### Task B13: Launch attempt and operations log (Program)
+
+**Files:** `src/program/launch-attempt.ts` (wires steps 1 to 7 of "Launch attempt"), `src/program/run.ts` (the cycle loop); test `test/program/launch-attempt.test.ts` with in-memory fakes for git, spawn and clock built as values.
+
+- [ ] Tests first (C1, C4, C5, C7): no launch with a hold or a request pending; every launch is preceded by `Grant` and `Intended`; a lost compare-and-append cancels the grant at once and decides again; with `nowMono = none` the attempt creates a Quota hold and launches nothing; the full recorded output sequence of a tranche with one correction matches a fixture.
+- [ ] Implement; check and test; commit.
+
+### Task B14: Startup recovery without the unchecked kill
+
+**Files:** `src/program/startup.ts`, `src/runtime/process-probe.ts` (`groupExists(pgid): Effect<boolean>` using `process.kill(-pgid, 0)`, which delivers no signal); test `test/program/startup.test.ts`.
+
+What startup does instead of design step 1 (owner ruling: the unchecked
+kill is not implemented). For every operation with `Launched` and no
+`Finished`:
+
+- It sends no signal. It probes the recorded group with signal 0.
+- If no such group exists, the step's processes are gone: step 5 charges
+  the grant at its estimate with `endedAt` the probe time, as the design
+  says, and step 3 holds the operation `Uncertain` for its git effect.
+- If a group with that id exists, startup cannot tell whether it is the
+  step or an unrelated process that reused the id. It appends the
+  `Uncertain` hold, leaves the grant open (it keeps counting at its
+  estimate), reports the opId, the recorded pgid and the members it can
+  list, and stops: `run` does not continue. The owner ends the process by
+  hand if it is the step's, and starts `run` again; the next startup's
+  probe finds the group gone.
+
+Steps 2 to 5 run as the design gives them otherwise.
+
+- [ ] Tests first (C4, C10 as amended, Review Focus 5): a fake probe reporting "exists" leads to an `Uncertain` hold, an open grant, a report naming the pgid, a stopped `run` and no call to any signaling function (the fake records calls); "gone" leads to a charge at the estimate and the hold; a crash between `Grant` and `Intended` is canceled as an orphan.
+- [ ] Implement; check and test; commit.
+
+This is a judgment call for the owner: signal 0 sends nothing, but it is a
+system call aimed at a recorded id. The alternative is to probe nothing
+and always hold, which keeps every crashed step's grant open until the
+owner acts.
+
+### Task B15: Requests (reconcile, restore, approve --base)
+
+**Files:** `src/features/requests.ts` (pending request fold; stale rule), `src/program/requests.ts` (performs a request as the lock holder); tests beside them.
+
+- [ ] Tests first (D, M3 amendment 8): a request whose HEAD is neither `atHead` nor `target` becomes `RequestStale`; `reconcile` is accepted only for an opId with an `Uncertain` hold; none of the three writes the ledger.
+- [ ] Implement; check and test; commit.
+
+### Task B16: Permission profiles, pinned versions, context per step
+
+**Files:** `src/domain/profiles.ts` (editing and read-only profiles as data, per client), `src/format/claude-settings.ts` (encodes the per-step settings file), `src/runtime/client-version.ts` (`--version` check against the configured pin); tests `test/format/claude-settings.test.ts`, `test/runtime/client-version.test.ts`.
+
+- [ ] Tests first (C9 agent part as far as encoding goes, C18): the encoded Claude editing settings deny `git push`, `git commit`, `git config`, web tools and `curl`, deny Edit and Write on the protected set unless the tranche permits, and enable the sandbox with `failIfUnavailable: true`; no encoded command line contains a bypass flag (a must-fail test with each known bypass flag); a version mismatch refuses startup.
+- [ ] Implement; check and test; commit. The profiles are unverified until L3.
+
+### Task B17: Allocations, rule 2 and the rate fit
+
+**Files:** `src/features/allocation.ts` (rule 2 and borrowing within ceilings), `src/features/rates.ts` (RLS update with forgetting factor, convergence test, mode per period); tests `test/features/allocation.test.ts`, `test/features/rates.test.ts`.
+
+- [ ] Tests first (C14, C21): rule 2 applies only in ledger mode without a loosening spend-down; an allocation change that would exceed 100 with the reserve is refused; RLS with λ = 1 matches a batch least-squares oracle on generated data within a stated tolerance; mode changes only when a period opens.
+- [ ] Implement; check and test; commit.
+
+### Task B18: Alerts and the CLI facade
+
+**Files:** `src/runtime/notifier.ts` (writes to the supervisor log and `status`; an injected capability), `src/facade/cli.ts` (commands: `run`, `status`, `approve [--base]`, `waive`, `release`, `adopt`, `restore [--review]`, `reconcile`, `release-protected [--accept]`, `backlog add`, `spend-down`, `ledger reserve|allocate|settle`); test `test/facade/cli.test.ts`.
+
+- [ ] Tests first: each command decodes its arguments and calls one Program entry with plain data; the facade has no branch on what a value means (review check); a notifier timeout releases nothing.
+- [ ] Implement; check and test; commit.
+
+---
+
+## Part C: waits on a decision or a live test
+
+Each item names what it waits on.
+
+### C1: L1 package (Claude usage reading), for approval; front of the sequence
+
+Waits on: the owner's approval of these commands and their cost.
+
+Preparation, no model call: read `claude --help` offline for the
+print-mode budget flag's name and unit, and record `claude --version`
+for the pin. If `--help` or `--version` is found to contact the network,
+stop and report.
+
+Commands (run in a fresh empty directory under a scratch path, so no
+project `CLAUDE.md` loads; `$OUT` is a scratch directory outside the
+repository):
+
+1. Statusline capture (no extra model call). Add one opt-in line to the
+   owner's statusline script that appends its stdin JSON to
+   `$OUT/statusline.jsonl`, and leave it in place for one ordinary
+   interactive session of the owner's. Remove it afterwards.
+2. One stream-json run:
+   `claude -p "Reply with the single word: ok" --output-format stream-json --verbose --max-turns 1 > "$OUT/l1-stream.jsonl"`
+3. One `/usage` run:
+   `claude -p "/usage" --output-format json > "$OUT/l1-usage.json"`
+
+Cap: two `claude -p` calls in total, with one retry of command 2 only if
+it fails before any model turn (an authentication or startup error).
+Cost: one short turn plus the client's system prompt, cached; expected
+well under one percentage point of the five-hour window, unmeasured
+until the statusline lines before and after show it. Command 3 may cost
+nothing; that is one of the questions.
+
+What is captured and where: raw files stay in `$OUT` and are never
+committed. Normalized copies go to `research/live/l1-2026-11-XX/`:
+`sed` replaces the home directory with `~`, and `jq` deletes
+`session_id`, `uuid`, `transcript_path`, `cwd` and any account or email
+field. A short `results.md` records the commands, the client version,
+and the readings before and after.
+
+Expected evidence and what each result changes:
+
+- `rate_limit_event` appears on an ordinary run and carries, per window,
+  a used percent (`usedPercent` or equivalent) and a reset time.
+  Foreman's own stream yields usable readings: after O11, sequential
+  launches can chain, the accounting ceilings become reachable, and the
+  accounting choice matters for unattended use. Task: decode the
+  concrete fields in `src/format/claude.ts` and map them to
+  `Observation` with source `claudeRateLimitEvent`.
+- The event appears but carries only a status (allowed, warning, limited)
+  without a percent, or does not appear on an ordinary run. Foreman's
+  stream yields no reading. A Claude launch needs a statusline line from
+  the owner's own use in the last 10 minutes, so an unattended night gets
+  about one Claude launch whatever the accounting choice. Unattended
+  Claude work is then not worth building toward unless command 3 says
+  otherwise; the decoder records the status only.
+- `/usage` returns a usage report and the statusline readings before and
+  after it do not move. Claude has a read without a model turn (E2
+  changes): a waiting Claude step can ask for a reading on
+  `readInterval` (O3), and chaining works even without the event. If the
+  bars move, `/usage` is a model turn and is not used.
+- The `result` message's `usage` object (token classes) confirms the
+  fit's inputs (Task B17); a budget flag found in `--help` and the
+  run report's unit decide whether `capFactor` sizing applies.
+- Statusline capture shows the `rate_limits` shape for source (b), which
+  sets the statusline decoder (C9 below).
+
+Not in this package: the delay and bracket measurements of L1 revision
+5.1 (b) and (c). They need several runs bracketed by readings and are
+proposed as L1b after the result above, with their own cap.
+
+### C2: L2 package (Codex usage windows), for approval; front of the sequence
+
+Waits on: the owner's approval.
+
+Preparation, no model call: read `codex exec --help` and
+`codex app-server --help` offline for a per-run budget option and the
+app-server's method list; record `codex --version`. Reading the newest
+local session file under the Codex sessions directory for
+`rate_limits` entries is free and may already answer the window shapes;
+do it first, saving a normalized copy only.
+
+Commands (fresh empty directory, `$OUT` as above):
+
+1. Rate-limit read through the app server, before the run: start
+   `codex app-server`, send `initialize`, the `initialized`
+   notification and `account/rateLimits/read` as newline-delimited JSON
+   on stdin, capture stdout to `$OUT/l2-read-before.jsonl`, then close
+   stdin. Confirm the method names in the help output first.
+2. One run:
+   `codex exec --json --sandbox read-only --skip-git-repo-check "Reply with the single word: ok" > "$OUT/l2-exec.jsonl"`
+3. The same read as 1, to `$OUT/l2-read-after.jsonl`.
+
+Cap: one `codex exec` call and two reads. Cost: one short turn, expected
+well under one percentage point of Codex's shortest window, unmeasured
+until reads 1 and 3 show it. A read is expected to cost nothing; whether
+it starts a turn is a question (check for any turn notification and
+whether the figures move between reads with no run between them; if
+they move, stop).
+
+Captured and normalized as in C1, to `research/live/l2-2026-11-XX/`.
+
+Expected evidence and what each result changes:
+
+- The read returns windows with used percent, window length and reset
+  time, and starts no turn. Add the Codex windows to `Windows` and to
+  `defaultPolicy` (`src/domain/window.ts`, `src/domain/policy.ts`) with
+  reserves the owner sets; Codex launches stop needing a waiver once O11
+  is approved. A waiting Codex step can poll on `readInterval` (O3).
+- The read starts a turn or costs usage. Read only before a launch, never
+  on an interval; Codex waits like Claude.
+- `turn.completed` carries token usage. The fit (B17) gets Codex inputs;
+  otherwise Codex steps are unmeasured and keep `initialEstimate`.
+- Readings without a reset time. O9 becomes a live question.
+- Since the default reviewer is Codex, an unattended tranche cycle
+  (implement, review, correct) needs both a positive L1 and a usable L2.
+
+### C3: L3 package (permissions), after B16
+
+Waits on: owner approval; B11 and B16 done. One implement step on a
+disposable repository the test creates, with the task list in the
+design's L3. Cap: one Claude run (plus one retry on a startup failure).
+Cost: one implement-sized step, probably 2 to 10 points of the
+five-hour window, unmeasured. Captured: the denied and landed attempts,
+marker files, loaded instruction files, `--version`; normalized as in
+C1. Result: marks the editing profile verified, or moves `.git/` and
+`.claude/` protection to detection only (design "Open items", L3). L3c
+and L3r only if a role swap is wanted.
+
+### C4: L4 package (crash and restart), after B13 to B15
+
+Waits on: owner approval; B13 to B15 done. One full cycle in a
+disposable repository, killed at each boundary the design lists, with
+two projects on one ledger. Cap: about ten short steps across both
+clients. Cost: roughly one five-hour window's foreman share on a quiet
+day, unmeasured. Result: confirms C4, C10 (as amended by B14), C20 with
+real crashes; the reused-pgid startup check confirms B14's hold. The
+monotonic-clock agreement check needs O11 first.
+
+### Decision-dependent items
+
+- O1, lender protection: readiness leases. Deferred by the owner's
+  ruling; not planned.
+- Cross-instance process termination: deferred; not planned. `ledger
+  settle` stays signal-free (B4).
+- O2, `backlog remove` policy: the command waits.
+- O3, `readInterval`, `fitLag`, `dataVersionPoll`: Codex polling,
+  `PRAGMA data_version` polling and the fit's pair selection wait for
+  values; code takes them as unset configuration.
+- O4, release of a quota hold at a passed reset time: not adopted; no
+  task unless adopted.
+- O5, reflection rule, and the reduced usable share: wait on L1 and L2
+  evidence and the owner; they change `RetirementRule` or the level.
+- O7 and O8, which charged grants stop counting, and the `ledger retire`
+  command's form: see "Accounting choices for decision". The command
+  and any automatic rule are a `RetirementRule` value (B2) plus a CLI
+  command.
+- O9, a provider without reset times: waits on L2.
+- O10, `ledger reset` removed: confirm; no task.
+- O11, the clock mechanism (`bun:ffi` and the statusline C helper): until
+  approved, Runtime supplies `Option.none()` for `nowMono` and every
+  launch needs a waiver. After approval: `src/runtime/clock.ts` and the
+  statusline helper, with a dependency-intake record for `bun:ffi`.
+- O12, startup signaling identity: B14 holds instead of signaling; if the
+  owner approves the proposal, startup may end a verified step's
+  processes.
+- O13: planned in A2, A3, B2, B3 as unit and property tests; no model
+  scope.
+- C9, statusline decoder for `rate_limits`: waits on C1's capture.
+- Role-swap suggestions and swap profiles: wait on L3c and L3r.
+- The suggestion statistic, the default `<stateDir>` and branch name: wait
+  on the owner.
+
+---
+
+## Accounting choices for decision
+
+The owner's ruling says the restrictive ceilings are not a requirement.
+These are the practical choices, at the defaults (five-hour cap 70,
+weekly cap 60, estimate 15 on each window, one project, sequential
+steps). Every figure below is arithmetic on the admission rule, argument
+only, and applies only after O11 (before it, every launch needs a
+waiver).
+
+Two facts bound every choice:
+
+- Without a usable reading from foreman's own stream (L1), a Claude
+  launch needs a statusline line from the owner's use in the last 10
+  minutes, so an unattended night gets about one Claude launch under
+  every choice. The choice matters for unattended use only if L1 is
+  positive (or `/usage` is a free read).
+- The weekly window is usually the binding one. With an estimate of 15
+  weekly points per step, every choice that keeps charged grants
+  counting until the weekly window resets allows about 4 Claude launches
+  per weekly period. Measured weekly estimates (A4) would be far smaller
+  than 15, but measuring needs fresh readings that bracket a step, which
+  again needs L1.
+
+| Choice | Unattended night (five-hour) | Weekend (weekly) | Assumes | What can go wrong | Live results that move it |
+|---|---|---|---|---|---|
+| 1. Owner-only retire (the body) | Ceiling 4 launches until a retire, about 2 per period; about 1 in practice pending L1 | At most 4, fewer as the owner's weekly use shows | Nothing about the provider; the owner's attestation is taken on trust | Charged grants pile up and stop all launches until the owner retires them; a careless retire undoes the margin | Positive L1 makes its low ceiling the limiting factor, so less attractive |
+| 2. Retire charged grants at a reading with a later reset time | About 2 per five-hour period (3 at half the estimate), so 3 to 6 in an 8-hour night if readings arrive, but the weekly window still stops it at about 4 per weekly period | Unchanged from 1 unless the weekly window resets during the weekend: about 4 per weekly period | A grant that ended before the period opened was counted in the earlier period (the contract's period-of-request assumption, and A6 for early resets) | An early reset or a delayed reading can retire a grant the provider has not counted yet, so the level understates (documented in the contract) | L1 or L2 showing reset times stable and readings near-current makes it more attractive; an observed early reset makes it less |
+| 3. Retire after a fixed delay D (a charged grant stops counting once a reading observed at least D after its end exists) | Close to choice 4 when D is short against the step spacing | Close to choice 4 | The provider shows a step's use within D: an unverified environmental assumption no test can prove as a maximum | A step counted later than D is dropped from the level while the reading does not yet show it | L1b delay measurements: a short, consistent lag makes it more attractive; a long or variable lag less |
+| 4. Reading plus open grants only (no carry of charged grants) | Limited by real use: `r ≤ 55` per launch, so 4 per period when steps use 15 points, about 12 at 5 points; roughly 6 to 20 a night, within the weekly limit | Limited by real weekly use: `r_w ≤ 45`; 4 at 15 points per step, about 16 at 3 points | Each reading reflects every finished step, which no evidence shows (O5) | A reading taken before a step's use is counted admits one more launch on stale room; repeated, overshoot grows by one estimate per lag | Positive L1 with readings in foreman's own stream after each step makes it more attractive; any observed lag makes it less |
+
+Recommendation (labeled as such; the owner decides). Run L1 and L2
+before choosing. If L1 shows no usable reading in foreman's own stream
+and `/usage` is not free, keep choice 1: the others buy nothing
+unattended. If L1 is positive, adopt choice 2 for the five-hour window as
+the first loosening, because its failure mode (an early reset or a late
+reading) is bounded to one period and already documented, and measure
+the delay (L1b) before considering choice 3. Choice 4 gives the most
+throughput but rests on an assumption the admission contract rejects as
+evidence. In all cases, B2's injected `RetirementRule` keeps the change
+to one value in Program.
+
+---
+
+## Costed handoff
+
+Token figures are rough, worked from the task count and the files each
+task reads.
+
+| Part | Work | Approvals needed | Subagent execution | Inline execution |
+|---|---|---|---|---|
+| A | 4 tasks | Already authorized; the owner reviews this plan | About 13 dispatches, 0.6 to 0.9M tokens, half a day | 1 review dispatch, about 0.3M tokens, 2 to 3 hours |
+| B | 18 tasks plus the `bun:sqlite` intake | Approval of Part B (in milestones: B1 to B10 pure and ledger; B11 to B16 git, processes, permissions; B17 and B18) and the accounting decision before B2's rule is wired | About 55 dispatches, 3 to 5M tokens, 3 to 5 working days | Not recommended in one session; per milestone about 1M tokens and 1 review dispatch |
+| C1, C2 | L1 and L2 packages | Each: the owner's approval of commands and cost | 1 agent each, about 50k tokens; 2 Claude calls and 1 Codex call plus 2 free reads | Same |
+| C3, C4 | L3 and L4 | Each: owner approval after its prerequisite tasks | 1 agent each, 100 to 200k tokens; one implement step (L3), about ten short steps (L4) | Same |
+| C, decisions | O1 to O13 items | The owner's decision on each | Sized when decided | |
+
+Recommended: subagent execution for Part B (many tasks with shared
+interfaces, and a mistake in the ledger or recovery is costly);
+inline for Part A (four small pure tasks). Part B's spend is substantial
+and needs an explicit yes.

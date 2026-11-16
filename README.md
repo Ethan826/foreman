@@ -6,9 +6,13 @@ Foreman is meant to pace its launches against the user's subscription usage wind
 
 ## Status
 
-The design is under adversarial review and is not approved. Only a first code slice exists: project setup, Domain types, Format decoders for Claude and Codex output, a pure pacing function (provisional until the design is approved), and tests for them. Nothing runs agents yet. Process control, git handling, storage, permissions and recovery code are not approved and not written.
+The owner approved the design at revision 6.1 on 2026-11-15. Its open items (O1 to O13 and a few others) stay open, and approving the design authorized no new code. The approved first code slice is project setup, Domain types, Format decoders for Claude and Codex output, the pure pacing function, and their tests. The pacing function in the code still follows revision 3 and has to be brought up to revision 6.1. Nothing runs agents yet. The usage ledger, holds, the review queue, worktrees, process control, permissions and recovery are designed but not approved for implementation and not written.
 
-Four live tests (L1 to L4) have not been run. They cover Claude usage reading, Codex usage windows, permissions, and crash and restart. Until L2 runs, the default policy lists no Codex windows, so every Codex launch would need a waiver.
+Launch admission is pacing. Foreman launches a step only when its own records leave room: the highest recent usage reading, plus a reservation for every step it has started and not yet retired, plus the new step's estimate, must stay under a cap below 100 percent. That bounds what foreman launches. It does not keep the provider's usage count under the cap or guarantee that the reserve is left for the user, because readings can be old and a running agent can use more than its estimate.
+
+Four live tests (L1 to L4) have not been run. L1 and L2 come first. They show whether foreman can read Claude and Codex usage on its own; without that, an unattended night gets about one Claude launch. Until L2 runs, the default policy lists no Codex windows, so every Codex launch would need a waiver.
+
+The next steps, the open decisions and the live-test packages are in [the implementation plan](docs/plans/2026-11-15-implementation-plan.md).
 
 ## Design principles
 
@@ -34,20 +38,20 @@ A disposable trial of Ralph 2.12.0 preceded this design. Its cooperative review 
 
 ## Layout
 
-- `src/domain`: identifiers, roles, outcomes, observations, usage windows and policy. Hold types wait for the approved design.
+- `src/domain`: identifiers, roles, outcomes, observations, usage windows and policy. Hold types are the first task of the implementation plan.
 - `src/features`: pure decision functions. Only pacing exists so far.
 - `src/format`: decoders for Claude and Codex output.
 - `src/runtime`, `src/program`, `src/facade`: will hold the Effect shell, the wiring and the CLI. They hold no code.
 - `test`: tests for Domain, Features and Format.
 - `docs/plans`: the decision record, the design, the Ralph trial and the reviews.
-- `research/model`: bounded model checks of the design. `check3.py` covers holds and recovery. `check4.py` covers the usage ledger and the scheduler. `check5.py` covers the grant rules of revision 5. `check51.py` checks revision 5.1's grant rules against its own count of the provider's use. Each has a mutation test and saved output.
+- `research/model`: bounded model checks of the design. `check3.py` covers holds and recovery. `check4.py` covers the usage ledger and the scheduler. `check5.py` covers the grant rules of revision 5. `check51.py` checks revision 5.1's grant rules against its own count of the provider's use, and `check52.py` covers revision 5.2's grant settling and periods. The checks back only the properties the design's claims ledger cites. Each has a mutation test and saved output.
 
 ## Development
 
 Install dependencies with `bun install`. Then:
 
 ```sh
-bun run check   # tsc --noEmit
+bun run check   # tsc, ESLint and the prose check
 bun run test    # vitest run
 bun run diagram # rewrite docs/diagrams/onion.svg
 ```
@@ -56,7 +60,7 @@ Both must pass before a commit.
 
 ## Design and reviews
 
-Start with `docs/plans/2026-11-14-agent-supervisor-design.md`. Its decision record and the Ralph trial results are in the same directory, along with prose reviews.
+Start with `docs/plans/2026-11-14-agent-supervisor-design.md`, then the admission contract and the implementation plan beside it. The decision record and the Ralph trial results are in the same directory, along with prose reviews.
 
 ## License
 
