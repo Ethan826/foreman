@@ -13,8 +13,9 @@ ceiling is 4 Claude launches on the five-hour window until a retire
 (about 2 per period) and 4 in a weekend on the weekly window. Expected
 launches are fewer: Claude readings come from the
 statusline during the owner's own use and stay fresh for 10 minutes, so
-an unattended night probably gets about one launch ("Unattended
-launches", under "Admission rule"). The conditional-safety analysis is research only
+an unattended night probably gets about one launch. That estimate is
+argument only and assumes foreman's own Claude stream yields no usable
+reading, pending L1 ("Unattended launches", under "Admission rule"). The conditional-safety analysis is research only
 ("Research: conditional admission safety (not a design claim)"). "How
 revision 6 answers the admission contract", at the end, maps each ruling
 point and contract item to its change. The re-review of revision 5.2
@@ -1011,9 +1012,14 @@ the owner approves a clock mechanism (O11); until then every launch is
 Unknown and needs a waiver, so the unattended figure is zero. Freshness
 lowers them further for Claude, whose readings come from the statusline
 during the owner's own use and stay fresh for 10 minutes: an unattended
-night probably gets about one Claude launch. Figures at the
-defaults: five-hour cap 100 − 30 = 70, weekly cap 100 − 40 = 60,
-estimate 15). A launch needs `r + 15n + 15 ≤ cap`, where `n` counts
+night probably gets about one Claude launch. That estimate is argument
+only. It assumes foreman's own stream-json yields no usable reading;
+until L1, `rate_limit_event` decodes only as "rate limited, window not
+named". If L1 shows that the event carries `usedPercent`, foreman's own
+steps keep readings fresh, sequential launches can chain, and the
+ceilings below become reachable. Figures at the defaults are a
+five-hour cap of 100 − 30 = 70, a weekly cap of 100 − 40 = 60 and an
+estimate of 15. A launch needs `r + 15n + 15 ≤ cap`, where `n` counts
 unretired grants across all projects and periods, and `r` is the
 window's reading:
 
@@ -3852,3 +3858,12 @@ Applied by the coordinator; no model or research file changed.
 | 7 | The Defaults intro says rows added since revision 4 need confirmation. |
 
 A passing `bun run check` does not establish design readiness.
+
+Follow-up check of the 6.1 diff (independent, read-only, about 56k
+tokens against a 40k budget, 6 tool calls): no blocking problems. One
+should-fix was applied: the "about one launch" estimate is now labeled
+argument only, with its assumption that foreman's own Claude stream
+yields no usable reading before L1, in the header and the unattended
+block. One nit was applied: a dangling parenthesis in the unattended
+block. A second nit, the placement of "(A4)" in the definitions row,
+reads correctly as written and is unchanged.
