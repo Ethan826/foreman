@@ -1,0 +1,7 @@
+== cc mono.c -o mono (in a scratch directory outside the repo), then mono twice, 2026-11-15 19:09
+4005433004694000
+4005433007043000
+== bun mono.ts
+ffi mono ns 4005433119704000n delta 2000n hrtime 90088083n ffi call us 732.0
+== sysctl -n kern.bootsessionuuid (value redacted)
+<present>

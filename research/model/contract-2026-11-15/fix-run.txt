@@ -1,0 +1,95 @@
+== python3 -I fix.py   (run from research/model/contract-2026-11-15, 2026-11-15 19:09)
+== T1 written rule (observed-after joins)
+   ('Reset',) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Snap', True) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   ('Snap', False) []  fresh False tu 2
+   ('Ingest', 2) []  fresh True tu 2
+   ('LedgerReset',) [('ownerperiod', 1)]  fresh False tu 2
+   ('Ingest', 1) []  fresh True tu 2
+   ('Run', 0) [('launch', 0, 0)] VIOL fresh True tu 2
+   TC VIOLATED
+== T1 with R1
+   ('Reset',) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Snap', True) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   ('Snap', False) []  fresh False tu 2
+   ('Ingest', 2) []  fresh True tu 2
+   ('LedgerReset',) [('ownerperiod', 1)]  fresh True tu 2
+   ('Ingest', 1) []  fresh True tu 2
+   ('Run', 0) [('refuse', 0)]  fresh True tu 2
+   TC holds on this trace
+== T1b with R1
+   ('Snap', False) []  fresh False tu 0
+   ('Reset',) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Ingest', 2) []  fresh True tu 0
+   ('LedgerReset',) [('ownerperiod', 1)]  fresh True tu 0
+   ('Ingest', 1) []  fresh True tu 0
+   ('Run', 0) [('launch', 0, 0)]  fresh True tu 0
+   TC holds on this trace
+== T1c with R1, text A5 (guard newest only)
+   ('Reset',) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   ('LedgerReset',) [('ownerperiod', 1)]  fresh False tu 2
+   blocked by text A5: ('Ingest', 1)
+== T1c with R1, provider-side A5 (model guard)
+   ('Reset',) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   ('LedgerReset',) [('ownerperiod', 1)]  fresh False tu 2
+   not enabled under model guard: ('Ingest', 1)
+== T2 PA6 mutant, text A5
+   ('Snap', True) []  fresh False tu 0
+   ('Reset',) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Ingest', 2) []  fresh True tu 0
+   ('Stale',) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   ('Ingest', 1) []  fresh True tu 2
+   ('Run', 0) [('launch', 0, 0)]  fresh True tu 2
+   ('Run', 1) [('launch', 1, 1)] VIOL fresh True tu 2
+   TC VIOLATED
+== T2 PA6 mutant, provider-side A5 (R2)
+   ('Snap', True) []  fresh False tu 0
+   ('Reset',) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Ingest', 2) []  fresh True tu 0
+   ('Stale',) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   not enabled under model guard: ('Ingest', 1)
+== T2s unmutated, same period, text A5
+   ('Snap', True) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Ingest', 2) []  fresh True tu 0
+   ('Stale',) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   ('Ingest', 1) []  fresh True tu 2
+   ('Run', 0) [('launch', 0, 0)]  fresh True tu 2
+   ('Run', 1) [('launch', 1, 1)] VIOL fresh True tu 2
+   TC VIOLATED
+== T2s unmutated, provider-side A5 (R2)
+   ('Snap', True) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Ingest', 2) []  fresh True tu 0
+   ('Stale',) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   not enabled under model guard: ('Ingest', 1)
+== T2s R1, provider-side A5 (R2)
+   ('Snap', True) []  fresh False tu 0
+   ('Snap', True) []  fresh False tu 0
+   ('Ingest', 2) []  fresh True tu 0
+   ('Stale',) []  fresh False tu 0
+   ('Outside',) []  fresh False tu 1
+   ('Outside',) []  fresh False tu 2
+   not enabled under model guard: ('Ingest', 1)
+rc=0
