@@ -11,6 +11,7 @@ import {
   pace,
   Unknown,
 } from "../../src/features/pace.ts"
+import { currentPeriod } from "../../src/features/periods.ts"
 import {
   bootB,
   grant,
@@ -93,6 +94,27 @@ describe("pace, revision 6.1", () => {
     )
   })
 
+  it("never lets another provider's readings stand in (same window names)", () => {
+    const codex = both(0, 0).map((r) => ({ ...r, provider: Clients.Codex }))
+    // Only Codex readings: Claude has no period, so Unknown.
+    expect(pace(inputFor(codex))).toEqual(
+      new Unknown({ windows: [Windows.FiveHour, Windows.Weekly] }),
+    )
+    // A fresh low Codex reading with a later reset time does not open a
+    // Claude period or lower Claude's highest reading.
+    const later = reading({ seq: 9, usedPercent: 0, resetsAt: t0 + 20 * hour, mono: stamp(990_000) })
+    expect(pace(inputFor([...both(65, 0), { ...later, provider: Clients.Codex }]))).toEqual(
+      new Hold({ windows: [Windows.FiveHour] }),
+    )
+  })
+
+  it("applies the one-point estimate floor at admission (O15)", () => {
+    expect(pace(inputFor(both(70, 0), { estimate: () => 0 }))).toEqual(
+      new Hold({ windows: [Windows.FiveHour] }),
+    )
+    expect(pace(inputFor(both(69, 0), { estimate: () => 0 }))).toEqual(new Allow({}))
+  })
+
   it("is Unknown for a provider with no policy windows", () => {
     expect(pace(inputFor(both(0, 0), { provider: Clients.Codex }))).toEqual(
       new Unknown({ windows: [] }),
@@ -105,7 +127,9 @@ describe("pace, revision 6.1", () => {
   })
 
   it("levels a period as its highest plus the window's grant points", () => {
-    const counted = Option.map(inputFor(both(20, 0)).periods(Windows.FiveHour), (p) =>
+    const counted = Option.map(
+      currentPeriod(both(20, 0), Clients.Claude, Windows.FiveHour, defaultPolicy),
+      (p) =>
       level(p, [grant(1, Windows.FiveHour, 5), grant(2, Windows.Weekly, 7)], Windows.FiveHour),
     )
     expect(counted).toEqual(Option.some(25))

@@ -20,10 +20,13 @@
 // during the step.
 //
 // The estimate is the largest measured increase among the role's last five
-// finished steps, else `initialEstimate`. A running agent can still use
+// finished steps, else `initialEstimate`, and never below
+// `minEstimatePoints` (owner ruling O15). A measured increase of 0 stays 0
+// in `measuredIncrease`; only the estimate is floored. A running agent can still use
 // more than its estimate; nothing here bounds real use.
 import { Array as Arr, Option, Order } from "effect"
 import type { MonoStamp } from "../domain/clock.ts"
+import type { Client } from "../domain/clients.ts"
 import type { Observation } from "../domain/observation.ts"
 import type { Policy } from "../domain/policy.ts"
 import type { Role } from "../domain/roles.ts"
@@ -47,12 +50,13 @@ interface Stamped {
 
 const stampedIn = (
   readings: ReadonlyArray<Observation>,
+  provider: Client,
   window: Window,
   step: StepSpan,
 ): ReadonlyArray<Stamped> =>
   Arr.getSomes(
     Arr.map(readings, (reading) =>
-    reading.window === window
+    reading.provider === provider && reading.window === window
       ? Option.flatMap(reading.observedMono, (mono) =>
           mono.bootId === step.startMono.bootId &&
           mono.bootId === step.endMono.bootId
@@ -63,16 +67,22 @@ const stampedIn = (
     ),
   )
 
+// Equal stamps are broken by ledger seq: the later-ingested reading wins
+// on both sides.
 const byMicros = Order.mapInput(Order.Number, (s: Stamped) => s.micros)
+const bySeq = Order.mapInput(Order.Number, (s: Stamped) => s.reading.seq)
+const latestBefore = Order.combine(byMicros, bySeq)
+const earliestAfter = Order.combine(byMicros, Order.flip(bySeq))
 
 export const measuredIncrease = (
   step: StepSpan,
   readings: ReadonlyArray<Observation>,
+  provider: Client,
   window: Window,
   policy: Policy,
 ): Option.Option<number> => {
   const freshness = policy.freshnessMillis * 1000
-  const stamped = stampedIn(readings, window, step)
+  const stamped = stampedIn(readings, provider, window, step)
   const before = Option.map(
     Arr.match(
       Arr.filter(
@@ -81,7 +91,7 @@ export const measuredIncrease = (
           s.micros <= step.startMono.micros &&
           step.startMono.micros - s.micros <= freshness,
       ),
-      { onEmpty: () => Option.none(), onNonEmpty: (xs) => Option.some(Arr.max(xs, byMicros)) },
+      { onEmpty: () => Option.none(), onNonEmpty: (xs) => Option.some(Arr.max(xs, latestBefore)) },
     ),
     (s) => s.reading,
   )
@@ -93,7 +103,7 @@ export const measuredIncrease = (
           s.micros >= step.endMono.micros &&
           s.micros - step.endMono.micros <= freshness,
       ),
-      { onEmpty: () => Option.none(), onNonEmpty: (xs) => Option.some(Arr.min(xs, byMicros)) },
+      { onEmpty: () => Option.none(), onNonEmpty: (xs) => Option.some(Arr.min(xs, earliestAfter)) },
     ),
     (s) => s.reading,
   )
@@ -117,7 +127,8 @@ export const estimate =
       Arr.getSomes(Arr.map(lastFive, (step) => step.increase(window))),
       {
         onEmpty: () => policy.initialEstimate,
-        onNonEmpty: (increases) => Arr.max(increases, Order.Number),
+        onNonEmpty: (increases) =>
+          Math.max(policy.minEstimatePoints, Arr.max(increases, Order.Number)),
       },
     )
   }

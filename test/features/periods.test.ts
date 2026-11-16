@@ -32,11 +32,22 @@ const reading = (
 })
 
 const fold = (readings: ReadonlyArray<Observation>): Option.Option<WindowPeriod> =>
-  currentPeriod(readings, defaultPolicy)
+  currentPeriod(readings, Clients.Claude, Windows.FiveHour, defaultPolicy)
 
 const t0 = 10 * hour
 
 describe("currentPeriod examples", () => {
+  it("keeps only the named provider's readings of the named window", () => {
+    const codex = { ...reading(2, 5, Option.some(t0 + 5 * hour)), provider: Clients.Codex }
+    const weekly = { ...reading(3, 90, Option.some(t0)), window: Windows.Weekly }
+    expect(
+      Option.map(fold([reading(1, 40, Option.some(t0)), codex, weekly]), (p) => [
+        p.periodSeq,
+        p.highest,
+      ]),
+    ).toEqual(Option.some([1, 40]))
+  })
+
   it("has no period without readings", () => {
     expect(Option.isNone(fold([]))).toBe(true)
   })

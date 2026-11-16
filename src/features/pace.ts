@@ -6,7 +6,8 @@
 // Rules:
 // 1. The windows checked are the provider's windows in policy (R-P1). A
 //    provider with no policy windows is Unknown, never Allow.
-// 2. A window is usable when its current period exists, the period's
+// 2. A window is usable when its current period (the asked provider's
+//    readings of that window only) exists, the period's
 //    freshest stamp and `nowMono` come from the same boot with
 //    0 <= nowMono - freshest <= freshness, and the period's reset time is
 //    absent or still ahead of the wall clock (`now < resetsAt`). With no
@@ -16,7 +17,8 @@
 //    of every counting grant for that window (`level`). Which grants count
 //    is decided by the caller (plan Task B2); pacing never filters them
 //    beyond provider and window.
-// 4. Allow iff every window is usable and level + estimate <= cap. Hold if
+// 4. Allow iff every window is usable and level + estimate <= cap, with
+//    the estimate never below minEstimatePoints (O15). Hold if
 //    a usable window fails that test. Otherwise Unknown. Hold and Unknown
 //    carry the windows without a usable allowing reading, in policy order.
 //
@@ -29,7 +31,8 @@ import type { MonoStamp } from "../domain/clock.ts"
 import type { GrantPoints } from "../domain/grant.ts"
 import type { Policy } from "../domain/policy.ts"
 import { Window } from "../domain/window.ts"
-import type { WindowPeriod } from "./periods.ts"
+import type { Observation } from "../domain/observation.ts"
+import { currentPeriod, type WindowPeriod } from "./periods.ts"
 
 export class Allow extends Schema.TaggedClass<Allow>()("Allow", {}) {}
 export class Hold extends Schema.TaggedClass<Hold>()("Hold", {
@@ -42,7 +45,7 @@ export class Unknown extends Schema.TaggedClass<Unknown>()("Unknown", {
 export type PaceDecision = Allow | Hold | Unknown
 
 export interface PaceInput {
-  readonly periods: (window: Window) => Option.Option<WindowPeriod>
+  readonly readings: ReadonlyArray<Observation>
   readonly now: number
   readonly nowMono: Option.Option<MonoStamp>
   readonly policy: Policy
@@ -108,11 +111,15 @@ type Judgment = "allows" | "fails" | "unusable"
 const judge =
   (input: PaceInput, counting: ReadonlyArray<GrantPoints>) =>
   (window: Window): Judgment =>
-    Option.match(input.periods(window), {
+    Option.match(currentPeriod(input.readings, input.provider, window, input.policy), {
       onNone: () => "unusable",
       onSome: (period) => {
         if (!isUsable(input, period)) return "unusable"
-        return level(period, counting, window) + input.estimate(window) <=
+        const estimate = Math.max(
+          input.policy.minEstimatePoints,
+          input.estimate(window),
+        )
+        return level(period, counting, window) + estimate <=
           input.cap(window)
           ? "allows"
           : "fails"

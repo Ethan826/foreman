@@ -5,6 +5,10 @@
 // minutes, initialEstimate 15 points. The reserve stays configurable.
 // Revision 4's defaults, confirmed by the owner: resetTolerance 5 minutes
 // and dropTolerance 5 points (design "Defaults", "Periods").
+// minEstimate 1 point per provider and window (owner ruling 2026-11-16,
+// O15): no reservation or admission estimate is below it, so a step that
+// measured 0 still reserves something. It is a floor on the estimate, not
+// a bound on what a step uses.
 //
 // Each provider's windows carry their own reserve, so a listed window
 // always has one.
@@ -42,6 +46,7 @@ export const Policy = Schema.Struct({
   initialEstimate: percent,
   resetToleranceMillis: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   dropTolerancePoints: percent,
+  minEstimatePoints: percent,
 })
 export type Policy = typeof Policy.Type
 
@@ -59,4 +64,5 @@ export const defaultPolicy: Policy = {
   initialEstimate: 15,
   resetToleranceMillis: 5 * 60 * 1000,
   dropTolerancePoints: 5,
+  minEstimatePoints: 1,
 }

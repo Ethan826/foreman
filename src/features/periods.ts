@@ -20,12 +20,22 @@
 //    stamp never sets it, and a stamp from a newer boot replaces it.
 //
 // A new period lowers the reading term of the level; it frees no
-// accounting room (grants still count until canceled or retired).
+// accounting room and retires no reservation (grants still count until
+// canceled or retired).
+//
+// Owner ruling 2026-11-16 (O14): this tolerance rule is a pacing
+// heuristic. If a provider's reset time rolls forward while a window is
+// idle, a move beyond resetTolerance opens a period, and a lower opening
+// reading then lowers the reading term (a downward adjustment by at most
+// the old highest minus the new reading). It does not establish a
+// provider's actual reset semantics.
 import { Array as Arr, Option } from "effect"
 import type { MonoStamp } from "../domain/clock.ts"
 import { type LedgerSeq, PeriodSeq } from "../domain/ids.ts"
+import type { Client } from "../domain/clients.ts"
 import type { Observation } from "../domain/observation.ts"
 import type { Policy } from "../domain/policy.ts"
+import type { Window } from "../domain/window.ts"
 
 export interface WindowPeriod {
   readonly periodSeq: PeriodSeq
@@ -108,10 +118,20 @@ export const ingestReading = (
     },
   })
 
+// Window names are shared across providers, so the fold keeps only the
+// readings of the named provider and window; a Codex reading never touches
+// a Claude period.
 export const currentPeriod = (
   readings: ReadonlyArray<Observation>,
+  provider: Client,
+  window: Window,
   policy: Policy,
 ): Option.Option<WindowPeriod> =>
-  Arr.reduce(readings, Option.none<WindowPeriod>(), (current, reading) =>
-    Option.some(ingestReading(current, reading, policy)),
+  Arr.reduce(
+    Arr.filter(
+      readings,
+      (reading) => reading.provider === provider && reading.window === window,
+    ),
+    Option.none<WindowPeriod>(),
+    (current, reading) => Option.some(ingestReading(current, reading, policy)),
   )

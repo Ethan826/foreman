@@ -1,6 +1,6 @@
 // Shared builders for the Features tests: readings with ledger seq and
 // monotonic stamps, grants, and a PaceInput over a list of readings.
-import { Array as Arr, Option, Schema } from "effect"
+import { Option, Schema } from "effect"
 import { type Client, Clients } from "../../src/domain/clients.ts"
 import { BootId, type MonoStamp } from "../../src/domain/clock.ts"
 import type { GrantPoints } from "../../src/domain/grant.ts"
@@ -15,7 +15,6 @@ import {
   type PaceDecision,
   type PaceInput,
 } from "../../src/features/pace.ts"
-import { currentPeriod } from "../../src/features/periods.ts"
 
 export const hour = 3_600_000
 export const minute = 60_000
@@ -65,11 +64,7 @@ export const inputFor = (
   patch: Partial<PaceInput> = {},
   policy: Policy = defaultPolicy,
 ): PaceInput => ({
-  periods: (window) =>
-    currentPeriod(
-      Arr.filter(readings, (r) => r.window === window),
-      policy,
-    ),
+  readings,
   now: t0,
   nowMono: Option.some(stamp(1_000_000)),
   policy,
