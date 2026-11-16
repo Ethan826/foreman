@@ -85,7 +85,7 @@ Details the flowchart leaves out:
 
 ## estimate
 
-`estimate(finished, role, policy)` gives, per window, the largest measured increase among the role's last five finished steps. When none of them is measured in that window it gives `initialEstimate`. `measuredIncrease(step, readings, window, policy)` brackets one step: the latest reading at or before its monotonic start and the earliest at or after its monotonic end, both in the step's boot and both with the same reset time. The reading before must be at most `freshness` older than the start and the reading after at most `freshness` newer than the end. The design leaves "usable" open here, and this stricter reading measures fewer steps.
+`estimate(finished, role, policy)` gives, per window, the largest measured increase among the role's last five finished steps. When none of them is measured in that window it gives `initialEstimate`. `measuredIncrease(step, readings, window, policy)` brackets one step: the latest reading at or before its monotonic start and the earliest at or after its monotonic end, both in the step's boot and both with the same reset time. The reading before must be at most `freshness` older than the start and the reading after at most `freshness` newer than the end. Both bracketing readings must be fresh relative to their own step boundary (owner ruling 2026-11-16), so fewer steps are measured. A measured increase is an observation of the provider's count across the step. It is not authoritative per-step usage: readings are whole points, arrive late, and include other use of the account.
 
 ```mermaid
 classDiagram

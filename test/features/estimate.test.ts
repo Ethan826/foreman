@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Option } from "effect"
 import { type Role, Roles } from "../../src/domain/roles.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
-import { Windows } from "../../src/domain/window.ts"
+import { type Window, Windows } from "../../src/domain/window.ts"
 import {
   estimate,
   measuredIncrease,
@@ -62,6 +62,21 @@ const step = (role: Role, points: number | undefined) => ({
 })
 
 describe("estimate", () => {
+  it("falls back to the initial estimate when a stale bracket leaves a step unmeasured", () => {
+    const readings = bracket(10, 40, { beforeAt: -1 })
+    const finished = [
+      {
+        role: Roles.Implementer,
+        increase: (window: Window) =>
+          measuredIncrease(span(10, 20), readings, window, defaultPolicy),
+      },
+    ]
+    expect(measuredIncrease(span(10, 20), readings, Windows.FiveHour, defaultPolicy)).toEqual(
+      Option.none(),
+    )
+    expect(estimate(finished, Roles.Implementer, defaultPolicy)(Windows.FiveHour)).toBe(15)
+  })
+
   it("is the initial estimate when no step is measured", () => {
     expect(estimate([], Roles.Implementer, defaultPolicy)(Windows.FiveHour)).toBe(15)
     expect(

@@ -8,10 +8,16 @@
 // one at or before the start, the reading after the earliest one at or
 // after the end.
 //
-// "Usable" is read strictly here (the design does not say relative to
-// what): the reading before must be at most `freshness` older than the
-// start, and the reading after at most `freshness` newer than the end.
-// Fewer steps are measured, so more fall back to `initialEstimate`.
+// "Usable" is read strictly (owner ruling 2026-11-16): both bracketing
+// readings must be fresh relative to their own step boundary. The reading
+// before must be at most `freshness` older than the step's start, and the
+// reading after at most `freshness` newer than the step's end. Fewer steps
+// are measured, so more fall back to `initialEstimate`.
+//
+// A measured increase is an observation of the provider's count across the
+// step, not authoritative per-step usage: readings are whole points,
+// reported with a delay, and include anything else that used the account
+// during the step.
 //
 // The estimate is the largest measured increase among the role's last five
 // finished steps, else `initialEstimate`. A running agent can still use
