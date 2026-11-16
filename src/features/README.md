@@ -1,6 +1,6 @@
 # Features
 
-Pure decision functions: period membership (`periods.ts`) and pacing (`pace.ts`). They follow design revision 6.1. Back to [how it works](../../docs/how-it-works.md).
+Pure decision functions: period membership (`periods.ts`), pacing (`pace.ts`) and the estimate per role and window (`estimate.ts`). They follow design revision 6.1. Back to [how it works](../../docs/how-it-works.md).
 
 May import: `domain`.
 
@@ -82,3 +82,20 @@ Details the flowchart leaves out:
 - A provider whose policy lists no windows is Unknown, never Allow. The default Codex policy lists none until the owner decides how Codex's reset times open periods (O14).
 - Which grants count is the caller's decision. `pace` keeps only the asked provider's grants and sums each window's points.
 - The wall clock enters only through `now < resetsAt`, which tightens as time passes.
+
+## estimate
+
+`estimate(finished, role, policy)` gives, per window, the largest measured increase among the role's last five finished steps. When none of them is measured in that window it gives `initialEstimate`. `measuredIncrease(step, readings, window, policy)` brackets one step: the latest reading at or before its monotonic start and the earliest at or after its monotonic end, both in the step's boot and both with the same reset time. The reading before must be at most `freshness` older than the start and the reading after at most `freshness` newer than the end. The design leaves "usable" open here, and this stricter reading measures fewer steps.
+
+```mermaid
+classDiagram
+    class StepSpan {
+        role
+        startMono
+        endMono
+    }
+    class FinishedStep {
+        role
+        increase
+    }
+```
