@@ -20,7 +20,9 @@
 // fields of rate_limit_info (status, resetsAt, rateLimitType, overage
 // fields) are kept opaque. `claudeWindowReadings` turns the two windows
 // foreman tracks (five_hour, seven_day) into readings, in percent and
-// epoch milliseconds; a window without utilization yields no reading.
+// epoch milliseconds. Windows are taken one at a time: an untracked window
+// is never examined, and a tracked window that is malformed or has no
+// utilization yields no reading without affecting the other.
 //   system/api_retry: session_id
 // Unknown extra fields are ignored. Any other event type fails to decode;
 // the shell decides what an undecodable line means.
@@ -66,12 +68,11 @@ export const ClaudeUnifiedWindow = Schema.Struct({
 })
 export type ClaudeUnifiedWindow = typeof ClaudeUnifiedWindow.Type
 
+// unifiedWindows is decoded as an opaque object; each tracked window is
+// validated on its own in claudeWindowReadings, so an untracked or
+// malformed window never removes another window's reading.
 export const ClaudeRateLimitInfo = Schema.StructWithRest(
-  Schema.Struct({
-    unifiedWindows: Schema.optionalKey(
-      Schema.Record(Schema.String, ClaudeUnifiedWindow),
-    ),
-  }),
+  Schema.Struct({ unifiedWindows: Schema.optionalKey(opaqueObject) }),
   [opaqueObject],
 )
 export type ClaudeRateLimitInfo = typeof ClaudeRateLimitInfo.Type
@@ -104,6 +105,8 @@ export const decodeClaudeApiRetry = Schema.decodeUnknownResult(ClaudeApiRetry)
 export const decodeClaudeEvent = Schema.decodeUnknownResult(ClaudeEvent)
 
 
+const decodeUnifiedWindow = Schema.decodeUnknownOption(ClaudeUnifiedWindow)
+
 // One window's reading from a rate_limit_event, before the shell adds the
 // observation stamps and the ledger seq.
 export interface ClaudeWindowReading {
@@ -126,7 +129,12 @@ export const claudeWindowReadings = (
   )
   return Arr.getSomes(
     Arr.map(wireWindow, ([wire, window]) =>
-      Option.flatMap(Option.flatMap(windows, Record.get(wire)), (entry) =>
+      Option.flatMap(
+        Option.flatMap(
+          Option.flatMap(windows, Record.get(wire)),
+          decodeUnifiedWindow,
+        ),
+        (entry) =>
         Option.map(Option.fromNullishOr(entry.utilization), (fraction) => ({
           window,
           usedPercent: toPercent(fraction),

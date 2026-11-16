@@ -91,12 +91,34 @@ describe("Claude rate_limit_event readings", () => {
   })
 
   it.each([
-    { five_hour: { utilization: 1.2 } },
-    { five_hour: { utilization: -0.1 } },
-    { five_hour: { utilization: "5%" } },
-    { five_hour: { utilization: 0.1, resetsAt: 1.5 } },
-    { five_hour: "full" },
-  ])("rejects a malformed window %j", (windows) => {
-    expect(Result.isFailure(decodeClaudeRateLimitEvent(withWindows(windows)))).toBe(true)
+    { utilization: 1.2 },
+    { utilization: -0.1 },
+    { utilization: "5%" },
+    { utilization: 0.1, resetsAt: 1.5 },
+    "full",
+  ])("drops only a malformed tracked window %j", (bad) => {
+    expect(
+      readingsOf(withWindows({ five_hour: bad, seven_day: { utilization: 0.3 } })),
+    ).toEqual(
+      Result.succeed([
+        { window: Windows.Weekly, usedPercent: 30, resetsAt: Option.none() },
+      ]),
+    )
+  })
+
+  it("never examines an untracked window", () => {
+    expect(
+      readingsOf(
+        withWindows({ overage: { utilization: 7 }, five_hour: { utilization: 0.1 } }),
+      ),
+    ).toEqual(
+      Result.succeed([
+        { window: Windows.FiveHour, usedPercent: 10, resetsAt: Option.none() },
+      ]),
+    )
+  })
+
+  it("rejects unifiedWindows that is not an object", () => {
+    expect(Result.isFailure(decodeClaudeRateLimitEvent(withWindows("none")))).toBe(true)
   })
 })
