@@ -1,0 +1,4 @@
+{"response": "initialize"}
+{"notification": "remoteControl/status/changed"}
+{"notification": "account/updated"}
+{"ordinaryUsageAllowed": true, "rateLimits": {"limitId": "codex", "limitName": null, "normalModelSlug": null, "primary": {"resetsAt": 1794883493, "usedPercent": 1, "windowDurationMins": 300}, "rateLimitReachedType": null, "secondary": {"resetsAt": 1795111836, "usedPercent": 13, "windowDurationMins": 10080}, "spendControlReached": false}, "rateLimitsByLimitId": {"codex": {"limitId": "codex", "limitName": null, "normalModelSlug": null, "primary": {"resetsAt": 1794883493, "usedPercent": 1, "windowDurationMins": 300}, "rateLimitReachedType": null, "secondary": {"resetsAt": 1795111836, "usedPercent": 13, "windowDurationMins": 10080}, "spendControlReached": false}}, "response": "account/rateLimits/read"}

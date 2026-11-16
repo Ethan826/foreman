@@ -544,6 +544,13 @@ Not in this package: the delay and bracket measurements of L1 revision
 5.1 (b) and (c). They need several runs bracketed by readings and are
 proposed as L1b after the result above, with their own cap.
 
+Result 2026-11-16 (research/live/results-2026-11-16.md): positive.
+`rate_limit_event.rate_limit_info.unifiedWindows` gives `utilization` and
+`resetsAt` for `five_hour` and `seven_day` on an ordinary run; `/usage`
+made no turn and reported zero tokens once (still treated as possibly
+consuming); readings have whole-point resolution; command 2 used at most
+one point, confounded by the owner's concurrent session.
+
 ### C2: L2 package (Codex usage windows), for approval; front of the sequence
 
 Approved by the owner 2026-11-16, after the app-server methods are
@@ -594,6 +601,15 @@ Expected evidence and what each result changes:
 - Readings without a reset time. O9 becomes a live question.
 - Since the default reviewer is Codex, an unattended tranche cycle
   (implement, review, correct) needs both a positive L1 and a usable L2.
+
+Result 2026-11-16 (research/live/results-2026-11-16.md): positive. The
+app-server read returns `usedPercent`, `windowDurationMins` (300 and
+10,080) and `resetsAt` for both windows and starts no turn; one `codex
+exec` moved the primary window from 0 to 1 percent. New question for the
+owner (O14): an idle Codex window's reset time appears to roll forward
+until usage starts (inferred from two observations), and revision 6.1
+opens a period on a reading with a later reset time, so the period rule
+needs a decision before the Codex windows enter `defaultPolicy`.
 
 ### C3: L3 package (permissions), after B16
 
