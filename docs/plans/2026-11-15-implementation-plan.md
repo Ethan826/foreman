@@ -369,7 +369,7 @@ Before B1: a dependency-intake record for `bun:sqlite` (built into Bun
 - [ ] Tests first: the child is a group leader; on its exit the runner signals that same group once, before reporting `Finished`, and a grandchild `sleep` is gone afterwards; a fixture stream with a `result` error classifies as the matching outcome; an undecodable line is `Unclassified`.
 - [ ] Implement; check and test; commit.
 
-Note: Bun reaps the leader when it exits, so the leader's zombie cannot pin the group id; between the leader's exit and the group signal an empty group's id could in principle be reused. This in-session signal is in the approved design (Operations step 3) and is not startup's kill; the owner may want it reviewed with O12.
+Note: Bun reaps the leader when it exits, so the leader's zombie cannot pin the group id; between the leader's exit and the group signal an empty group's id could in principle be reused. This in-session signal is in the approved design (Operations step 3) and is not startup's kill. Owner ruling 2026-11-16: its signaling risk stays unresolved, reviewed with O12; B14's step-ended command does not approve it, and B12 is not implemented until the owner rules on it.
 
 ### Task B13: Launch attempt and operations log (Program)
 
@@ -407,6 +407,33 @@ This is a judgment call for the owner: signal 0 sends nothing, but it is a
 system call aimed at a recorded id. The alternative is to probe nothing
 and always hold, which keeps every crashed step's grant open until the
 owner acts.
+
+Owner command `step ended` (owner ruling 2026-11-16). If the recorded
+group id has been reused by an unrelated process, the probe keeps
+finding it and `run` would stop on every startup. The owner recovers
+with `foreman step ended <project> <opId> --grant <grantId>`:
+
+- It appends one attributable record, `StepEndedByOwner(opId, grantId,
+  at, by)`, to that project's log under the project's lock, naming the
+  exact operation and reservation. It is refused unless that operation
+  has `Launched` without `Finished` and that grant is the operation's
+  open grant.
+- It signals nothing and probes nothing.
+- Startup treats the operation as ended: it no longer probes the
+  recorded group, so a reused group id no longer stops `run`.
+- It is an attestation, not evidence. It does not retire or cancel the
+  grant (the grant is charged at its estimate by the settle step and
+  then counts until a retire under the rules in force), does not resolve
+  the operation's `Uncertain` hold on its repository effect (that still
+  needs `reconcile`), does not authorize replaying the step, and does
+  not grant any tranche approval.
+- [ ] Tests first: refused for an unknown opId, a finished operation, or
+  a grant that is not the operation's; accepted once, refused when
+  repeated; after it, startup with a fake probe that reports "exists"
+  makes no probe call for that operation and `run` continues; the grant
+  is charged at its estimate and stays counted; the `Uncertain` hold
+  remains; no approval, retire, cancel or replay record is appended; no
+  signaling function is called (the fake records calls).
 
 ### Task B15: Requests (reconcile, restore, approve --base)
 
@@ -464,12 +491,20 @@ repository):
 3. One `/usage` run:
    `claude -p "/usage" --output-format json > "$OUT/l1-usage.json"`
 
-Cap: two `claude -p` calls in total, with one retry of command 2 only if
-it fails before any model turn (an authentication or startup error).
-Cost: one short turn plus the client's system prompt, cached; expected
-well under one percentage point of the five-hour window, unmeasured
-until the statusline lines before and after show it. Command 3 may cost
-nothing; that is one of the questions.
+Cap: two `claude -p` calls in total. One retry of a command is allowed
+only for a startup failure known to precede provider execution (for
+example the client exits with an error before sending any request); an
+uncertain outcome is never retried automatically. Cost: one short turn
+plus the client's system prompt; "well under one percentage point of the
+five-hour window" is an estimate, and the report gives the measured
+consumption from the readings before and after each command. `/usage`
+is treated as potentially consuming usage until a reading shows
+otherwise.
+
+Approved by the owner 2026-11-16, including the temporary statusline
+edit: the original script is preserved and restored afterward. Raw
+outputs stay private and outside the repository; normalized copies are
+inspected before they are committed.
 
 What is captured and where: raw files stay in `$OUT` and are never
 committed. Normalized copies go to `research/live/l1-2026-11-XX/`:
@@ -511,7 +546,12 @@ proposed as L1b after the result above, with their own cap.
 
 ### C2: L2 package (Codex usage windows), for approval; front of the sequence
 
-Waits on: the owner's approval.
+Approved by the owner 2026-11-16, after the app-server methods are
+confirmed offline against official documentation or the installed
+client's protocol: one read-only execution and the two quota reads,
+using the existing authentication without extracting credentials. Raw
+outputs stay private and outside the repository; normalized copies are
+inspected before they are committed.
 
 Preparation, no model call: read `codex exec --help` and
 `codex app-server --help` offline for a per-run budget option and the
@@ -643,6 +683,13 @@ Two facts bound every choice:
 | 3. Retire after a fixed delay D (a charged grant stops counting once a reading observed at least D after its end exists) | Close to choice 4 when D is short against the step spacing | Close to choice 4 | The provider shows a step's use within D: an unverified environmental assumption no test can prove as a maximum | A step counted later than D is dropped from the level while the reading does not yet show it | L1b delay measurements: a short, consistent lag makes it more attractive; a long or variable lag less |
 | 4. Reading plus open grants only (no carry of charged grants) | Limited by real use: `r ≤ 55` per launch, so 4 per period when steps use 15 points, about 12 at 5 points; roughly 6 to 20 a night, within the weekly limit | Limited by real weekly use: `r_w ≤ 45`; 4 at 15 points per step, about 16 at 3 points | Each reading reflects every finished step, which no evidence shows (O5) | A reading taken before a step's use is counted admits one more launch on stale room; repeated, overshoot grows by one estimate per lag | Positive L1 with readings in foreman's own stream after each step makes it more attractive; any observed lag makes it less |
 
+Owner ruling 2026-11-16: the choice is deferred until L1 and L2 report.
+Choice 1 is the provisional baseline, not an accepted long-term
+usability tradeoff. A positive L1 does not select choice 2: telemetry
+being available and evidence that a charge may be retired are separate
+questions. The arithmetic in this table is rechecked before the decision
+is presented again.
+
 Recommendation (labeled as such; the owner decides). Run L1 and L2
 before choosing. If L1 shows no usable reading in foreman's own stream
 and `/usage` is not free, keep choice 1: the others buy nothing
@@ -655,6 +702,10 @@ evidence. In all cases, B2's injected `RetirementRule` keeps the change
 to one value in Program.
 
 ---
+
+Owner ruling 2026-11-16: Part A runs now, inline, with a 300k-token
+total cap including verification and records, checkpointed before the
+cap is reached; no subagent expansion and no Part B implementation.
 
 ## Costed handoff
 
