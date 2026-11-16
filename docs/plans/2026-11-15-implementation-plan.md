@@ -266,6 +266,58 @@ Unknown; a provider with no policy windows is Unknown.
 Docs for Part A: the orientation docs were updated to revision 6.1 with
 this plan; Tasks A1 and A3 update the Domain and Features READMEs.
 
+### Review of Part A and the Claude decoder (2026-11-16)
+
+One independent fresh-context review (Opus, read-only, 12 tool calls,
+authorized by the owner with a 100k-token cap) of `653f477..b9b27fe`
+under src/ and test/. Verdict: the code matches revision 6.1's rules on
+every input traced; nothing blocking; `bun run test` (201) and
+`bun run check` pass; no casts, assertions, disables or skipped tests.
+Open findings (not yet fixed; the owner decides when):
+
+1. Should fix. Readings are never filtered by provider:
+   `currentPeriod`, `measuredIncrease` (`stampedIn`) and
+   `PaceInput.periods` are keyed by window alone, and window names are
+   shared across providers. A caller that filters by window only (as
+   test/features/fixtures.ts does) would let a Codex reading with a later
+   reset time open a Claude period and lower its highest reading, which
+   loosens pacing, or bracket a Claude step. No test produces a Codex
+   reading. Fix: a provider parameter or filter in all three, and Codex
+   readings in the oracle's generator. (Coordinator confirmed against the
+   code.)
+2. Should fix. Estimate tests miss rules that mutants could break
+   unnoticed: the after-reading freshness bound, choosing the latest
+   reading before the start and the earliest after the end (every test
+   has one candidate per side), and the window filter. Ties on equal
+   micros are broken by array position rather than seq. The fixture's
+   `beforeAt: -1` gives a negative micros value the schema forbids.
+3. Should fix. The C13 oracle compares only the decision name, not the
+   window lists, and mirrors periods.ts step by step, so a misreading
+   both share would pass. Its generators never reach a now in another
+   boot, Codex readings, or non-integer percents and points.
+4. Should fix, fails closed. `unifiedWindows` validates every entry, so
+   one odd untracked window (for example utilization above 1, unverified
+   that it occurs) rejects the whole event and loses both tracked
+   readings. Decode the two tracked keys strictly and keep the rest
+   opaque.
+5. Nit. Hundredth-point percents plus fractional grant points can sum
+   just above an exact cap and hold (tightens only); compare in integer
+   hundredths.
+6. Nit. The estimate requires exactly equal reset times, as the design
+   says; Codex-style reset jitter would leave steps unmeasured.
+
+O14 under the implemented rule: a period's reset time is fixed by the
+reading that opened it, so drift accumulates against that value. A move
+of more than 5 minutes past it opens a period; the observed 21 seconds
+does not. If an idle window's reset time rolled forward with the clock, a
+period would open every 5 minutes or more while idle. With flat idle use
+(0 to 0) nothing changes. If the opening reading were lower than the old
+highest (a lagging or cached source), the spurious period would bypass
+the keep-the-highest rule and loosen the reading term by at most that
+difference; foreman's own grants keep counting, so only outside use
+could be under-counted. Unverified: churn of period records and the
+interaction with rule P's carry-over test in Task B.
+
 ---
 
 ## Part B: settled design, implementation needs the owner's approval
@@ -720,6 +772,39 @@ evidence. In all cases, B2's injected `RetirementRule` keeps the change
 to one value in Program.
 
 ---
+
+### Recheck of the arithmetic with positive L1 and L2 (2026-11-16)
+
+Coordinator's arithmetic, argument only, at the defaults (five-hour cap
+70, weekly cap 60), sequential steps, readings current. `e` is the
+estimate in points per window, `u` a step's real use; under A4 `e`
+becomes the largest measured increase of the role's last five steps once
+L1-style readings bracket steps, so `e` need not stay 15.
+
+- Positive L1 and L2 remove the "about one Claude launch per night"
+  limit: foreman's own steps produce readings, so launches can chain.
+  They do not change any retirement rule.
+- Choice 1 (owner-only retire): every grant counts until a retire, so
+  the total until a retire is about `floor((cap - r) / e)` per window:
+  five-hour 4 at e = 15, 14 at 5, 35 at 2; weekly 4 at e_w = 15, 20 at 3.
+  Within one five-hour period, readings and grants both rise, giving
+  `floor((70 - e) / (u + e)) + 1` launches: 2 at u = e = 15, 7 at 5, 18
+  at 2. Measured estimates, not telemetry, set this ceiling.
+- Choice 2 (retire at a later reset time): per five-hour period as
+  choice 1's within-period figure, repeating each period; the weekly
+  window still accumulates for a week, so it binds unless e_w is small.
+- Choice 4 (reading plus open grants): per period
+  `floor((70 - e) / u) + 1` five-hour launches: 4 at 15, 12 at 5, 28 at
+  2, 56 at 1. It relies on each reading including every finished step,
+  which nothing shows (O5).
+- Whole-point resolution matters now that estimates can be measured: a
+  step that uses under one point can measure as 0, and an estimate of 0
+  reserves nothing under any choice. Whether estimates need a floor is a
+  new owner question (O15). L1 did not measure an implement step's real
+  use; L1b would.
+
+Choice 1 stays the provisional baseline; the decision remains the
+owner's.
 
 Owner ruling 2026-11-16: Part A runs now, inline, with a 300k-token
 total cap including verification and records, checkpointed before the
