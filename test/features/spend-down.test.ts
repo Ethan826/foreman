@@ -5,12 +5,19 @@ import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Option } from "effect"
 import { Clients } from "../../src/domain/clients.ts"
 import { LedgerSeq, PeriodSeq } from "../../src/domain/ids.ts"
-import { type LedgerEntry, type LedgerRow, SpendDown, SpendDownCanceled } from "../../src/domain/ledger.ts"
+import {
+  type LedgerEntry,
+  type LedgerRow,
+  SpendDown,
+  SpendDownCanceled,
+  SpendDownEndCauses,
+} from "../../src/domain/ledger.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import { Windows } from "../../src/domain/window.ts"
 import {
   activeSpendDown,
   capFor,
+  spendDownsToExpire,
   skipsAllocations,
   spendDownAccepted,
 } from "../../src/features/spend-down.ts"
@@ -26,7 +33,12 @@ const snapshotOf = (rows: ReadonlyArray<LedgerRow>) => ({
 const spendDown = (level: number, periodSeq = 1) =>
   new SpendDown({ provider: Clients.Claude, window: Windows.FiveHour, levelPercent: level, periodSeq: PeriodSeq.make(periodSeq) })
 const cancel = (seq: number) =>
-  new SpendDownCanceled({ provider: Clients.Claude, window: Windows.FiveHour, spendDownSeq: LedgerSeq.make(seq) })
+  new SpendDownCanceled({
+    provider: Clients.Claude,
+    window: Windows.FiveHour,
+    spendDownSeq: LedgerSeq.make(seq),
+    cause: SpendDownEndCauses.Owner,
+  })
 const active = (rows: ReadonlyArray<LedgerRow>, current = period(1), now = 5_000) =>
   Option.map(activeSpendDown(snapshotOf(rows), Clients.Claude, Windows.FiveHour, Option.some(current), now, defaultPolicy), (s) => s.levelPercent)
 
@@ -76,5 +88,30 @@ describe("spendDownAccepted", () => {
     expect(spendDownAccepted(true, Option.none())).toBe(true)
     expect(spendDownAccepted(false, Option.none())).toBe(false)
     expect(spendDownAccepted(true, Option.some(spendDown(50)))).toBe(false)
+  })
+})
+
+describe("spendDownsToExpire", () => {
+  const expire = (rows: ReadonlyArray<LedgerRow>, now: number) =>
+    spendDownsToExpire(snapshotOf(rows), Clients.Claude, () => Option.some(period(1)), now, defaultPolicy)
+  const expired = new SpendDownCanceled({
+    provider: Clients.Claude,
+    window: Windows.FiveHour,
+    spendDownSeq: LedgerSeq.make(1),
+    cause: SpendDownEndCauses.ResetPassed,
+  })
+
+  it("expires an active loosening spend-down once the reset time has passed", () => {
+    expect(expire([spendDown(90)], reset)).toEqual([expired])
+  })
+
+  it("expires nothing before the reset time, nothing tightening, nothing already canceled", () => {
+    expect(expire([spendDown(90)], reset - 1)).toEqual([])
+    expect(expire([spendDown(50)], reset + 1)).toEqual([])
+    expect(expire([spendDown(90), cancel(1)], reset + 1)).toEqual([])
+  })
+
+  it("keeps an expired spend-down ended when the clock is set back", () => {
+    expect(active([spendDown(90), expired], period(1), reset - 1_000)).toEqual(Option.none())
   })
 })

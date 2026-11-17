@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 import { type Client, Clients } from "../../src/domain/clients.ts"
 import { BootId } from "../../src/domain/clock.ts"
 import { Finished, Intended, type ProjectEvent } from "../../src/domain/events.ts"
-import { GrantId, OpId, ProjectId, Revision, TrancheId, WaiverId } from "../../src/domain/ids.ts"
+import { GrantId, OpId, PeriodSeq, ProjectId, Revision, TrancheId, WaiverId } from "../../src/domain/ids.ts"
 import {
   Charged,
   Grant,
@@ -17,22 +17,20 @@ import {
   LedgerBusy,
   type LedgerStore,
   ReadingRow,
+  SpendDown,
+  SpendDownCanceled,
 } from "../../src/domain/ledger.ts"
 import { Success } from "../../src/domain/outcomes.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { ownerOnly } from "../../src/features/counting.ts"
-import { defaultCap } from "../../src/features/pace.ts"
 import {
-  admit,
-  Admitted,
   type AdmissionRequest,
   allocationsInFallback,
-  applySettle,
-  cancelLostRace,
   Refused,
-} from "../../src/program/admission.ts"
+} from "../../src/features/admission.ts"
+import { admit, Admitted, applySettle, cancelLostRace } from "../../src/program/admission.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 
 const busyMillis = 50
@@ -44,7 +42,6 @@ const context = {
   policy: defaultPolicy,
   retirement: ownerOnly,
   allocations: allocationsInFallback,
-  cap: defaultCap(defaultPolicy, Clients.Claude),
 }
 const estimate = [
   { window: Windows.FiveHour, points: 15 },
@@ -176,6 +173,21 @@ const grantCoversEveryPolicyWindow = (store: LedgerStore) =>
     ])
   })
 
+const spendDownExpiryIsDurable = (store: LedgerStore) =>
+  Effect.gen(function* () {
+    yield* seedReadings(store, 60)
+    yield* store.transact((tx) =>
+      tx.append([
+        new SpendDown({ provider: Clients.Claude, window: Windows.FiveHour, levelPercent: 90, periodSeq: PeriodSeq.make(1) }),
+      ]),
+    )
+    const pastReset = { ...request(1), now: now + 3_600_000 }
+    expect(Schema.is(Refused)(yield* admit(store, pastReset, context))).toBe(true)
+    expect(Arr.length(Arr.filter(yield* rowsOf(store), Schema.is(SpendDownCanceled)))).toBe(1)
+    const clockSetBack = { ...request(2), now }
+    expect(Schema.is(Refused)(yield* admit(store, clockSetBack, context))).toBe(true)
+  })
+
 const lostRaceCanceledAtOnce = (store: LedgerStore) =>
   Effect.gen(function* () {
     yield* seedReadings(store, 0)
@@ -232,6 +244,9 @@ describe("admission", () => {
   )
   it.effect("records the grant in every policy window pacing checked", () =>
     withLedger(grantCoversEveryPolicyWindow),
+  )
+  it.effect("writes a loosening spend-down's expiry so a clock set back cannot revive it", () =>
+    withLedger(spendDownExpiryIsDurable),
   )
 })
 

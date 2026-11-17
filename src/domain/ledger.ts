@@ -114,10 +114,27 @@ export class SpendDown extends Schema.TaggedClass<SpendDown>()(
   { provider: Client, window: Window, levelPercent: percent, periodSeq: PeriodSeq },
 ) {}
 
-/** Ends the spend-down written at `spendDownSeq` (`spend-down --cancel`). */
+/**
+ * Why a spend-down ended early: the owner's `spend-down --cancel`, or a
+ * loosening spend-down whose period's reset time foreman observed passed.
+ */
+export const SpendDownEndCauses = {
+  Owner: "owner",
+  ResetPassed: "resetPassed",
+} as const
+
+/** Schema for a spend-down end cause, one of {@link SpendDownEndCauses}. */
+export const SpendDownEndCause = Schema.Literals(Record.values(SpendDownEndCauses))
+/** A spend-down end cause; see {@link SpendDownEndCauses}. */
+export type SpendDownEndCause = typeof SpendDownEndCause.Type
+
+/**
+ * Ends the spend-down written at `spendDownSeq`, for good: once written,
+ * no clock reading brings it back (review finding F5).
+ */
 export class SpendDownCanceled extends Schema.TaggedClass<SpendDownCanceled>()(
   LedgerRowKinds.SpendDownCanceled,
-  { provider: Client, window: Window, spendDownSeq: LedgerSeq },
+  { provider: Client, window: Window, spendDownSeq: LedgerSeq, cause: SpendDownEndCause },
 ) {}
 
 /**

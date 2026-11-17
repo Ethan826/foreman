@@ -8,11 +8,19 @@
 // A spend-down is active only while the window's current period is its
 // `periodSeq` and no `SpendDownCanceled` names it. A loosening one also
 // ends when the wall clock reaches the period's reset time, since ending
-// it tightens; a tightening one never ends on the clock.
+// it tightens; a tightening one never ends on the clock. The first launch
+// attempt that sees a loosening spend-down's reset time passed writes its
+// `SpendDownCanceled(resetPassed)` (`spendDownsToExpire`), so a clock set
+// back afterwards cannot bring the looser cap back (review finding F5).
 import { Array as Arr, Option, Schema } from "effect"
 import type { Client } from "../domain/clients.ts"
 import type { LedgerSeq, PeriodSeq } from "../domain/ids.ts"
-import { type LedgerSnapshot, SpendDown, SpendDownCanceled } from "../domain/ledger.ts"
+import {
+  type LedgerSnapshot,
+  SpendDown,
+  SpendDownCanceled,
+  SpendDownEndCauses,
+} from "../domain/ledger.ts"
 import type { Policy } from "../domain/policy.ts"
 import type { Window } from "../domain/window.ts"
 import { defaultCap } from "./pace.ts"
@@ -109,3 +117,45 @@ export const spendDownAccepted = (
   usable: boolean,
   active: Option.Option<SpendDown>,
 ): boolean => usable && Option.isNone(active)
+
+/**
+ * The cancel rows to write for `provider`'s loosening spend-downs whose
+ * period's reset time the wall clock has reached: each active one, in
+ * every policy window, ended with cause `resetPassed`. Written once,
+ * they end the spend-down for good, whatever the clock reads later.
+ */
+export const spendDownsToExpire = (
+  snapshot: LedgerSnapshot,
+  provider: Client,
+  periodOf: (window: Window) => Option.Option<PeriodRef>,
+  now: number,
+  policy: Policy,
+): ReadonlyArray<SpendDownCanceled> =>
+  Arr.flatMap(policy.providers[provider].windows, ({ window }) =>
+    Option.match(
+      Option.flatMap(periodOf(window), (current) =>
+        Arr.findLast(
+          snapshot.entries,
+          (entry) =>
+            Schema.is(SpendDown)(entry.row) &&
+            entry.row.provider === provider &&
+            entry.row.window === window &&
+            entry.row.periodSeq === current.periodSeq &&
+            loosens(entry.row, policy) &&
+            pastReset(current, now) &&
+            !isCanceled(snapshot, entry.seq),
+        ),
+      ),
+      {
+        onNone: () => [],
+        onSome: (entry) => [
+          new SpendDownCanceled({
+            provider,
+            window,
+            spendDownSeq: entry.seq,
+            cause: SpendDownEndCauses.ResetPassed,
+          }),
+        ],
+      },
+    ),
+  )
