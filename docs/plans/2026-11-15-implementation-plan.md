@@ -690,13 +690,39 @@ pushed or reviewed.
   project: 'beta' }`. The mutant was reverted and `git diff` is empty.
 
 Verification by the coordinator after the agent returned: `bun run check`
-PASS (exit 0; the prose gate reports one non-blocking finding), and
-`bun run test` PASS (40 files, 414 tests).
+PASS (exit 0; 0 blocking prose findings), and `bun run test` PASS (40
+files, 414 tests). Correction: this record first said the prose gate
+reported "one non-blocking finding". That came from reading only the
+last line of the log. The gate reports 29 non-blocking notes across 13
+files, listed in the landing record below.
 
 Consumption: the harness measured 118,027 tokens for the agent (39 tool
 calls, about 5.6 minutes), 28,027 over the 90k allowance. The agent
 estimated about 70k, which was wrong, and it did not checkpoint. The
 allowance was not met. The coordinator's own use is not included.
+
+Owner direction on budgets (2026-11-17): a self-estimated token allowance
+is not an enforceable cap; the agent's 70k estimate was unreliable.
+Future delegation uses smaller work units and controls that something
+outside the agent enforces, where available, and reports the measured
+usage afterward. No budget-control engineering is requested now.
+
+Landing (2026-11-17, owner authorization): milestone 1 landed on `main`
+locally by fast-forward from 1524edc to e3d07e0 (27 commits, all with the
+noreply author email). The tree was clean and `main` had not diverged.
+There is no merge commit and nothing was pushed. On `main`, `bun run
+check` and `bun run test` both PASS (40 files, 414 tests), after which
+the `part-b-m1` branch was deleted. F8 stays with B15. Not authorized:
+push, more review dispatch and Part B milestone 2.
+
+The prose gate's non-blocking notes on `main` (0 blocking): 29 in total.
+`README.md` has 3, including the triad at 45:21. `src/domain/README.md`
+has 5 triads. `research/live/` has 4: participial clauses in
+`l1b-2026-11-16/plan.md` (2) and `l1b-2026-11-16/results.md` (1), and a
+caveat shape in `results-2026-11-16.md`. The rest are in `AGENTS.md` (4),
+`docs/how-it-works.md` (4), `docs/dependency-intake.md` (3),
+`src/features/README.md` (2), and one each in the facade, format, program
+and runtime READMEs.
 
 ### Task B11: Git and worktree handling
 
