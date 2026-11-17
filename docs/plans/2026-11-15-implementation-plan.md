@@ -972,6 +972,66 @@ Correction unit, resumed (2026-11-17): complete, f3577b5, on
   about 13.3 minutes). With the stopped first attempt (104,887), the
   correction work used 295,206 tokens.
 
+Focused review of B11a (2026-11-17, one fresh-context reviewer,
+read-only, no delegation): **does not clear the slice for landing yet.**
+Every defect found fails closed. None gives a false pass.
+
+Blocking:
+
+- R1, confirmed by the reviewer's probe and again by the coordinator.
+  `isDirectory` in `src/runtime/file-paths.ts:18` is `existsSync(path) &&
+  statSync(path).isDirectory()`. `existsSync` returns false on EACCES, so
+  a worktree under a directory the process cannot search is reported as
+  `directory-present`, which is the wrong condition. `PathUnreadable` from
+  stat is then reachable only through a race. The recorded departure ("stat
+  or realpath failed on a present path") is false for stat, and no test
+  exercises `PathUnreadable`. Fix: use `statSync` alone, treat only
+  ENOENT and ENOTDIR as absent, and add a test with an unsearchable parent.
+- R2, by reading, confirmed by the coordinator: Runtime still decodes and
+  decides, against ruling 2, and no departure records it. `ownerHead`
+  (`src/runtime/worktree.ts:190-198`) decodes `rev-parse HEAD` in Runtime
+  with `String.trim`. `addWorktreeWith` and
+  `refuseExistingBranch`/`refuseExistingPath` (116-133 and 200-219)
+  interpret exit codes and make the refusal decisions. Fix: move the
+  decode to Format and the refusals to Features and Program, or record it
+  as a departure for the owner.
+
+Minor:
+
+- R3: the requested path is not required to be absolute, and the
+  positional arguments have no `--`. Git resolves the path against the
+  owner's checkout, while the prechecks and reads resolve against the
+  process's working directory. A relative path could put the worktree
+  inside the owner's checkout without being caught, and a leading `-`
+  would be parsed as an option.
+- R4: `checkWorktree` is not total. `RecordedWorktree` fields are
+  `string`, but `WorktreeCheckFailed` requires a non-empty `GitText`, and
+  an empty path throws. Program passes a validated `WorktreeCreated`, so
+  this cannot happen today.
+- R5: the `-z` decoder accepts malformed input. A duplicate `worktree`
+  attribute silently drops the first, a record need not start with
+  `worktree`, and data after the last terminator is accepted. All of these
+  fail closed.
+- R6: the docs overstate ruling 3. An empty directory appearing between
+  the path precheck and the add is accepted by git, so the stricter
+  refusal is bypassed silently. The branch race is tested and correct.
+- R7, the gate note: the two new vocabulary names do fire today, but
+  `test/lint/fixtures.test.ts:99-101` asserts only one message per
+  fixture. Removing a name from `closedNames` would still pass, and
+  `path-listed` and `is-locked` have no fixture line. AGENTS.md's
+  vocabulary list is out of date (outside the diff).
+- R8: tests and identity reads inherit the global git config and
+  environment (`core.hooksPath`, `GIT_DIR`), which the clean environment
+  in later B11 work covers. One test matches git's English stderr, so it
+  depends on locale.
+
+The reviewer ran lint, tsc and the six new test files (all pass; no
+timeout fired). It did not rerun the recorded old-code mutants, since the
+review was read-only, and did not run the full suite.
+
+Consumption, measured by the harness: 110,779 tokens (20 tool calls,
+about 3.9 minutes).
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
