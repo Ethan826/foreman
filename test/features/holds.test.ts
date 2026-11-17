@@ -8,17 +8,31 @@ import { Clients } from "../../src/domain/clients.ts"
 import {
   Adopted,
   Approved,
+  BaseRequested,
+  CommitRecorded,
+  Finished,
   HoldCreated,
+  Intended,
   Launched,
+  LedgerBound,
   LogPosition,
   type LoggedEvent,
-  type ProjectEvent,
+  PreApproved,
+  ProjectEvent,
   ProtectedReleased,
+  Rebased,
   Reconciled,
   Released,
   RequestCompleted,
   RestoreRequested,
+  ReviewQueued,
+  TrancheEnded,
+  UnwindRequested,
+  Unwound,
   Waived,
+  WaiverExpired,
+  WorktreeCreated,
+  WorktreeIntended,
 } from "../../src/domain/events.ts"
 import { Approval, Drift, Failure, Protected, Quota, Uncertain } from "../../src/domain/holds.ts"
 import { LedgerSeq, OpId, Revision, TrancheId, WaiverId } from "../../src/domain/ids.ts"
@@ -133,8 +147,19 @@ describe("quotaReleased", () => {
   })
 })
 
-// Events that are neither a hold's creation nor any hold's release.
-const Neutral = Schema.Struct({ pgid: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 9 })), at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })) })
+// Every event kind that neither creates a hold nor releases one under
+// src/features/holds.ts; the kinds below must partition ProjectEvent.
+const neutralKinds = [
+  Intended, Launched, Finished, CommitRecorded, PreApproved, WaiverExpired,
+  ReviewQueued, Unwound, TrancheEnded, LedgerBound, WorktreeIntended,
+  WorktreeCreated, Rebased, BaseRequested, UnwindRequested, RestoreRequested,
+] as const
+const releaseKinds = [Approved, Waived, Released, Adopted, Reconciled, RequestCompleted, ProtectedReleased] as const
+const NeutralEvent = Schema.Union(neutralKinds)
+const Insert = Schema.Struct({
+  event: NeutralEvent,
+  at: Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 8 })),
+})
 const base: ReadonlyArray<ProjectEvent> = [
   create(approval),
   create(quota()),
@@ -142,19 +167,25 @@ const base: ReadonlyArray<ProjectEvent> = [
   new Released({ opId: OpId.make("op-1") }),
   create(uncertain),
   create(drift("supervisor")),
+  create(drift("review")),
   create(protectedHold),
 ]
-const withNeutral = (inserts: ReadonlyArray<typeof Neutral.Type>) =>
+const withNeutral = (inserts: ReadonlyArray<typeof Insert.Type>) =>
   Arr.reduce(inserts, base, (events, insert) => [
     ...Arr.take(events, insert.at),
-    new Launched({ opId: OpId.make("op-9"), pgid: insert.pgid }),
+    insert.event,
     ...Arr.drop(events, insert.at),
   ])
 
 describe("holdsOf property", () => {
+  it("classifies every event kind as hold creation, release or neutral", () => {
+    expect(new Set([HoldCreated, ...releaseKinds, ...neutralKinds])).toEqual(new Set(ProjectEvent.members))
+    expect(neutralKinds.length + releaseKinds.length + 1).toBe(ProjectEvent.members.length)
+  })
+
   it.prop(
-    "events that release nothing never change the hold set (no clock input exists)",
-    { inserts: Schema.Array(Neutral).check(Schema.isMaxLength(6)) },
+    "events of every non-release kind never change the hold set (no clock input exists)",
+    { inserts: Schema.Array(Insert).check(Schema.isMaxLength(6)) },
     ({ inserts }) => JSON.stringify(held(withNeutral(inserts))) === JSON.stringify(held(base)),
     { arbitrary: { runs: 300 } },
   )

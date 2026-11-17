@@ -548,6 +548,71 @@ Remaining, not done (checkpointed for budget; the owner decides):
   parent acquires. It needs a small declaration of `Bun.spawn` for the
   tests.
 
+Done in the separate 150k session (2026-11-17), tests only; no
+production code changed, because every new test passed against the
+existing code. Each test was therefore written after the code and proven
+with a mutant in an isolated copy of the repository:
+
+- F7 A1, `test/program/lifecycle-property.test.ts`, "settles each grant at
+  most once and leaves open only in-flight steps after a settle": an
+  `it.effect.prop` (200 runs, 20 to 40 generated operations, steps 1 to 4,
+  projects alpha and beta) over a real SQLite ledger in a temporary
+  directory. Operations: `admit`, Intended and Finished appended to the
+  project's in-memory log by a live process, `cancelLostRace` before an
+  Intended, a crash that drops every write a live process still owed, and
+  `applySettle`. Invariants over stored rows: no grant charged twice,
+  canceled twice, or both; after a settle of a project, each of its open
+  grants was Intended and not Finished in that log. Mutants: settle never
+  cancels orphans (fails), settle never charges finished steps (fails),
+  the store writes a repeated settle row (fails, at the unique index). The
+  minimum length matters: without it the generator rarely reached a
+  Finished step and the never-charge mutant survived. No failing seed
+  arose against the real code, so none is kept.
+- F7 A2, `test/runtime/ledger-sqlite.test.ts`, "writes no row of a batch
+  whose second row is refused, the first included". Mutant: the
+  transaction commits a failed body (fails, the first row and its seq
+  stay).
+- F7 A3, same file, "waits within busy_timeout for another process's
+  write lock, then writes": a child Bun process
+  (`test/runtime/fixtures/hold-ledger-write.ts`) holds BEGIN IMMEDIATE for
+  300 ms; the parent's store, opened with a 10 s busy timeout, writes
+  after it. Mutant: `busy_timeout=0` (fails with LedgerBusy).
+- F7 A4, `test/features/holds.test.ts`: the holds property now inserts
+  generated events of all 16 kinds that neither create nor release a
+  hold, and a new test checks that creation, release and neutral kinds
+  partition `ProjectEvent.members`. Mutants: Intended releases any
+  Uncertain hold (property fails); a new unclassified event kind
+  (partition test fails).
+- B (F2), `test/runtime/project-lock.test.ts`, "refuses while a child
+  holds it and is acquired after the child is killed": a child
+  (`test/runtime/fixtures/hold-lock.ts`) takes the lock, the parent's
+  `tryLock` exits with LockHeld, the test sends SIGKILL, reaps the child
+  (signalCode SIGKILL) and acquires. Mutant: `BEGIN` instead of `BEGIN
+  EXCLUSIVE` in `tryLock` (fails: the parent acquires while held).
+- Support: `test/runtime/child-process.ts` starts a fixture, waits for
+  its ready file (bounded, 10 s), and kills with SIGKILL and reaps
+  (bounded, 10 s) in a finalizer on every path; `test/runtime/bun-spawn.d.ts`
+  declares Bun 1.3.6's `spawn` subset, `process.execPath`/`argv` and
+  `import.meta.dirname`, with `exited` typed `PromiseLike` because the
+  test lint bans the `Promise` type name; `node-fs.d.ts` gains
+  `existsSync` and `writeFileSync`.
+
+Remaining from this session:
+
+- The lock fixture takes SQLite's exclusive lock with the same pragmas as
+  `tryLock` rather than calling `tryLock`: the lint lets no test file run
+  an Effect (`Effect.runPromise` and `await` are banned under `test/`),
+  and the child is an entrypoint. A drift between the fixture and
+  `tryLock`'s pragmas would go unseen. The owner decides whether child
+  entrypoints get a lint exemption.
+- The A1 invariants do not cover cross-project isolation: a mutant that
+  lets a settle of one project cancel another project's grants survives
+  (it breaks no listed invariant). Adding "a settle of P writes no row
+  for a grant of another project" is a one-line invariant, not added
+  because it is outside the owner's list.
+- F2's other parts (take leaks the handle when BEGIN EXCLUSIVE throws;
+  release skips close if ROLLBACK throws) are untested and unfixed.
+
 Interfaces and provenance superseded by milestone 1 (beyond the
 corrections above): B1's rows carry no seq (`LedgerEntry` pairs them);
 `LedgerTx.read`/`append` return Effects; B4's command lives in

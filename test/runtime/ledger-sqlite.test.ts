@@ -22,6 +22,7 @@ import {
 } from "../../src/domain/ledger.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
+import { startChild } from "./child-process.ts"
 
 const busyMillis = 50
 const fiveHour = [{ window: Windows.FiveHour, points: 15 }]
@@ -124,6 +125,17 @@ const chargeAfterCancelRefused = (store: LedgerStore) =>
     expect(yield* seqsOf(store)).toEqual([1, 2])
   })
 
+// A batch whose first row is valid and whose second is refused (a charge
+// of a grant canceled in an earlier transaction) writes neither row.
+const failedBatchWritesNothing = (store: LedgerStore) =>
+  Effect.gen(function* () {
+    yield* appendIn(store, [grant("g-1"), canceled("g-1")])
+    const refused = yield* Effect.flip(appendIn(store, [grant("g-2"), charged("g-1")]))
+    expect(refused).toEqual(new GrantSettled({ grantId: GrantId.make("g-1") }))
+    expect(yield* rowsOf(store)).toEqual([grant("g-1"), canceled("g-1")])
+    expect(yield* appendIn(store, [reading])).toEqual([3])
+  })
+
 const cancelAfterChargeRefused = (store: LedgerStore) =>
   Effect.gen(function* () {
     yield* appendIn(store, [grant("g-1"), charged("g-1")])
@@ -163,6 +175,38 @@ const overlappingTransactionsSerialize = (store: LedgerStore) =>
     expect(yield* rowsOf(store)).toHaveLength(2)
   })
 
+// A child process holds the write lock for this long, well inside the
+// busy timeout this test opens its store with.
+const childHoldMillis = 300
+const waitingBusyMillis = 10_000
+
+// The write starts while a child process holds the lock (its ready file
+// is written after BEGIN IMMEDIATE) and succeeds once the child releases
+// it. A second process is needed: SQLite's busy wait is synchronous and
+// would block this process's event loop, so the lock holder could not
+// release from here.
+const waitsThenSucceeds = (dir: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const path = `${dir}/ledger.sqlite`
+      const store = yield* openLedger(path, waitingBusyMillis)
+      yield* startChild("hold-ledger-write.ts", path, `${dir}/ready`, [String(childHoldMillis)])
+      expect(yield* appendIn(store, [grant("g-1")])).toEqual([1])
+      expect(yield* rowsOf(store)).toEqual([grant("g-1")])
+    }),
+  )
+
+const withDir = <A, E>(use: (dir: string) => Effect.Effect<A, E>) => {
+  const dir = mkdtempSync(`${tmpdir()}/foreman-ledger-`)
+  return Effect.ensuring(use(dir), removeDir(dir))
+}
+
+describe("SQLite ledger store across processes", () => {
+  it.live("waits within busy_timeout for another process's write lock, then writes", () =>
+    withDir(waitsThenSucceeds),
+  )
+})
+
 describe("SQLite ledger store", () => {
   it.effect("assigns gap-free seqs ordered across tables", () => withLedger(gapFreeAcrossTables))
   it.effect("rolls back a failed transaction with no row and no gap", () =>
@@ -171,6 +215,9 @@ describe("SQLite ledger store", () => {
   it.effect("skips a second charge of a grant", () => withLedger(secondChargeSkipped))
   it.effect("refuses a charge after a cancel and writes nothing", () =>
     withLedger(chargeAfterCancelRefused),
+  )
+  it.effect("writes no row of a batch whose second row is refused, the first included", () =>
+    withLedger(failedBatchWritesNothing),
   )
   it.effect("refuses a cancel after a charge", () => withLedger(cancelAfterChargeRefused))
   it.effect("returns LedgerBusy with nothing written while another connection holds the lock", () =>
