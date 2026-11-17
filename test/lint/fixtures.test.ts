@@ -104,6 +104,9 @@ const mustFail: Record<string, ReadonlyArray<Expected>> = {
   ],
   "test/cast.ts": [{ ruleId: "@typescript-eslint/consistent-type-assertions" }],
   "test/schema-decode.ts": [{ ruleId: "no-restricted-syntax", message: "Schema.decode" }],
+  "test/run-sync.ts": [{ ruleId: "no-restricted-syntax", message: "running them" }],
+  "test/runtime/fixtures/other-child.ts": [{ ruleId: "no-restricted-syntax", message: "running them" }],
+  "test/runtime/fixtures/hold-lock.ts": [{ ruleId: "no-restricted-syntax", message: "running them" }],
 }
 
 const clean: ReadonlyArray<string> = [

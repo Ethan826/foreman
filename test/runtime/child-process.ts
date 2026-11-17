@@ -26,7 +26,11 @@ const killAndReap = (child: Subprocess) =>
     ),
   )
 
-const waitForFile = (path: string) =>
+/**
+ * Waits, polling and bounded by the ready timeout, until a child has
+ * written the file at `path`.
+ */
+export const waitForFile = (path: string) =>
   Effect.timeout(
     Effect.retry(
       Effect.flatMap(Effect.sync(() => existsSync(path)), (found) =>

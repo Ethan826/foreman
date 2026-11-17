@@ -1,17 +1,39 @@
-// Child fixture: takes the project lock at argv[0] the way
-// src/runtime/project-lock.ts does (SQLite exclusive locking mode,
-// busy_timeout 0, BEGIN EXCLUSIVE), writes the ready file at argv[1],
-// then holds the lock until it is killed. It cannot call tryLock itself:
-// that returns an Effect, and the lint lets no test file run one.
-import { Database } from "bun:sqlite"
+// Child fixture: takes the project lock at argv[0] with the production
+// `tryLock` (src/runtime/project-lock.ts), writes the ready file at
+// argv[1], then holds the lock. With a hold time in argv[2] it releases
+// the lock through tryLock's scope after that many milliseconds, writes
+// argv[1] + ".released" and waits, still alive, until it is killed;
+// without one it holds the lock until it is killed. It is an entrypoint, so it runs
+// the Effect with Effect.runSync, which the lint permits in this one file
+// (eslint.rules.js, `lockChildEntrypoint`).
+import { Effect } from "effect"
 import { writeFileSync } from "node:fs"
-import { blockForever, withArgs } from "./child-args.ts"
+import { tryLock } from "../../../src/runtime/project-lock.ts"
+import { blockFor, blockForever, withArgs } from "./child-args.ts"
 
-withArgs((lockPath, ready) => {
-  const db = new Database(lockPath, { create: true })
-  db.exec("PRAGMA busy_timeout=0")
-  db.exec("PRAGMA locking_mode=EXCLUSIVE")
-  db.exec("BEGIN EXCLUSIVE")
-  writeFileSync(ready, "locked")
+/** Holds for `millis` milliseconds, or until killed when it is 0. */
+const hold = (millis: number) => {
+  if (millis > 0) blockFor(millis)
+  else blockForever()
+}
+
+/** Takes the lock, signals ready and holds; the scope's end releases it. */
+const holdLock = (lockPath: string, ready: string, millis: number) =>
+  Effect.scoped(
+    Effect.andThen(
+      tryLock(lockPath),
+      Effect.sync(() => {
+        writeFileSync(ready, "locked")
+        hold(millis)
+      }),
+    ),
+  )
+
+/** The file written once the child has released the lock. */
+const releasedFile = (ready: string) => `${ready}.released`
+
+withArgs((lockPath, ready, millis) => {
+  Effect.runSync(holdLock(lockPath, ready, millis))
+  writeFileSync(releasedFile(ready), "released")
   blockForever()
 })

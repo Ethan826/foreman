@@ -106,13 +106,20 @@ const throwingSchema =
   "decode|decodeSync|decodeUnknownSync|encodeSync|encodeUnknownSync|" +
   "decodePromise|decodeUnknownPromise|encodePromise|encodeUnknownPromise|asserts"
 
-const effectBans = [
+/** The Effect members that run an Effect, plus Effect.promise. */
+const effectRunners = ["runSync", "runPromise", "runFork", "runSyncExit", "runPromiseExit", "promise"]
+
+/**
+ * The effect bans, with the runners in `permitted` left out. Only the
+ * named entrypoint exception below passes a non-empty list.
+ */
+const effectBansExcept = (permitted) => [
   message(
     `MemberExpression[object.name=/^(Schema|S)$/][property.name=/^(${throwingSchema})$/]`,
     "Schema.decode and the Sync, Promise and asserts forms throw or reject or are v3 names; use decodeUnknownEffect / decodeUnknownResult / decodeUnknownOption.",
   ),
   message(
-    "MemberExpression[object.name='Effect'][property.name=/^(runSync|runPromise|runFork|runSyncExit|runPromiseExit|promise)$/]",
+    `MemberExpression[object.name='Effect'][property.name=/^(${effectRunners.filter((name) => !permitted.includes(name)).join("|")})$/]`,
     "Core code builds Effects; running them belongs to Program or the entrypoint. Use Effect.tryPromise, not Effect.promise.",
   ),
   message(
@@ -120,6 +127,8 @@ const effectBans = [
     "getOrThrow throws; use match or getOrElse.",
   ),
 ]
+
+const effectBans = effectBansExcept([])
 
 const parsing = [
   message("MemberExpression[object.name='JSON']", "JSON.parse and JSON.stringify throw; use Schema.fromJsonString."),
@@ -241,7 +250,25 @@ const nativeMethods = [
 ]
 
 const coreGroups = [loops, collections, failures, asynchrony, effectBans, parsing, literalSchemas, bareNames]
-const testGroups = [failures, asynchrony, effectBans, bareNames]
+/** The syntax groups tests keep, with a given set of effect bans. */
+const testGroupsWith = (bans) => [failures, asynchrony, bans, bareNames]
+const testGroups = testGroupsWith(effectBans)
+
+/**
+ * The one entrypoint exception (owner decision, 2026-11-17): the
+ * lock-child fixture is a child process's entrypoint, and it runs the
+ * production `tryLock` so the cross-process lock test exercises the real
+ * acquisition and release rather than a copy of its pragmas. It may call
+ * `Effect.runSync` and nothing else from the runner ban; every other test
+ * rule holds. Exact path, no glob: another fixture or test that runs an
+ * Effect still fails (lint-fixtures/test/run-sync.ts and
+ * lint-fixtures/test/runtime/fixtures/other-child.ts), and so does runPromise at
+ * this path (lint-fixtures/test/runtime/fixtures/hold-lock.ts).
+ */
+const lockChildEntrypoint = {
+  file: "test/runtime/fixtures/hold-lock.ts",
+  permitted: ["runSync"],
+}
 
 const throwingImports = {
   name: "effect/Schema",
@@ -369,6 +396,14 @@ export const buildConfig = ({ tsconfigRootDir, ignores = [] }) => defineConfig([
       "functional/no-loop-statements": "off",
       "functional/no-let": "off",
       "functional/immutable-data": "off",
+    },
+  },
+  {
+    files: [lockChildEntrypoint.file],
+    rules: {
+      "no-restricted-syntax": noRestrictedSyntax(
+        ...testGroupsWith(effectBansExcept(lockChildEntrypoint.permitted)),
+      ),
     },
   },
 ])
