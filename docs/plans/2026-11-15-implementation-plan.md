@@ -813,6 +813,37 @@ The estimate was badly low for a slice of this size: five layers, 36
 tests and real-git fixtures. Measured usage, not the estimate, is the
 figure to plan from.
 
+Owner rulings on B11a (2026-11-17). The trial improved scope control (one
+job, no delegation, a clear stop) and did not validate the effort
+estimate. 153,558 tokens is the measured cost of this slice.
+
+1. Canonical path: accepted. Record git's resolved path, and check that it
+   identifies the intended worktree and branch.
+2. Layering: accepted. Runtime gets the raw output, Format decodes it,
+   Features checks it, and Program connects those steps.
+3. Prechecks: accepted. Refusing an existing path is a reasonable explicit
+   restriction. Keep git's error details when a race defeats the precheck.
+4. Quoted paths: fix now with `git worktree list --porcelain -z`. Git
+   already gives an unambiguous format, and rejecting valid paths adds an
+   unnecessary restriction. This supersedes the design's listing command.
+5. F9: fix before landing. A retained git registration does not show that
+   the worktree exists. Check that the directory is present and verify its
+   git identity before reporting it valid. Keep the locked registration
+   and never prune it automatically.
+
+Authorized, as separate work units with measured consumption and no
+estimate treated as a cap: the corrections for 4 and 5 with regression
+tests, then one fresh-context review of B11a only (layer boundaries and
+recorded departures included), with no delegation, no whole-project audit
+and no new modeling. No landing or push. If the review clears the slice,
+the next decision is local landing.
+
+Coordinator's reading of 1 and 3 against the code: `GitCommandFailed`
+already carries `args`, `exitCode` and `stderr`, so 3 holds and needs
+a test for the race path only. In 1, creation takes `--show-toplevel`
+without checking that it resolves to the requested path or that the
+worktree is on the branch. The correction unit adds that check too.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
