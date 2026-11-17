@@ -875,6 +875,53 @@ committed, `src/` is unchanged, and the review has not started.
 - Consumption, measured by the harness: 104,887 tokens (27 tool calls,
   about 6.5 minutes).
 
+Correction to the record (owner, 2026-11-17): the premise of ruling 4,
+that git quotes worktree paths, was wrong. Git prints them raw. The real
+failure is a newline in a path, which splits a non-`-z` listing record
+and also breaks creation's combined `rev-parse`. Ruling 4 stands: keep
+`-z`. The regression tests must use a real path containing a newline and
+show both failures, in the listing and in creation.
+
+Hang diagnosis (2026-11-17, coordinator inline, separate from the
+corrections):
+
+- Cause, confirmed: the worker's edit to
+  `test/features/worktree-check.test.ts` defines the helper
+  `const check = (entries, directory = present) => check(entries,
+  directory)`. It calls itself where it should call
+  `checkWorktree(recorded, entries, directory)`. Bun (1.3.6) runs on
+  JavaScriptCore, which does proper tail calls in strict code (ES
+  modules), so the self tail call loops forever instead of overflowing
+  the stack. Production code was not involved.
+- Evidence, from a scratch probe outside the repository: under Bun, `const
+  check = (n) => check(n + 1)` ran until a 5-second timeout killed it
+  (exit 124). A non-tail version threw `RangeError` at once. Node
+  overflowed in about a second.
+- Reproduction: `gtimeout -k 5 30 bun run test
+  test/features/worktree-check.test.ts`. It printed `RUN v5.1.0` and then
+  nothing, and was ended at 30s with exit 124. With the one line
+  temporarily corrected, the same command finished in about 1s (exit 1,
+  16 tests: 11 pass, and 5 fail on the F9 conditions `src/` does not have
+  yet, as expected). The file was then restored byte for byte from a copy,
+  and the worker's uncommitted tests are unchanged.
+- Cleanup: GNU `timeout` (Homebrew `gtimeout`) makes itself the leader of
+  its own process group and, when the limit passes, signals that group
+  (`-k 5` sends KILL 5s after TERM). It reaches only processes the command
+  started. `pgrep -fl vitest` found none before or after either run. No
+  `pkill` and no pattern kill were used, and nothing was denied. For
+  later workers, each single-file test run goes through `gtimeout -k 5
+  <seconds> bun run test <file>`, with `pgrep` afterward.
+- Remaining uncertainty: none for this hang. The diagnosis did not ask
+  why vitest's own test timeout did not stop the loop. A synchronous
+  infinite loop blocks the worker's event loop, so a timer cannot fire;
+  this is expected behavior, but no run checked it separately.
+- What the correction worker needs: fix the helper to call
+  `checkWorktree(recorded, entries, directory)` as its first step on
+  resuming.
+- Effort: about 5 shell commands and 37s of test runs in total. The
+  coordinator's tokens for inline work are not measured by the harness,
+  so no token figure is claimed.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
