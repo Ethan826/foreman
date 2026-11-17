@@ -8,7 +8,13 @@
 import { Array as Arr, Schema } from "effect"
 import { type ProjectEvent, ReviewQueued, TrancheEnded, Unwound } from "../domain/events.ts"
 import type { Revision, TrancheId } from "../domain/ids.ts"
-import { ChangesRequested, type StepOutcome } from "../domain/outcomes.ts"
+import {
+  Abandoned,
+  ChangesRequested,
+  NotConverged,
+  type StepOutcome,
+  type TrancheEnd,
+} from "../domain/outcomes.ts"
 
 /** One tranche result waiting for review. */
 export interface QueueEntry {
@@ -54,15 +60,20 @@ export const queueOf = (events: ReadonlyArray<ProjectEvent>): ReadonlyArray<Queu
 export const implementAllowed = (queue: ReadonlyArray<QueueEntry>, bound: number): boolean =>
   Arr.length(queue) + 1 <= bound
 
+/** Whether `outcome` unwinds the tranches stacked above the head. */
+const unwinds = (outcome: StepOutcome | TrancheEnd): boolean =>
+  Schema.is(ChangesRequested)(outcome) ||
+  Schema.is(NotConverged)(outcome) ||
+  Schema.is(Abandoned)(outcome)
+
 /**
- * The tranches to unwind when the head's review ends with `outcome`: on a
- * change request, exactly the tranches above the head (stacked on it);
- * otherwise none. Unwinding re-arms their pre-approvals (plan Task B10).
+ * The tranches to unwind when the head's review requests changes or its
+ * tranche ends not converged or abandoned: exactly the tranches above the
+ * head (stacked on it); otherwise none (design "Review queue", unwinding;
+ * review finding F6). Unwinding re-arms their pre-approvals.
  */
 export const unwindTargets = (
   queue: ReadonlyArray<QueueEntry>,
-  outcome: StepOutcome,
+  outcome: StepOutcome | TrancheEnd,
 ): ReadonlyArray<TrancheId> =>
-  Schema.is(ChangesRequested)(outcome)
-    ? Arr.map(Arr.drop(queue, 1), (entry) => entry.tranche)
-    : []
+  unwinds(outcome) ? Arr.map(Arr.drop(queue, 1), (entry) => entry.tranche) : []

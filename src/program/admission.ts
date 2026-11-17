@@ -45,7 +45,14 @@ export interface AdmissionRequest {
   readonly now: number
   /** The monotonic clock now; none until a clock mechanism exists (O11). */
   readonly nowMono: Option.Option<MonoStamp>
-  readonly waiverId: Option.Option<WaiverId>
+  /** The armed waiver (`armedWaiver`), if any; it applies only to its provider. */
+  readonly waiver: Option.Option<ArmedWaiver>
+}
+
+/** A waiver armed in the project log, and the provider it was given for. */
+export interface ArmedWaiver {
+  readonly waiverId: WaiverId
+  readonly provider: Client
 }
 
 /** Rule 2 (allocations): whether the request fits its project's share. */
@@ -124,13 +131,21 @@ const decide = (snapshot: LedgerSnapshot, request: AdmissionRequest, context: Ad
     cap: context.cap,
   })
 
-const grantOf = (request: AdmissionRequest) =>
+/**
+ * The grant for an admitted request, with points in every policy window of
+ * its provider: the request's estimate, or the initial estimate for a
+ * window it omits, exactly as pacing checked them (review finding F4).
+ */
+const grantOf = (request: AdmissionRequest, policy: Policy) =>
   new Grant({
     grantId: request.grantId,
     project: request.project,
     opId: request.opId,
     provider: request.provider,
-    points: request.estimate,
+    points: Arr.map(policy.providers[request.provider].windows, ({ window }) => ({
+      window,
+      points: estimateFor(request, policy)(window),
+    })),
     issuedAt: request.now,
   })
 
@@ -146,11 +161,11 @@ export const admit = (
   store.transact((tx) =>
     Effect.gen(function* () {
       const snapshot = yield* tx.read
-      const waived = Option.isSome(request.waiverId)
+      const waived = Option.exists(request.waiver, (w) => w.provider === request.provider)
       const decision = decide(snapshot, request, context)
       if (!waived && !Schema.is(Allow)(decision)) return new Refused({ decision })
       if (!waived && !context.allocations(snapshot, request)) return new AllocationRefused()
-      const seq = yield* Effect.fromOption(Arr.head(yield* tx.append([grantOf(request)])), () =>
+      const seq = yield* Effect.fromOption(Arr.head(yield* tx.append([grantOf(request, context.policy)])), () =>
         new LedgerError({ reason: "the grant was not written" }),
       )
       return new Admitted({ grantId: request.grantId, seq })

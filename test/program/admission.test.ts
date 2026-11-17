@@ -6,7 +6,7 @@ import { Array as Arr, Effect, Option, Schema } from "effect"
 import type { Scope } from "effect"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { Clients } from "../../src/domain/clients.ts"
+import { type Client, Clients } from "../../src/domain/clients.ts"
 import { BootId } from "../../src/domain/clock.ts"
 import { Finished, Intended, type ProjectEvent } from "../../src/domain/events.ts"
 import { GrantId, OpId, ProjectId, Revision, TrancheId, WaiverId } from "../../src/domain/ids.ts"
@@ -50,7 +50,12 @@ const estimate = [
   { window: Windows.FiveHour, points: 15 },
   { window: Windows.Weekly, points: 15 },
 ]
-const request = (n: number, project = "alpha", waiver = false): AdmissionRequest => ({
+const request = (
+  n: number,
+  project = "alpha",
+  waiver = false,
+  waiverProvider: Client = Clients.Claude,
+): AdmissionRequest => ({
   project: ProjectId.make(project),
   opId: OpId.make(`op-${String(n)}`),
   grantId: GrantId.make(`g-${String(n)}`),
@@ -58,7 +63,7 @@ const request = (n: number, project = "alpha", waiver = false): AdmissionRequest
   estimate,
   now,
   nowMono: Option.some(nowMono),
-  waiverId: waiver ? Option.some(WaiverId.make("w-1")) : Option.none(),
+  waiver: waiver ? Option.some({ waiverId: WaiverId.make("w-1"), provider: waiverProvider }) : Option.none(),
 })
 const readingRow = (window: (typeof Windows)[keyof typeof Windows], usedPercent: number) =>
   new ReadingRow({
@@ -150,6 +155,27 @@ const waivedStillTakesGrant = (store: LedgerStore) =>
     expect(Arr.length(Arr.filter(yield* rowsOf(store), Schema.is(Grant)))).toBe(1)
   })
 
+const otherProvidersWaiverIgnored = (store: LedgerStore) =>
+  Effect.gen(function* () {
+    yield* seedReadings(store, 60)
+    const result = yield* admit(store, request(1, "alpha", true, Clients.Codex), context)
+    expect(Schema.is(Refused)(result)).toBe(true)
+    expect(Arr.filter(yield* rowsOf(store), Schema.is(Grant))).toEqual([])
+  })
+
+const grantCoversEveryPolicyWindow = (store: LedgerStore) =>
+  Effect.gen(function* () {
+    yield* seedReadings(store, 10)
+    yield* admit(store, { ...request(1), estimate: [{ window: Windows.FiveHour, points: 5 }] }, context)
+    const grants = Arr.filter(yield* rowsOf(store), Schema.is(Grant))
+    expect(Arr.map(grants, (g) => g.points)).toEqual([
+      [
+        { window: Windows.FiveHour, points: 5 },
+        { window: Windows.Weekly, points: 15 },
+      ],
+    ])
+  })
+
 const lostRaceCanceledAtOnce = (store: LedgerStore) =>
   Effect.gen(function* () {
     yield* seedReadings(store, 0)
@@ -200,6 +226,12 @@ describe("admission", () => {
   it.effect("counts every project's open grants", () => withLedger(countsOtherProjectsGrants))
   it.effect("admits a waived launch and still takes its grant", () =>
     withLedger(waivedStillTakesGrant),
+  )
+  it.effect("ignores a waiver armed for another provider", () =>
+    withLedger(otherProvidersWaiverIgnored),
+  )
+  it.effect("records the grant in every policy window pacing checked", () =>
+    withLedger(grantCoversEveryPolicyWindow),
   )
 })
 

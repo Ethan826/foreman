@@ -151,7 +151,9 @@ export const approvalFor = (
 
 /**
  * Whether `backlog add <tranche>` is accepted: the tranche has no unused
- * entry and the backlog holds fewer than `backlogMax` entries.
+ * entry, has not started (no approval of it was used), and the backlog
+ * holds fewer than `backlogMax` entries. A tranche has at most one entry
+ * (review finding F9c).
  */
 export const backlogAddAccepted = (
   events: ReadonlyArray<ProjectEvent>,
@@ -159,7 +161,13 @@ export const backlogAddAccepted = (
   backlogMax: number,
 ): boolean => {
   const backlog = backlogOf(events)
-  return !Arr.some(backlog, (a) => a.tranche === tranche) && Arr.length(backlog) < backlogMax
+  const started = Arr.some(
+    approvalsOf(events),
+    (a) => a.tranche === tranche && Option.isSome(a.usedBy),
+  )
+  return (
+    !started && !Arr.some(backlog, (a) => a.tranche === tranche) && Arr.length(backlog) < backlogMax
+  )
 }
 
 /** Whether a tranche other than `passed` has started and not ended or unwound. */

@@ -86,6 +86,11 @@ describe("backlogAddAccepted", () => {
     expect(backlogAddAccepted([pre(2), pre(3)], t(4), 3)).toBe(true)
     expect(Arr.length(backlogOf([...three, intend(2, "op-1")]))).toBe(2)
   })
+
+  it("refuses a second entry for a tranche whose approval was used (it has started)", () => {
+    expect(backlogAddAccepted([pre(2), intend(2, "op-1")], t(2), 3)).toBe(false)
+    expect(backlogAddAccepted([live(2), intend(2, "op-1")], t(2), 3)).toBe(false)
+  })
 })
 
 describe("approvalHoldOnPass", () => {

@@ -4,7 +4,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr } from "effect"
 import { type ProjectEvent, ReviewQueued, TrancheEnded, Unwound } from "../../src/domain/events.ts"
 import { Revision, TrancheId } from "../../src/domain/ids.ts"
-import { ChangesRequested, Passed, Success } from "../../src/domain/outcomes.ts"
+import { Abandoned, ChangesRequested, NotConverged, Passed, Success } from "../../src/domain/outcomes.ts"
 import { implementAllowed, queueOf, unwindTargets } from "../../src/features/review-queue.ts"
 
 const r = (c: string) => Revision.make(c.repeat(40))
@@ -53,6 +53,11 @@ describe("unwindTargets", () => {
   it("on a change request at the head, unwinds exactly the tranches above it", () => {
     expect(unwindTargets(two, new ChangesRequested())).toEqual([TrancheId.make("t-2")])
   })
+  it("also unwinds the tranches above the head when it ends not converged or abandoned", () => {
+    expect(unwindTargets(two, new NotConverged())).toEqual([TrancheId.make("t-2")])
+    expect(unwindTargets(two, new Abandoned())).toEqual([TrancheId.make("t-2")])
+  })
+
   it("unwinds nothing on any other outcome, or with nothing above the head", () => {
     expect(unwindTargets(two, new Success())).toEqual([])
     expect(unwindTargets(queueOf([queued("t-1", "a")]), new ChangesRequested())).toEqual([])
