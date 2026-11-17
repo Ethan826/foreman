@@ -2,7 +2,7 @@
 // directory: seq order, rollback, the settle rules and the write lock.
 import { describe, expect, it } from "@effect/vitest"
 import { Database } from "bun:sqlite"
-import { Array as Arr, Effect, Exit, Option } from "effect"
+import { Array as Arr, Effect, Exit, Option, Order } from "effect"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { Clients } from "../../src/domain/clients.ts"
@@ -150,6 +150,19 @@ const secondConnectionContinues = (store: LedgerStore, path: string) =>
     expect(yield* seqsOf(store)).toEqual([1, 2])
   })
 
+// Two transactions on one store whose bodies yield, run concurrently.
+const appendAfterYield = (store: LedgerStore, id: string) =>
+  store.transact((tx) => Effect.flatMap(Effect.yieldNow, () => tx.append([grant(id)])))
+
+const overlappingTransactionsSerialize = (store: LedgerStore) =>
+  Effect.gen(function* () {
+    const results = yield* Effect.all([appendAfterYield(store, "g-1"), appendAfterYield(store, "g-2")], {
+      concurrency: 2,
+    })
+    expect(Arr.sort(Arr.flatten(results), Order.Number)).toEqual([1, 2])
+    expect(yield* rowsOf(store)).toHaveLength(2)
+  })
+
 describe("SQLite ledger store", () => {
   it.effect("assigns gap-free seqs ordered across tables", () => withLedger(gapFreeAcrossTables))
   it.effect("rolls back a failed transaction with no row and no gap", () =>
@@ -165,5 +178,8 @@ describe("SQLite ledger store", () => {
   )
   it.effect("continues seqs from another connection's commits", () =>
     withLedger(secondConnectionContinues),
+  )
+  it.effect("serializes overlapping transactions on one store", () =>
+    withLedger(overlappingTransactionsSerialize),
   )
 })

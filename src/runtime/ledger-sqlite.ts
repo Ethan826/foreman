@@ -7,7 +7,7 @@
 // leaves no row and no gap. Rows are stored as their Schema encoding in
 // JSON; `charges` and `grantCancellations` have a unique key on `grantId`.
 import { Database } from "bun:sqlite"
-import { Array as Arr, Effect, Option, pipe, Schema } from "effect"
+import { Array as Arr, Effect, Option, pipe, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
 import type { GrantId } from "../domain/ids.ts"
 import { LedgerSeq } from "../domain/ids.ts"
@@ -219,8 +219,14 @@ const connectionOf = (db: Database): TxConnection<LedgerBusy | LedgerError> => (
   active: withDb(() => db.inTransaction),
 })
 
-const storeOf = (db: Database): LedgerStore => ({
-  transact: (body) => transaction(connectionOf(db), body(txOf(db))),
+/**
+ * The store over one connection. A connection holds one transaction at a
+ * time, so `transact` calls on the same store queue on a one-permit
+ * semaphore instead of failing with "cannot start a transaction within a
+ * transaction" when their bodies overlap.
+ */
+const storeOf = (db: Database, lock: Semaphore.Semaphore): LedgerStore => ({
+  transact: (body) => Semaphore.withPermits(lock, 1)(transaction(connectionOf(db), body(txOf(db)))),
 })
 
 /** Opens the database, sets `busy_timeout` and creates any missing table. */
@@ -263,5 +269,5 @@ export const openLedger = (
         db.close()
       }),
     ),
-    storeOf,
+    (db) => storeOf(db, Semaphore.makeUnsafe(1)),
   )

@@ -4,7 +4,7 @@
 // in one `BEGIN IMMEDIATE` transaction that refuses it, writing nothing,
 // if another writer appended first.
 import { Database } from "bun:sqlite"
-import { Array as Arr, Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
 import {
   type LoggedEvent,
@@ -107,8 +107,13 @@ const readFromDb = (db: Database, position: LogPosition) =>
     )
   })
 
-const logOf = (db: Database): ProjectLog => ({
-  append: (expected, events) => transaction(connectionOf(db), appendTx(db, expected, events)),
+/**
+ * The log over one connection. Appends on the same log queue on a
+ * one-permit semaphore, since a connection holds one transaction at a time.
+ */
+const logOf = (db: Database, lock: Semaphore.Semaphore): ProjectLog => ({
+  append: (expected, events) =>
+    Semaphore.withPermits(lock, 1)(transaction(connectionOf(db), appendTx(db, expected, events))),
   readFrom: (position) => readFromDb(db, position),
 })
 
@@ -149,5 +154,5 @@ export const openProjectLog = (
         db.close()
       }),
     ),
-    logOf,
+    (db) => logOf(db, Semaphore.makeUnsafe(1)),
   )

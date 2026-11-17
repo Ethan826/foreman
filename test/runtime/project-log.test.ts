@@ -1,7 +1,7 @@
 // The project log's compare-and-append and the project lock, against real
 // files in a temporary directory.
 import { describe, expect, it } from "@effect/vitest"
-import { Array as Arr, Effect } from "effect"
+import { Array as Arr, Effect, Exit } from "effect"
 import type { Scope } from "effect"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -75,11 +75,24 @@ const lockFreedAtScopeEnd = (dir: string) =>
     yield* Effect.scoped(tryLock(path))
   })
 
+// Two appends at the same expected position, run concurrently on one log:
+// one wins, the other fails with PositionMoved, and nothing else fails.
+const overlappingAppendsSerialize = (log: ProjectLog) =>
+  Effect.gen(function* () {
+    const exits = yield* Effect.all(
+      [Effect.exit(log.append(at(0), [bound])), Effect.exit(log.append(at(0), [released]))],
+      { concurrency: 2 },
+    )
+    expect(Arr.map(exits, (e) => (Exit.isSuccess(e) ? "ok" : "moved"))).toEqual(["ok", "moved"])
+    expect(Arr.length(yield* log.readFrom(at(0)))).toBe(1)
+  })
+
 describe("project log", () => {
   it.effect("appends at the expected position and reads back in order", () => withLog(appendsInOrder))
   it.effect("refuses an append at a stale position and writes nothing", () =>
     withLog(staleAppendRefused),
   )
+  it.effect("serializes overlapping appends on one log", () => withLog(overlappingAppendsSerialize))
 })
 
 describe("project lock", () => {
