@@ -665,6 +665,39 @@ Owner authorization, 2026-11-17 (for the three items above):
   and its mutant, and both handle-leak fixes. No landing, push or
   additional review dispatch.
 
+Result (2026-11-17): all three items done on `part-b-m1`, not landed,
+pushed or reviewed.
+
+- 66f9265, item 3: `tryLockWith(open)` injects the connection, and
+  `tryLock` is `tryLockWith(openSqlite)`. A failed acquisition closes the
+  handle, and a failed close becomes a second `ProjectLogError` after the
+  original. Release is ROLLBACK `ensuring` close, so both defects stay in
+  the cause. The four tests in `test/runtime/project-lock-cleanup.test.ts`
+  were seen failing before the fix.
+- 82e5686, item 1: `lockChildEntrypoint` in `eslint.rules.js` names
+  `test/runtime/fixtures/hold-lock.ts` and permits only `runSync`. The
+  child runs the production `tryLock` and releases by closing its scope.
+  The must-fail fixtures are an ordinary test calling `runSync`, a sibling
+  fixture in the same directory, and `runPromise` at the exempt path. A
+  new cross-process test (refused while the child holds the lock, acquired
+  after it releases while the child is still running) fails when release
+  is mutated to `Effect.void`.
+- 560dbb4, item 2: the invariant `settlesOnlyItsProject` in
+  `test/program/lifecycle-property.test.ts`. The mutant drops
+  `view.grant.project === project` from `isOpenOf` in
+  `src/features/settle.ts`; the property then fails with `expected
+  { settled: 'g-1', project: 'alpha' } to deeply equal { settled: 'g-1',
+  project: 'beta' }`. The mutant was reverted and `git diff` is empty.
+
+Verification by the coordinator after the agent returned: `bun run check`
+PASS (exit 0; the prose gate reports one non-blocking finding), and
+`bun run test` PASS (40 files, 414 tests).
+
+Consumption: the harness measured 118,027 tokens for the agent (39 tool
+calls, about 5.6 minutes), 28,027 over the 90k allowance. The agent
+estimated about 70k, which was wrong, and it did not checkpoint. The
+allowance was not met. The coordinator's own use is not included.
+
 ### Task B11: Git and worktree handling
 
 **Files:** `src/runtime/git.ts` (clean git environment with the recorded `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `-c` overrides), `src/runtime/worktree.ts` (supervisor worktree creation as intent, effect, completion; review worktree `--lock --detach`; startup check), `src/runtime/protected.ts` (digest walk and compare), `src/runtime/commit.ts` (temporary index, `commit-tree` with `Op-Id` trailer, `update-ref HEAD <new> <base>`); tests in `test/runtime/` against repositories the test creates in a temporary directory.
