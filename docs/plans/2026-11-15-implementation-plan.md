@@ -626,6 +626,29 @@ new events `ProtectedReleased` and `WaiverExpired`; `PaceInput.periods`
 became `PaceInput.readings`; the scheduler takes injected verdicts and
 reset times; the test suite runs on the Bun runtime.
 
+### Owner decisions before landing milestone 1 (2026-11-17)
+
+To be done before landing; not started, because the 150k allowance for
+the remaining items was already exhausted (157,322 tokens measured). F8
+stays with B15.
+
+1. Approved: a narrow lint entrypoint exception for the single named
+   lock-child fixture (test/runtime/fixtures/hold-lock.ts), allowing only
+   the bootstrap needed to run the real `tryLock`. Its exact path and
+   permitted calls are recorded in the lint config; no directory-wide
+   exemption. A must-fail fixture shows ordinary tests still cannot use
+   those calls. The child must exercise production lock acquisition and
+   release, not copied pragmas.
+2. Project isolation in the generated-sequence test: a settle for project
+   P writes no settlement row for another project's grant. The surviving
+   cross-project mutant must be shown to fail.
+3. Fix both project-lock handle leaks, with injected-failure tests: a
+   failed acquisition closes the opened handle; a failed rollback during
+   release still attempts close; cleanup failures stay visible alongside
+   the original failure.
+
+No review dispatch, landing or push is authorized by this pass.
+
 ### Task B11: Git and worktree handling
 
 **Files:** `src/runtime/git.ts` (clean git environment with the recorded `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `-c` overrides), `src/runtime/worktree.ts` (supervisor worktree creation as intent, effect, completion; review worktree `--lock --detach`; startup check), `src/runtime/protected.ts` (digest walk and compare), `src/runtime/commit.ts` (temporary index, `commit-tree` with `Op-Id` trailer, `update-ref HEAD <new> <base>`); tests in `test/runtime/` against repositories the test creates in a temporary directory.
