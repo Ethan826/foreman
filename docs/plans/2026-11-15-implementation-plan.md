@@ -436,6 +436,74 @@ Before B1: a dependency-intake record for `bun:sqlite` (built into Bun
 
 `backlog remove` waits on O2 (Part C).
 
+### Milestone 1 record (2026-11-17)
+
+Tasks B1 to B10 ran inline on branch `part-b-m1` under the owner's 1M-token
+authorization, in the order B1, B2, B5, B3, B4, B6, B7, B8, B10, B9 (see the
+rulings). One fresh-context review (Opus, about 132k tokens, 31 tool calls)
+read the whole branch; one fix pass followed. Token use for the milestone is
+not measurable from inside the session; a rough estimate is 600 to 750k,
+unverified. Escape-hatch scan over the branch: none; the one changed config
+is `package.json`'s test script (run the suite on the Bun runtime).
+
+Completion lines from the ledger:
+
+- Task B1: complete (commits b4e285e..ae57bad, tests: bun run test →    Duration  2.35s (import 46%, tests 42%, transform 10%, worker 1%))
+- Task B2: complete (commits ae57bad..ab6568c, tests: bun run test →    Duration  2.45s (import 46%, tests 42%, transform 11%, worker 1%))
+- Task B5: complete (commits ab6568c..a0712ad, tests: bun run test →    Duration  2.83s (import 50%, tests 38%, transform 12%, worker 1%))
+- Task B3: complete (commits a0712ad..b9cef71, tests: bun run test →    Duration  3.52s (import 52%, tests 39%, transform 8%, worker 1%))
+- Task B4: complete (commits b9cef71..faee335, tests: bun run test →    Duration  2.72s (import 47%, tests 43%, transform 9%, worker 1%))
+- Task B6: complete (commits faee335..5dd7e8f, tests: bun run test →    Duration  2.80s (import 48%, tests 42%, transform 9%, worker 1%))
+- Task B7: complete (commits 5dd7e8f..99ea1bb, tests: bun run test →    Duration  2.90s (import 49%, tests 41%, transform 9%, worker 1%))
+- Task B8: complete (commits 99ea1bb..8dd6f18, tests: bun run test →    Duration  2.94s (import 48%, tests 41%, transform 9%, worker 1%))
+- Task B10: complete (commits 8dd6f18..bad1f3e, tests: bun run test →              at least ~264ms faster with isolate: false — reuses workers across files instead of one per file)
+- Task B9: complete (commits bad1f3e..5d09390, tests: bun run test →              at least ~254ms faster with isolate: false — reuses workers across files instead of one per file)
+
+Rulings (each with its cost if wrong):
+
+- Ruling: task ids are B1..B10; this skill's task-start/task-brief parse only numeric "Task N" headings, so briefs are extracted by hand from the plan and ledger lines are written in the same format — the committed plan stays unchanged — cost if wrong: none to the code; a resume must read this note.
+- Ruling: branch part-b-m1 in the main checkout rather than a worktree — Part A ran on main with the owner's knowledge and nothing else is checked out here — cost if wrong: the owner's checkout sits on the branch until landing.
+- - B5 -> B3: B3's settleActions reads ProjectLogView built from B5's events, but B3 precedes B5. Ruling: execute B5 before B3 — order only, no scope change — cost if wrong: none.
+- - B4 and B5 both create src/runtime/project-lock.ts. Ruling: B5 creates it (the flock holder), B4 consumes it — cost if wrong: none.
+- - B10 -> B9: the scheduler's candidates need approvalFor. Ruling: execute B10 before B9 — cost if wrong: none.
+- - B3 says src/runtime/admission.ts runs pace and rule 2, but the lint layer table lets runtime import only domain. Ruling: admission composition goes in src/program/admission.ts (program may import features and runtime); runtime keeps the store — cost if wrong: one file location.
+- - B3 says admission runs rule 2, but allocations and the rate fit are B17 (milestone 3). Design: windows are in fallback until rates converge, and in fallback rule 1 alone admits. Ruling: rule 2 is an injected function; milestone 1 supplies the fallback (no rule-2 refusal), named as such — cost if wrong: rule 2 untested until B17.
+- B1: Ruling: no Bun type package is installed and tsconfig has types []; declare the bun:sqlite API the store uses in src/runtime/bun-sqlite.d.ts, following test/lint/child-process.d.ts — no new dependency — cost if wrong: a wrong declaration compiles but fails at run time, which the store's tests would show.
+- B1: Ruling: rows carry no seq; the snapshot pairs each row with its seq (LedgerEntry), and append returns the seqs written — a row is the same value before and after it is stored — cost if wrong: none to behavior.
+- B1: Ruling: LedgerTx.read and append return Effects (append can refuse a charge after a cancel with a typed error) — the plan sketched them as plain returns — cost if wrong: none.
+- B1: Ruling: run the test suite on the Bun runtime (`bun --bun vitest run`) — vitest's binary otherwise runs workers on Node 26, which has no bun:sqlite, and Bun has no node:sqlite; foreman runs on Bun, so this is the stricter, more faithful choice; the existing suite passes unchanged under Bun (242/242 before the store's tests) — cost if wrong: a Node-only behavior difference would go unseen, but production is Bun.
+- B1: Ruling: the test that holds the write lock from a second connection keeps that helper in the test file, not in src — test-only code stays in tests — cost if wrong: none.
+- B5: Ruling: commit outcomes are logged as CommitRecorded(opId, outcome) reusing Domain's CommitOutcome, steps as Finished(opId, outcome, endedAt) reusing StepOutcome, and holds as HoldCreated(hold) — Domain already has classes tagged Committed, NothingToCommit, CommitRefused and CommitFailed, and a second set of identically tagged events would collide — cost if wrong: event names differ from the plan's list, not their content.
+- B5: Ruling: the project lock is SQLite's exclusive lock on a dedicated lock file (PRAGMA locking_mode=EXCLUSIVE, BEGIN EXCLUSIVE, busy_timeout 0), held for the run — Bun exposes no flock and the design asks for a non-blocking single-writer lock released when the holder dies; SQLite's unix locks are POSIX fcntl locks the OS drops with the process — published primitive (SQLite locking), not invented — cost if wrong: on a filesystem without POSIX locks the lock would not hold; such filesystems are not supported for the ledger either.
+- B5: Ruling: the LedgerBound check is a pure function in src/features/binding.ts — the plan lists only domain and runtime files for B5, but the check is a decision and belongs in Features — cost if wrong: one file location.
+- B3: Ruling: SettleAction has CancelOrphan and ChargeFromFinished only; ChargeAtEstimate is for a step startup found ended without Finished (B14, milestone 2) and has no source in this milestone — cost if wrong: one variant added in B14.
+- B3: Ruling: rule 2 is the injected AllocationRule; this milestone provides allocationsInFallback (always admits), since every window is in fallback until the rate fit (B17) converges and the design admits by rule 1 alone in fallback — cost if wrong: none until B17.
+- B3: Ruling: a waived request is admitted whatever pace says and still takes its grant at its estimate (design C7); arming, consuming and expiring waivers is B7 — cost if wrong: none.
+- B4: Ruling: the command that takes the lock, reads the log and writes the settle lives in src/program/ledger-settle.ts with its test in test/program/ — it composes Runtime lock, log and ledger, which only Program may do; the plan named a runtime test file — cost if wrong: file location.
+- B6: Ruling: add event ProtectedReleased(accept) — the design's release-protected command has no event in the log, and a hold must be released only by its own event — cost if wrong: one event added.
+- B6: Ruling: holdsOf folds the log's own releases; a quota hold's release by readings is quotaReleased, a separate pure check over readings and pacing that the scheduler applies — the log cannot see the ledger — cost if wrong: none; both are pure and tested.
+- B6: Ruling: a Quota hold with an empty window list is never released by readings, only by a waiver — closes the vacuous release found while writing TSDoc (plan note 5) — cost if wrong: a provider with no policy windows needs a waiver per launch, which the design already requires (Unknown).
+- B7: Ruling: add event WaiverExpired(waiverId), appended by a launch attempt that does not launch a step of the waived provider — the design expires an armed waiver at the next attempt whatever its result, and a refused attempt otherwise leaves no record — cost if wrong: one event.
+- B10: Ruling: "the next tranche" for the approval hold after a passing review is the backlog's head entry, or a tranche already started (an implement step intended and not ended or unwound) — the design does not define "next" further — cost if wrong: a hold created or skipped when the owner meant another order.
+- B9: Ruling: the scheduler takes an injected admission check (a verdict per candidate, computed by Program from the ledger with pace and the allocation rule) and an injected reset time per provider, rather than the whole LedgerSnapshot — admission's real decision writes a grant in a transaction, and the scheduler stays pure — cost if wrong: Program must compute the verdicts; the race between the check and the real admit refuses at admit and the next attempt tries again.
+- B9: Ruling: when the head's last review requested changes and no rounds remain, schedule returns EndNotConverged(tranche) (C6) — the plan's test list names this outcome — cost if wrong: none.
+- Final: Ruling: F5 a wall clock set back re-activates a loosening spend-down until a new period — the same rule as pace's now < resetsAt, which the C16 property already allows (setting the clock back loosens only through now < resetsAt) — cost if wrong: a looser cap for the rest of the period after the clock is set back.
+
+Review fixes:
+
+- Final: fixed F1 transaction bracket — test/runtime/sqlite-transaction.test.ts RED→GREEN (missing bracket; :memory: ledger opened), suite green
+- Final: fixed F3 waiver applied only to its provider — admission.test "ignores a waiver armed for another provider" RED→GREEN, suite green
+- Final: fixed F4 grant points in every policy window — admission.test "records the grant in every policy window pacing checked" RED→GREEN, suite green
+- Final: fixed F6 unwind on notConverged and abandon — review-queue.test "also unwinds ... not converged or abandoned" RED→GREEN, suite green
+- Final: fixed F9c no second entry for a started tranche — backlog.test "refuses a second entry for a tranche whose approval was used" RED→GREEN, suite green
+
+Deferred minor findings:
+
+- Final: minor (deferred): F2 project lock has no cross-process test; take leaks the handle when BEGIN EXCLUSIVE throws; release skips close if ROLLBACK throws.
+- Final: minor (deferred): F7 tests weaker than plan named (settle crash-point property mirrors the rule; busy_timeout wait-then-succeed untested; mid-settle failure only at store level; holds property inserts only Launched).
+- Final: minor (deferred): F8 Reconciled must be appended at reconcile completion (B15); RequestCompleted carries no outcome, so a failed restore would release drift (B15).
+- Final: minor (deferred): F9a Launch.candidate.role is Schema.String rather than Role; F9b no per-store semaphore on transact.
+
 ### Task B11: Git and worktree handling
 
 **Files:** `src/runtime/git.ts` (clean git environment with the recorded `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `-c` overrides), `src/runtime/worktree.ts` (supervisor worktree creation as intent, effect, completion; review worktree `--lock --detach`; startup check), `src/runtime/protected.ts` (digest walk and compare), `src/runtime/commit.ts` (temporary index, `commit-tree` with `Op-Id` trailer, `update-ref HEAD <new> <base>`); tests in `test/runtime/` against repositories the test creates in a temporary directory.
