@@ -731,6 +731,43 @@ and runtime READMEs.
 - [ ] Tests first (D, C9 git part, C11, C12): a planted hook, filter, fsmonitor and signing program write no marker file during any shell git command; `update-ref` with a stale base is refused and the owner's branch and checkout are unchanged; the commit ignores the worktree's index; a protected change creates the `Protected` outcome before any git command; the owner's checkout is byte-identical after a full commit cycle.
 - [ ] Implement; check and test; commit, one commit per file pair.
 
+#### B11a: create and identify the supervisor worktree (scoped 2026-11-17)
+
+The owner authorized this one slice of B11 on 2026-11-17, not the rest of
+B11 or the next milestone. It is also a trial of a different way to
+control delegated work.
+
+Deliverable, on branch `b11a-worktree` from `main`:
+
+- Create, following the design's "Supervisor worktree" section: resolve
+  `base` (`rev-parse HEAD` in the owner's checkout unless a start
+  revision is given), run `git worktree add --lock --reason foreman -b
+  foreman/<name> <path> <base>`, then resolve `rev-parse
+  --absolute-git-dir --git-common-dir` in the new worktree. Return the
+  fields of `WorktreeCreated`. Report an existing branch or path as a
+  typed failure, with no cleanup.
+- Identify (the startup check): decode `git worktree list --porcelain`
+  in Format and decide in Features whether the recorded path is listed on
+  `refs/heads/<branch>` and locked. Report which condition failed.
+- Focused tests against disposable repositories the tests create in a
+  temporary directory. They cover creation, the existing branch, the
+  existing path, the owner's checkout unchanged, the identify check
+  passing, an unlocked worktree, a different branch, a missing path, and
+  decoder cases (including a locked entry with and without a reason).
+
+Excluded: process launching, startup recovery (completing
+`WorktreeIntended` without `WorktreeCreated`), appending events to the
+project log, the clean git environment and `-c` overrides
+(`src/runtime/git.ts`), the review worktree, protected digests, the commit
+procedure, and new dependencies.
+
+Control method: one worker invocation, with no delegation and no
+automatic follow-up. It stops at completion or at the first scope
+conflict and writes a checkpoint (as text to the coordinator) either way.
+Its token figure is an estimate (about 60k), not a cap. No deadline is
+set, because nothing outside the worker would enforce one. The harness
+measures consumption afterward, and the coordinator records it here.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
