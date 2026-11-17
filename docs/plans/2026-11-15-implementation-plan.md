@@ -844,6 +844,37 @@ a test for the race path only. In 1, creation takes `--show-toplevel`
 without checking that it resolves to the requested path or that the
 worktree is on the branch. The correction unit adds that check too.
 
+Correction unit, first attempt (2026-11-17): stopped. Nothing was
+committed, `src/` is unchanged, and the review has not started.
+
+- What stopped it: a test run of `bun --bun vitest run
+  test/features/worktree-check.test.ts`, started after the test was
+  edited but before `src/` changed, hung past the 120s tool timeout. The
+  worker stopped that run, then tried `pkill -f` on vitest workers, and
+  the auto-mode classifier denied it ("Destructive or Unwanted Actions").
+  The worker stopped and quoted the denial, as the rules require. No
+  vitest process was left running. Why the run hung is not known; a
+  failing test should fail, not hang.
+- Left uncommitted on `b11a-worktree`: `test/format/worktree-list.test.ts`
+  holds the item A tests, rewritten for `-z`. It was seen failing for the
+  right reason: 11 cases fail against the newline decoder. The item B
+  tests in `test/features/worktree-check.test.ts` are the ones that hung,
+  so they have not been seen failing.
+- Probe findings (git 2.50.1, Apple Git-155):
+  - Without `-z`, git prints worktree paths raw, never quoted. It quotes
+    only the lock reason, and a newline in a path splits the record. B11a
+    deviation 4 and the decoder's header note are wrong about paths.
+  - Creation's single three-value `rev-parse` splits on newlines, so a
+    path containing a newline breaks creation too.
+  - `rev-parse --absolute-git-dir`, `--path-format=absolute
+    --git-common-dir` and `--show-toplevel` resolve symlinks themselves.
+- The worker's planned design is in its checkpoint, kept by the
+  coordinator. It adds `directory-present` and `git-identity` to
+  `WorktreeConditions` and moves `createWorktree` into Program, because
+  Runtime may not import Features.
+- Consumption, measured by the harness: 104,887 tokens (27 tool calls,
+  about 6.5 minutes).
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
