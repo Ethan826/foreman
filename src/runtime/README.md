@@ -11,3 +11,9 @@ Per the [design](../../docs/plans/2026-11-14-agent-supervisor-design.md) ("Archi
 [`ledger-sqlite.ts`](ledger-sqlite.ts) implements Domain's `LedgerStore` on a SQLite file through Bun's built-in `bun:sqlite` ([intake record](../../docs/dependency-intake.md)). Each record kind has its own table, and a one-row `ledgerSeq` table numbers every row across all tables. Each write is one `BEGIN IMMEDIATE` transaction, so seq order is commit order. A transaction that fails rolls back with no row written and no seq used. A second charge or cancel of a grant is skipped, and a charge of a canceled grant (or the reverse) fails with `GrantSettled`. A write that waits longer than `busy_timeout` for another connection's lock fails with `LedgerBusy` and writes nothing. [`bun-sqlite.d.ts`](bun-sqlite.d.ts) declares the parts of `bun:sqlite` the store uses, since the project installs no Bun type package.
 
 Tests run on the Bun runtime (`bun --bun vitest run`), so they reach `bun:sqlite` against temporary database files.
+
+## Project log and lock
+
+[`project-log.ts`](project-log.ts) implements Domain's `ProjectLog`: one SQLite table of events numbered from 1. Each append includes the position its writer last read and runs in one `BEGIN IMMEDIATE` transaction. If another writer appended first, the append fails with `PositionMoved` and writes nothing. The writer then re-reads the log and decides again.
+
+[`project-lock.ts`](project-lock.ts) gives one holder at a time and refuses a second at once with `LockHeld`. Bun has no `flock`, so the lock is SQLite's exclusive lock on a dedicated lock file, held with `busy_timeout` 0. SQLite's unix locks are POSIX advisory locks, which the operating system drops when the holder's process dies. [`sqlite.ts`](sqlite.ts) holds what the stores share: recognizing `SQLITE_BUSY` and reading an error's message.

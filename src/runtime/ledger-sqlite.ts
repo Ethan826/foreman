@@ -32,6 +32,7 @@ import {
   SpendDown,
   SpendDownCanceled,
 } from "../domain/ledger.ts"
+import { isSqliteBusy, sqliteReason } from "./sqlite.ts"
 
 /** The table names (design "Where the ledger lives"). */
 const Tables = {
@@ -77,21 +78,9 @@ const tableFor = (row: LedgerRow) =>
     () => new LedgerError({ reason: "a row kind with no table" }),
   )
 
-/** SQLite's result code for a lock held past `busy_timeout`. */
-const SqliteCodes = { Busy: "SQLITE_BUSY" } as const
-const isBusy = Schema.is(Schema.Struct({ code: Schema.Literal(SqliteCodes.Busy) }))
-const messageOf = Schema.decodeUnknownOption(Schema.Struct({ message: Schema.String }))
-
-/** The message of a thrown error, when it has one. */
-const reasonOf = (error: unknown): string =>
-  Option.match(messageOf(error), {
-    onNone: () => "unknown SQLite error",
-    onSome: ({ message }) => message,
-  })
-
 /** Maps a thrown SQLite error to LedgerBusy (lock held) or LedgerError. */
 const toFailure = (error: unknown): LedgerBusy | LedgerError =>
-  isBusy(error) ? new LedgerBusy() : new LedgerError({ reason: reasonOf(error) })
+  isSqliteBusy(error) ? new LedgerBusy() : new LedgerError({ reason: sqliteReason(error) })
 
 /** Runs a synchronous SQLite call, mapping a thrown error. */
 const withDb = <A>(use: () => A) => Effect.try({ try: use, catch: toFailure })
