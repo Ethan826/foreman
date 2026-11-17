@@ -41,6 +41,13 @@ Where the foreman work stands, for the next session.
    c0cee4f fixed it, and both stay in history. Part A's token use is
    unknown: roughly estimated at 200k, not verified to be within the
    300k cap.
+9. Open failure, 2026-11-16: `test/lint/prose.test.ts` ("passes on the
+   repository's own Markdown") failed once in three full `bun run test`
+   runs and passed alone and in the other two. The failure message was
+   not captured. Alone it takes about 1.2 seconds against vitest's
+   default 5-second timeout; a timeout under the full suite's parallel
+   load is the leading hypothesis, unverified. Not fixed: raising the
+   timeout would loosen a tolerance, which needs the owner.
 8. Waiting on the owner: the accounting choice (deferred until L1 and L2
    reported; the arithmetic is to be rechecked before it is presented),
    O14 (Codex reset times roll forward while idle), approval of Part B,

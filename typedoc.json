@@ -1,0 +1,36 @@
+{
+  "$schema": "https://typedoc.org/schema.json",
+  "name": "foreman",
+  "entryPoints": [
+    "src"
+  ],
+  "entryPointStrategy": "expand",
+  "exclude": [
+    "**/*.md"
+  ],
+  "out": "site",
+  "readme": "README.md",
+  "excludePrivate": false,
+  "validation": {
+    "notExported": true,
+    "invalidLink": true,
+    "notDocumented": true
+  },
+  "treatWarningsAsErrors": true,
+  "githubPages": true,
+  "excludeExternals": true,
+  "externalSymbolLinkMappings": {
+    "effect": {
+      "*": "https://effect-ts.github.io/effect/"
+    }
+  },
+  "requiredToBeDocumented": [
+    "Enum",
+    "Variable",
+    "Function",
+    "Class",
+    "Interface",
+    "TypeAlias",
+    "Namespace"
+  ]
+}

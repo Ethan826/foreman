@@ -55,8 +55,10 @@ export interface PaceInput {
   readonly nowMono: Option.Option<MonoStamp>
   readonly policy: Policy
   readonly provider: Client
+  /** The next step's estimate in points for a window; pace raises it to `minEstimatePoints`. */
   readonly estimate: (window: Window) => number
   readonly counting: ReadonlyArray<GrantPoints>
+  /** The cap in points for a window, usually {@link defaultCap}; a spend-down supplies its own. */
   readonly cap: (window: Window) => number
 }
 

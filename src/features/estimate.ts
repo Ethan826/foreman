@@ -28,6 +28,7 @@ export interface StepSpan {
  */
 export interface FinishedStep {
   readonly role: Role
+  /** The step's measured increase in points for a window, or none when the step is unmeasured there. */
   readonly increase: (window: Window) => Option.Option<number>
 }
 

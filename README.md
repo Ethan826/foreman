@@ -30,7 +30,7 @@ Imports point inward. Domain imports nothing. Features and Format are the pure c
 
 ## How it works
 
-For sequence diagrams of a tranche and of a launch attempt, the hold states, a plain-words account of pacing, and what exists today, read [docs/how-it-works.md](docs/how-it-works.md). Each `src/` layer has a README linked from there.
+For sequence diagrams of a tranche and of a launch attempt, the hold states, a plain-words account of pacing, and what exists today, read [docs/how-it-works.md](docs/how-it-works.md). Each `src/` layer has a README linked from there. The API reference, generated from the TSDoc in `src/` by `bun run docs`, is published at https://ethan826.github.io/foreman/.
 
 ## Why not Ralph
 

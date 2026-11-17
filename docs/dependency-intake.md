@@ -199,6 +199,34 @@ Added 2026-11-15. No new package: both ship inside the pinned `effect`.
 - Release cycle and maintenance: same as `effect`; upgrades are reviews.
 - License and pinning: as `effect`.
 
+## typedoc 0.28.20 (2026-11-16)
+
+- Why: the owner asked for generated API documentation from the TSDoc in
+  `src/`, published to GitHub Pages. `bun run docs` writes the site to
+  `site/` (ignored by git); `.github/workflows/docs.yml` builds it and
+  deploys it on each push to `main`.
+- Alternatives considered: `@microsoft/api-extractor` with
+  `api-documenter` (built for published libraries, needs a declaration
+  build first); hand-written Markdown (drifts from the code).
+- Footprint: dev-only. Five direct dependencies (`@gerrit0/mini-shiki`,
+  `lunr`, `markdown-it`, `minimatch`, `yaml`); the install added 20
+  packages. Nothing in `src/` imports it.
+- Fit: `typedoc.json` documents every module under `src/`, maps Effect
+  symbols to Effect's API reference, requires documentation on
+  declarations (not fields) and treats every warning as an error, so the
+  docs build also fails on an undocumented declaration or a broken link.
+- Release cycle and maintenance: TypeStrong organization, frequent
+  releases; 0.28.20 was released 2026-07-05 and supports TypeScript 5.0
+  to 6.0 (this project pins 5.9.3). Minor releases change options, so
+  every upgrade is a review.
+- Security and supply chain: no install scripts. It runs in CI with read
+  access only; the deploy job alone has `pages: write` and
+  `id-token: write`.
+- License: Apache-2.0, compatible with this project's license.
+- Pinning: exact `0.28.20`, resolved into `bun.lock`. The three GitHub
+  Pages actions are pinned by commit: `actions/configure-pages` v6.0.0,
+  `actions/upload-pages-artifact` v5.0.0, `actions/deploy-pages` v5.0.1.
+
 ## Considered and declined
 
 - oxlint and biome: see above.
