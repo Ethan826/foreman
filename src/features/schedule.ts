@@ -22,7 +22,7 @@ import { Array as Arr, Option, Order, Schema } from "effect"
 import { Client } from "../domain/clients.ts"
 import { TrancheId } from "../domain/ids.ts"
 import { ChangesRequested, type StepOutcome } from "../domain/outcomes.ts"
-import { type Role, type RoleClients, Roles } from "../domain/roles.ts"
+import { Role, type RoleClients, Roles } from "../domain/roles.ts"
 import { Window } from "../domain/window.ts"
 import type { QueueEntry } from "./review-queue.ts"
 
@@ -90,7 +90,7 @@ export class Launch extends Schema.TaggedClass<Launch>()("Launch", {
   candidate: Schema.Struct({
     kind: Schema.Literals([CandidateKinds.Correction, CandidateKinds.Review, CandidateKinds.Implement]),
     tranche: TrancheId,
-    role: Schema.String,
+    role: Role,
     provider: Client,
   }),
 }) {}

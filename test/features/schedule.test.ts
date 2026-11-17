@@ -1,10 +1,10 @@
 // The scheduler (plan Task B9; design "Scheduler", C19, H1, C6).
 import { describe, expect, it } from "@effect/vitest"
-import { Option, Schema } from "effect"
+import { Option, Result, Schema } from "effect"
 import { type Client, Clients } from "../../src/domain/clients.ts"
 import { Revision, TrancheId } from "../../src/domain/ids.ts"
 import { ChangesRequested, Success } from "../../src/domain/outcomes.ts"
-import { defaultRoleClients } from "../../src/domain/roles.ts"
+import { defaultRoleClients, Roles } from "../../src/domain/roles.ts"
 import { Windows } from "../../src/domain/window.ts"
 import {
   Admits,
@@ -118,5 +118,17 @@ describe("schedule: holds and refusals", () => {
   it("launches the next candidate when the first is refused", () => {
     const ctx = context({ verdict: (c) => (c.kind === CandidateKinds.Implement ? new RefusedByAllocation() : new Admits()) })
     expect(kindOf(schedule(view(), ctx))).toBe(CandidateKinds.Review)
+  })
+})
+
+describe("Launch", () => {
+  it("accepts only roles of the closed vocabulary", () => {
+    const decode = Schema.decodeUnknownResult(Launch)
+    const launch = (role: string) => ({
+      _tag: "Launch",
+      candidate: { kind: CandidateKinds.Review, tranche: "t-1", role, provider: Clients.Codex },
+    })
+    expect(Result.isSuccess(decode(launch(Roles.Reviewer)))).toBe(true)
+    expect(Result.isFailure(decode(launch("boss")))).toBe(true)
   })
 })
