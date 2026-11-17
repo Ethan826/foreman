@@ -41,13 +41,23 @@ Where the foreman work stands, for the next session.
    c0cee4f fixed it, and both stay in history. Part A's token use is
    unknown: roughly estimated at 200k, not verified to be within the
    300k cap.
-9. Open failure, 2026-11-16: `test/lint/prose.test.ts` ("passes on the
-   repository's own Markdown") failed once in three full `bun run test`
-   runs and passed alone and in the other two. The failure message was
-   not captured. Alone it takes about 1.2 seconds against vitest's
-   default 5-second timeout; a timeout under the full suite's parallel
-   load is the leading hypothesis, unverified. Not fixed: raising the
-   timeout would loosen a tolerance, which needs the owner.
+9. Intermittent failure, investigated 2026-11-17: `test/lint/prose.test.ts`
+   ("passes on the repository's own Markdown") failed once in three full
+   runs on 2026-11-16; the message was not captured. Investigation:
+   - Timing. 5 plain full runs, 3 runs beside a concurrent `bun run
+     check`, and 20 runs under a continuous `bun run check` loop: 0
+     failures in 28. The test took 1.5 to 2.0 seconds under load against
+     vitest's 5-second default. The timeout hypothesis is not supported.
+   - No test writes files, so one test racing another is ruled out.
+   - `tools/prose/check.sh` scans tracked and untracked, not-ignored
+     Markdown. A probe with a temporary untracked `.md` containing a tell
+     fails this test while the file exists and passes once it is gone. A
+     transient untracked Markdown file at the time would explain one
+     failure followed by clean reruns; that such a file existed is not
+     shown.
+   - The test now reports status, signal, spawn error, stderr and every
+     BLOCK line on failure, and asserts no spawn error or signal, so a
+     recurrence names its cause. No timeout or tolerance was changed.
 8. Waiting on the owner: the accounting choice (deferred until L1 and L2
    reported; the arithmetic is to be rechecked before it is presented),
    O14 (Codex reset times roll forward while idle), approval of Part B,

@@ -19,9 +19,24 @@ describe("prose gate", () => {
     expect(result.status).toBe(0)
   })
 
+  // On failure, the message carries everything needed to tell a blocking
+  // finding from a failed spawn: status, signal, spawn error, stderr and
+  // the BLOCK lines (an intermittent failure on 2026-11-16 left none).
   it("passes on the repository's own Markdown", () => {
     const result = run()
-    expect(result.status).toBe(0)
-    expect(result.stdout).toContain("prose: checked")
+    const blockLines = result.stdout
+      .split("\n")
+      .filter((line) => line.includes("BLOCK"))
+    const diagnosis = JSON.stringify({
+      status: result.status,
+      signal: result.signal,
+      error: result.error?.message,
+      stderr: result.stderr,
+      blockLines,
+    })
+    expect(result.error, diagnosis).toBeUndefined()
+    expect(result.signal, diagnosis).toBeNull()
+    expect(result.status, diagnosis).toBe(0)
+    expect(result.stdout, diagnosis).toContain("prose: checked")
   })
 })
