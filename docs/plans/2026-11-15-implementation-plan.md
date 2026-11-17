@@ -504,6 +504,53 @@ Deferred minor findings:
 - Final: minor (deferred): F8 Reconciled must be appended at reconcile completion (B15); RequestCompleted carries no outcome, so a failed restore would release drift (B15).
 - Final: minor (deferred): F9a Launch.candidate.role is Schema.String rather than Role; F9b no per-store semaphore on transact.
 
+### Milestone 1 corrections (2026-11-17, owner review)
+
+Done, on branch `part-b-m1`:
+
+- Admission decided in Features: `decideAdmission` in
+  `src/features/admission.ts` (waiver for its own provider, pacing, rule 2
+  per window); Program's `admit` only reads, writes and wires. This
+  supersedes B3's "`src/runtime/admission.ts` runs `pace` and rule 2".
+  The cap is computed from the snapshot, spend-downs included; the
+  `AdmissionContext.cap` field is gone and `AllocationRule` takes a window.
+- F5 (not accepted by analogy): a loosening spend-down whose reset time
+  foreman sees passed is ended for good by `SpendDownCanceled(cause
+  resetPassed)`, written in the admission transaction; a clock set back
+  cannot revive it. `SpendDownCanceled` gains `cause` (vocabulary
+  `SpendDownEndCauses`).
+- Overlapping `transact` calls on one store failed with "cannot start a
+  transaction within a transaction" (established by a test first); each
+  ledger store now queues them on a one-permit semaphore. The project log
+  has the same semaphore defensively: its append body never yields, so its
+  overlap test passes with or without it and is not evidence for it.
+- `Launch.role` is the `Role` schema.
+
+Remaining, not done (checkpointed for budget; the owner decides):
+
+- F7's planned tests: a crash-sequence property run through the real
+  store (generated admit, Intended, Finished, crash and settle
+  sequences; no grant both charged and canceled, none charged twice, no
+  orphan left after a settle); a store-level test that a batch append
+  failing on its second row writes nothing; a `busy_timeout`
+  wait-then-succeed test, which needs a second process because a
+  synchronous SQLite wait blocks the event loop; a broader holds property
+  that inserts every non-release event kind.
+- The automated cross-process lock test: a child Bun process holds the
+  lock, the parent is refused, the child is killed with SIGKILL, and the
+  parent acquires. It needs a small declaration of `Bun.spawn` for the
+  tests.
+
+Interfaces and provenance superseded by milestone 1 (beyond the
+corrections above): B1's rows carry no seq (`LedgerEntry` pairs them);
+`LedgerTx.read`/`append` return Effects; B4's command lives in
+`src/program/ledger-settle.ts`; B5's lock is SQLite's exclusive lock on a
+lock file rather than `flock` (published primitive, SQLite locking),
+logged commit outcomes are `CommitRecorded` and holds `HoldCreated`, with
+new events `ProtectedReleased` and `WaiverExpired`; `PaceInput.periods`
+became `PaceInput.readings`; the scheduler takes injected verdicts and
+reset times; the test suite runs on the Bun runtime.
+
 ### Task B11: Git and worktree handling
 
 **Files:** `src/runtime/git.ts` (clean git environment with the recorded `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `-c` overrides), `src/runtime/worktree.ts` (supervisor worktree creation as intent, effect, completion; review worktree `--lock --detach`; startup check), `src/runtime/protected.ts` (digest walk and compare), `src/runtime/commit.ts` (temporary index, `commit-tree` with `Op-Id` trailer, `update-ref HEAD <new> <base>`); tests in `test/runtime/` against repositories the test creates in a temporary directory.
