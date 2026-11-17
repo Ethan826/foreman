@@ -922,6 +922,56 @@ corrections):
   coordinator's tokens for inline work are not measured by the harness,
   so no token figure is claimed.
 
+The owner accepted `gtimeout -k 5 <seconds>` as the cancellation
+mechanism for these runs (2026-11-17). It is an external timeout over the
+run's process group, and the agent harness does not have to own it.
+`pgrep` afterward is a diagnostic, not proof of cleanup.
+
+Correction unit, resumed (2026-11-17): complete, f3577b5, on
+`b11a-worktree`. It is not landed, pushed or reviewed.
+
+- The recursive helper is fixed. The F9 tests first failed on a schema
+  error building the expected value, because the conditions did not exist
+  yet. With the Domain vocabulary added first, all 5 failed on their
+  assertions.
+- A: the listing is read with `--porcelain -z`, and `decodeWorktreeList`
+  splits fields at NUL, with records at empty fields. A real worktree
+  whose path contains a newline passes the startup check. With the old
+  decoder and no `-z`, it fails with `failed: ['path-listed']`. Creation
+  reads each `rev-parse` value with its own command (decoders in
+  `src/format/rev-parse.ts` strip exactly one newline). A real path
+  containing a newline creates correctly. The old combined `rev-parse`
+  failed with `GitOutputUndecodable` ("Expected no excess property").
+- B (F9): conditions `directory-present` and `git-identity`, read by
+  `src/runtime/worktree-directory.ts`. A deleted directory fails Present,
+  and the locked registration stays listed. An unrelated directory, or
+  another repository, fails Identity. Nothing is pruned, unlocked or
+  removed.
+- C: `checkCreated` (`src/features/worktree-created.ts`) checks that the
+  resolved top level is the requested path with symlinks resolved, and
+  that HEAD is `refs/heads/foreman/<name>`. Otherwise it fails with
+  `WorktreeNotAsCreated`. Creation moved to Program.
+- D: a simulated branch race keeps git's args, exit code and stderr. The
+  code was unchanged, and a mutant that drops stderr fails the test.
+- The worker's deviations from the planned design: a new `PathUnreadable`
+  error (stat or realpath failed on a present path); Runtime split into
+  `worktree.ts`, `worktree-directory.ts` and `file-paths.ts` (file-length
+  limit); creation's raw-read type `AddedWorktree` in Runtime, with only
+  `DirectoryReading` in Domain.
+- Gate note, open: `test/lint/fixtures.test.ts` checks only that
+  `bare-names.ts` reports at least one closed-vocabulary message. The two
+  new must-fail lines are not each asserted.
+- Timeouts: none fired. A stray `cat >> /dev/null` in one shell command
+  blocked on stdin. The worker stopped that task by its task ID, and no
+  pattern kill was used.
+- Coordinator's verification: `gtimeout -k 5 300 bun run check` PASS (0
+  blocking; 30 non-blocking notes, the new one an and-chain at
+  `src/features/README.md:120`). `gtimeout -k 5 300 bun run test` PASS
+  (46 files, 487 tests).
+- Consumption, measured by the harness: 190,319 tokens (62 tool calls,
+  about 13.3 minutes). With the stopped first attempt (104,887), the
+  correction work used 295,206 tokens.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
