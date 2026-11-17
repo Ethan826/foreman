@@ -60,3 +60,7 @@ classDiagram
 ```
 
 `claudeWindowReadings` turns a decoded `rate_limit_event` into one reading per tracked window (five-hour and weekly), in percent and epoch milliseconds. A window without a utilization gives no reading. The shell adds the observation stamps and the ledger `seq` to make an `Observation`. Codex readings wait for the owner's decision on how Codex reset times open periods (O14).
+
+## Worktree listing
+
+[`worktree-list.ts`](worktree-list.ts) decodes `git worktree list --porcelain` into Domain's `WorktreeEntry` values with `decodeWorktreeList`. A `locked` line with no reason decodes as a lock without one. Attributes it does not use, such as `prunable`, are ignored. The output is read without `-z`, so a path that git quotes keeps its quotes and never matches a recorded path.

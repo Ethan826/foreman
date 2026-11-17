@@ -114,3 +114,7 @@ Part B's first milestone adds these pure modules. Each folds the project log or 
 - [`review-queue.ts`](review-queue.ts): the review queue, its bound and unwinding.
 - [`backlog.ts`](backlog.ts): pre-approvals and the approval each tranche starts under.
 - [`schedule.ts`](schedule.ts): the next step, ordered by provider reset time (an invented heuristic, flagged in the design).
+
+## Worktree startup check
+
+[`worktree-check.ts`](worktree-check.ts) holds `checkWorktree`, which decides whether the recorded path is listed on `refs/heads/<branch>` and locked. It returns the entry, or `WorktreeCheckFailed` with each condition that failed. A path that is not listed is reported alone, and a detached entry is not on the branch. Paths compare exactly.

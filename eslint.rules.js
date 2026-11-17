@@ -177,12 +177,15 @@ const literalSchemas = [
 ]
 
 // Closed vocabularies whose canonical modules are listed in canonicalModules.
-const closedNames = ["claude", "codex", "implementer", "reviewer", "corrector"]
-const canonicalModules = ["src/domain/clients.ts", "src/domain/roles.ts"]
+const closedNames = [
+  "claude", "codex", "implementer", "reviewer", "corrector",
+  "path-listed", "on-branch", "is-locked",
+]
+const canonicalModules = ["src/domain/clients.ts", "src/domain/roles.ts", "src/domain/worktree.ts"]
 const bareNames = [
   message(
     `Literal[value=/^(${closedNames.join("|")})$/]`,
-    "Bare closed vocabulary string: refer to the named constant (Clients, Roles) from src/domain/clients.ts or roles.ts.",
+    "Bare closed vocabulary string: refer to the named constant (Clients, Roles, WorktreeConditions) from src/domain/clients.ts, roles.ts or worktree.ts.",
   ),
 ]
 
