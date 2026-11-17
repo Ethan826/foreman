@@ -768,6 +768,51 @@ Its token figure is an estimate (about 60k), not a cap. No deadline is
 set, because nothing outside the worker would enforce one. The harness
 measures consumption afterward, and the coordinator records it here.
 
+Result (2026-11-17): complete, on `b11a-worktree` (b7f881d, f10a3aa). It
+is not landed, pushed or reviewed. The worker stopped at completion with
+no scope conflict.
+
+- Domain `src/domain/worktree.ts` (the vocabulary `WorktreeConditions`
+  and the typed failures). Format `src/format/worktree-list.ts`
+  (`decodeWorktreeList`). Features `src/features/worktree-check.ts`
+  (`checkWorktree`, pure, which lists every condition that fails).
+  Runtime `src/runtime/worktree.ts` (the injected `RunGit`;
+  `createWorktree` uses `execFile` from `node:child_process`, so there is
+  no new package). Program `src/program/worktree.ts`
+  (`identifyWorktree`).
+- Tests: 36 new, in `test/format/`, `test/features/`, `test/program/` and
+  `test/runtime/`, against temporary repositories with local config only.
+- Coordinator's verification on the branch: `bun run check` PASS (0
+  blocking prose findings, the same 29 non-blocking notes as `main`).
+  `bun run test` PASS (44 files, 450 tests).
+
+Deviations for the owner to rule on:
+
+1. Creation also resolves `--show-toplevel`. The recorded path is the
+   path git lists with symlinks resolved (on macOS `/var` lists as
+   `/private/var`). Otherwise a symlinked state directory would fail the
+   startup check as "missing path".
+2. Runtime returns the raw listing, and Program does the decoding and the
+   check, because the layer rules let Runtime import only Domain.
+3. Existing branch and path are refused before `worktree add`. This is
+   stricter than git, which accepts an empty existing directory. A race
+   between the check and the add surfaces as a generic `GitCommandFailed`.
+4. The listing is read without `-z`, as the design says, so a path that
+   git quotes never matches and fails closed as "missing path".
+
+F9 (found in B11a, open, for B11 drift or B14): the design's startup
+check passes when the worktree directory was deleted but its locked
+administrative entry remains, because `git worktree list` still lists
+the path. A later check (drift or HEAD) has to catch this; none does yet.
+
+Consumption: the harness measured 153,558 tokens (55 tool calls, about
+8.7 minutes) against an estimate of about 60k, 2.6 times the estimate.
+The coordinator's use is not included. Notes on the trial: the work unit
+finished cleanly and stopped where it should, with its deviations named.
+The estimate was badly low for a slice of this size: five layers, 36
+tests and real-git fixtures. Measured usage, not the estimate, is the
+figure to plan from.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
