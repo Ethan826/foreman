@@ -33,6 +33,9 @@ notification; Program wires capabilities; the facade (CLI) converts input
 and leaves every decision to the core. Persistent state lives in the shell and passes through the
 pure functions.
 
+Load the skills `effect-v4` and `readable-functional-code` before writing
+or reviewing code in `src/` or `test/`.
+
 - TypeScript with Effect v4 (skill `effect-v4`). Exact pins and a
   committed lockfile once installation is approved.
 - Inject implementations; never select behavior with a flag.
