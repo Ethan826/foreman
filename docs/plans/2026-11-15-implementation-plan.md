@@ -531,7 +531,10 @@ near or beyond the 1M authorization (milestone, review and both
 correction passes); it is not certified as within the cap. The owner
 authorized a separate 150k tokens on 2026-11-17 for the two remaining
 items below, to run in a fresh session; that allowance is accounted
-separately.
+separately. Measured by the harness: the fresh session that did them
+used 157,322 tokens (38 tool calls, about 7 minutes), about 7k over the
+150k allowance, before the coordinator's own verification. The allowance
+was not met.
 
 Remaining, not done (checkpointed for budget; the owner decides):
 
