@@ -4,4 +4,10 @@ See [how it works](../../docs/how-it-works.md).
 
 May import: `domain`.
 
-Per the [design](../../docs/plans/2026-11-14-agent-supervisor-design.md) ("Architecture"), this layer will be the Effect shell: launching agent processes in a new process group, the SQLite event store with its conditional append, the instance lock, the clock, the walk and digest of protected paths, git reads and the commit and reset procedures, and a notifier (a log notifier in the first version). Persistent state lives here and passes through the pure Features functions. The layer table lets Runtime import only Domain, so decisions stay out of it. No process, git, storage, clock or notifier code belongs here until the design is approved.
+Per the [design](../../docs/plans/2026-11-14-agent-supervisor-design.md) ("Architecture"), this layer will be the Effect shell: launching agent processes in a new process group, the SQLite event store with its conditional append, the instance lock, the clock, the walk and digest of protected paths, git reads and the commit and reset procedures, and a notifier (a log notifier in the first version). Persistent state lives here and passes through the pure Features functions. The layer table lets Runtime import only Domain, so decisions stay out of it. The owner approved the design and Part B's first milestone (Tasks B1 to B10).
+
+## Ledger store
+
+[`ledger-sqlite.ts`](ledger-sqlite.ts) implements Domain's `LedgerStore` on a SQLite file through Bun's built-in `bun:sqlite` ([intake record](../../docs/dependency-intake.md)). Each record kind has its own table, and a one-row `ledgerSeq` table numbers every row across all tables. Each write is one `BEGIN IMMEDIATE` transaction, so seq order is commit order. A transaction that fails rolls back with no row written and no seq used. A second charge or cancel of a grant is skipped, and a charge of a canceled grant (or the reverse) fails with `GrantSettled`. A write that waits longer than `busy_timeout` for another connection's lock fails with `LedgerBusy` and writes nothing. [`bun-sqlite.d.ts`](bun-sqlite.d.ts) declares the parts of `bun:sqlite` the store uses, since the project installs no Bun type package.
+
+Tests run on the Bun runtime (`bun --bun vitest run`), so they reach `bun:sqlite` against temporary database files.

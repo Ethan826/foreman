@@ -56,3 +56,11 @@ export type PeriodSeq = typeof PeriodSeq.Type
 export const GrantId = slug.pipe(Schema.brand("GrantId"))
 /** A grant id; see {@link GrantId}. */
 export type GrantId = typeof GrantId.Type
+
+/**
+ * Identifies one project (one target repository and its event log) in the
+ * shared ledger. A slug, like the other identifiers.
+ */
+export const ProjectId = slug.pipe(Schema.brand("ProjectId"))
+/** A project identifier; see {@link ProjectId}. */
+export type ProjectId = typeof ProjectId.Type

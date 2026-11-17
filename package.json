@@ -8,7 +8,7 @@
     "prose": "sh tools/prose/check.sh",
     "lint": "eslint .",
     "diagram": "bun -e 'import { renderOnion } from \"./docs/diagrams/onion.ts\"; await Bun.write(\"docs/diagrams/onion.svg\", renderOnion())'",
-    "test": "vitest run",
+    "test": "bun --bun vitest run",
     "docs": "typedoc"
   },
   "dependencies": {
