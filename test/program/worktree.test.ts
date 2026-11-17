@@ -1,17 +1,28 @@
 // The startup check end to end (design "Supervisor worktree", "Startup
-// check"; plan B11a): git lists the worktrees, Format decodes the listing
-// and Features decides. Each test makes its own repository and worktree.
+// check"; plan B11a and owner rulings 4 and 5 on it): git lists the
+// worktrees, Runtime reads the directory, Format decodes and Features
+// decides. Each test makes its own repository and worktree.
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Option } from "effect"
+import { Effect, Option, Result } from "effect"
+import { mkdirSync, rmSync } from "node:fs"
+import { decodeWorktreeList } from "../../src/format/worktree-list.ts"
+import { listWorktrees } from "../../src/runtime/worktree.ts"
 import type { WorktreeCreated } from "../../src/domain/events.ts"
 import { WorktreeCheckFailed, WorktreeConditions } from "../../src/domain/worktree.ts"
 import type { WorktreeCondition } from "../../src/domain/worktree.ts"
-import { identifyWorktree } from "../../src/program/worktree.ts"
-import { createWorktree } from "../../src/runtime/worktree.ts"
+import { createWorktree, identifyWorktree } from "../../src/program/worktree.ts"
 import { git, withRepo } from "../runtime/git-repo.ts"
 
-const created = (dir: string, owner: string) =>
-  createWorktree({ ownerCheckout: owner, path: `${dir}/worktree`, name: "t", start: Option.none() })
+const createdAt = (owner: string, path: string) =>
+  createWorktree({ ownerCheckout: owner, path, name: "t", start: Option.none() })
+
+const created = (dir: string, owner: string) => createdAt(owner, `${dir}/worktree`)
+
+/** The recorded path's entry in a fresh `-z` listing, read from the common directory. */
+const listedEntry = (worktree: WorktreeCreated) =>
+  Effect.map(listWorktrees(worktree.commonDir), (text) =>
+    Result.map(decodeWorktreeList(text), (entries) => entries.find((entry) => entry.path === worktree.path)),
+  )
 
 const failedWith =
   (worktree: WorktreeCreated) =>
@@ -64,6 +75,48 @@ const reportsRetired = (dir: string, owner: string) =>
     )
   })
 
+const passesWithNewlineInPath = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const worktree = yield* createdAt(owner, `${dir}/work\ntree`)
+    expect(worktree.path).toContain("\n")
+    const entry = yield* identifyWorktree(worktree)
+    expect(entry.path).toBe(worktree.path)
+    expect(entry.branch).toEqual(Option.some("refs/heads/foreman/t"))
+  })
+
+const reportsDeletedDirectory = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const worktree = yield* created(dir, owner)
+    rmSync(worktree.path, { recursive: true, force: true })
+    expect(yield* Effect.flip(identifyWorktree(worktree))).toEqual(
+      failedWith(worktree)(WorktreeConditions.Present),
+    )
+    const entry = yield* listedEntry(worktree)
+    expect(Result.map(entry, (found) => found?.lock)).toEqual(
+      Result.succeed(Option.some({ reason: Option.some("foreman") })),
+    )
+  })
+
+const reportsUnrelatedDirectory = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const worktree = yield* created(dir, owner)
+    rmSync(worktree.path, { recursive: true, force: true })
+    mkdirSync(worktree.path)
+    expect(yield* Effect.flip(identifyWorktree(worktree))).toEqual(
+      failedWith(worktree)(WorktreeConditions.Identity),
+    )
+  })
+
+const reportsOtherRepository = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const worktree = yield* created(dir, owner)
+    rmSync(worktree.path, { recursive: true, force: true })
+    yield* git(dir, "init", "--quiet", "-b", "foreman/t", worktree.path)
+    expect(yield* Effect.flip(identifyWorktree(worktree))).toEqual(
+      failedWith(worktree)(WorktreeConditions.Identity),
+    )
+  })
+
 describe("identifyWorktree (startup check)", () => {
   it.effect("passes for the created worktree", () => withRepo(passesForCreated))
 
@@ -74,4 +127,12 @@ describe("identifyWorktree (startup check)", () => {
   it.effect("reports a detached worktree as not on the branch", () => withRepo(reportsDetached))
 
   it.effect("reports a missing path after the owner retires the worktree", () => withRepo(reportsRetired))
+
+  it.effect("passes for a worktree whose path contains a newline", () => withRepo(passesWithNewlineInPath))
+
+  it.effect("reports a deleted directory; the locked registration stays listed", () => withRepo(reportsDeletedDirectory))
+
+  it.effect("reports an unrelated directory at the path as the wrong identity", () => withRepo(reportsUnrelatedDirectory))
+
+  it.effect("reports another repository at the path as the wrong identity", () => withRepo(reportsOtherRepository))
 })

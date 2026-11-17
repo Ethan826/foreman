@@ -179,7 +179,7 @@ const literalSchemas = [
 // Closed vocabularies whose canonical modules are listed in canonicalModules.
 const closedNames = [
   "claude", "codex", "implementer", "reviewer", "corrector",
-  "path-listed", "on-branch", "is-locked",
+  "path-listed", "directory-present", "git-identity", "on-branch", "is-locked",
 ]
 const canonicalModules = ["src/domain/clients.ts", "src/domain/roles.ts", "src/domain/worktree.ts"]
 const bareNames = [

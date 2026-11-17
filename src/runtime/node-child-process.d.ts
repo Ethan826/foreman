@@ -1,7 +1,7 @@
 // The project installs no Node type package; this declares the parts of
 // Bun's Node-compatible `node:child_process` and `node:fs` that the
 // Runtime layer uses (Bun 1.3.6): `execFile` with a callback, as Node
-// documents it, and `existsSync`.
+// documents it, `existsSync`, `statSync` and `realpathSync`.
 declare module "node:child_process" {
   /**
    * The error `execFile` passes when the child did not exit 0. `code` is
@@ -24,4 +24,8 @@ declare module "node:child_process" {
 declare module "node:fs" {
   /** Whether a file or directory exists at `path` (following symbolic links). */
   export function existsSync(path: string): boolean
+  /** A file's status, following symbolic links; throws when it cannot be read. */
+  export function statSync(path: string): { isDirectory(): boolean }
+  /** The absolute path with every symbolic link resolved; throws when it cannot be resolved. */
+  export function realpathSync(path: string): string
 }

@@ -1,14 +1,16 @@
-// Decoder for `git worktree list --porcelain` (git-worktree(1), "Porcelain
-// Format"): one block per worktree, blocks separated by an empty line, each
-// line an attribute name and an optional value after the first space. The
-// first line of a block is `worktree <path>`. Attributes decoded here:
-// HEAD, branch, detached, bare and locked (with or without a reason).
-// Others, such as `prunable`, are ignored, since git may add attributes.
+// Decoder for `git worktree list --porcelain -z` (git-worktree(1),
+// "Porcelain Format"; owner ruling 4 on B11a): one record per worktree,
+// each attribute ending in NUL and each record ending in one more NUL, so
+// records split at an empty field. An attribute is a name and an optional
+// value after the first space. The first attribute of a record is
+// `worktree <path>`. Attributes decoded here: HEAD, branch, detached, bare
+// and locked (with or without a reason). Others, such as `prunable`, are
+// ignored, since git may add attributes.
 //
-// Blind spot: without `-z`, git quotes a path or lock reason that holds
-// unusual characters such as a newline; such a value is decoded with its
-// quotes, so a quoted path never equals a recorded path and the startup
-// check reports it as not listed.
+// Why `-z` (probed with git 2.50.1): without it, git prints a path raw,
+// never quoted, so a newline in a path splits its record, and it quotes a
+// lock reason with unusual characters. With `-z` both come through
+// verbatim. A NUL cannot occur in a path, so the split is unambiguous.
 import { Array as Arr, Option, Record, Result, Schema, String } from "effect"
 import type { WorktreeEntry } from "../domain/worktree.ts"
 import { GitText } from "../domain/worktree.ts"
@@ -17,8 +19,11 @@ import { Revision } from "../domain/ids.ts"
 /** The separator between an attribute name and its value. */
 const attributeSeparator = " "
 
+/** The byte that ends every attribute, and a record when it follows one. */
+const fieldEnd = "\0"
+
 /**
- * One block's attributes as git prints them. A flag attribute (detached,
+ * One record's attributes as git prints them. A flag attribute (detached,
  * bare, a reasonless locked) has the empty string as its value.
  */
 const PorcelainBlock = Schema.Struct({
@@ -33,30 +38,45 @@ type PorcelainBlock = typeof PorcelainBlock.Type
 
 const decodeBlocks = Schema.decodeUnknownResult(Schema.Array(PorcelainBlock))
 
+/** Records gathered so far; the last is the one being filled. */
+type Records = Arr.NonEmptyReadonlyArray<ReadonlyArray<string>>
+
+/** The fold's start: one empty record. */
+const oneEmptyRecord: Records = [[]]
+
 /**
- * Decodes the text of `git worktree list --porcelain` into its entries, in
- * listing order. Empty text is no entries. Fails when a block has no
- * `worktree` line, an empty path or branch, or a HEAD that is not an
+ * Decodes the text of `git worktree list --porcelain -z` into its entries,
+ * in listing order. Empty text is no entries. Fails when a record has no
+ * `worktree` attribute, an empty path or branch, or a HEAD that is not an
  * object id.
  */
 export const decodeWorktreeList = (
   text: string,
 ): Result.Result<ReadonlyArray<WorktreeEntry>, Schema.SchemaError> =>
-  Result.map(decodeBlocks(Arr.map(blocksOf(text), attributesOf)), Arr.map(toEntry))
+  Result.map(decodeBlocks(Arr.map(recordsOf(text), attributesOf)), Arr.map(toEntry))
 
-/** The non-empty blocks of the listing, each as its non-empty lines. */
-const blocksOf = (text: string): ReadonlyArray<ReadonlyArray<string>> =>
-  Arr.filter(Arr.map(String.split(text, "\n\n"), linesOf), Arr.isReadonlyArrayNonEmpty)
+/**
+ * The non-empty records of the listing, each as its attributes. Splitting
+ * at every NUL and starting a record at each empty field also drops the
+ * empty field after the last record.
+ */
+const recordsOf = (text: string): ReadonlyArray<ReadonlyArray<string>> =>
+  Arr.filter(
+    Arr.reduce(String.split(text, fieldEnd), oneEmptyRecord, addField),
+    Arr.isReadonlyArrayNonEmpty,
+  )
 
-/** A block's non-empty lines. */
-const linesOf = (block: string): ReadonlyArray<string> =>
-  Arr.filter(String.split(block, "\n"), String.isNonEmpty)
+/** Adds one field: an empty field starts a new record, any other joins the last. */
+const addField = (records: Records, field: string): Records =>
+  String.isEmpty(field)
+    ? Arr.append(records, [])
+    : Arr.modifyLastNonEmpty(records, Arr.append(field))
 
-/** A block's lines as a record from attribute name to value; a later duplicate wins. */
-const attributesOf = (lines: ReadonlyArray<string>): Record.ReadonlyRecord<string, string> =>
-  Record.fromEntries(Arr.map(lines, attributeOf))
+/** A record's attributes as a record from name to value; a later duplicate wins. */
+const attributesOf = (fields: ReadonlyArray<string>): Record.ReadonlyRecord<string, string> =>
+  Record.fromEntries(Arr.map(fields, attributeOf))
 
-/** One line split at its first space into a name and a value (empty when absent). */
+/** One attribute split at its first space into a name and a value (empty when absent). */
 const attributeOf = (line: string): readonly [string, string] => {
   const [name, ...rest] = String.split(line, attributeSeparator)
   return [name, Arr.join(rest, attributeSeparator)]

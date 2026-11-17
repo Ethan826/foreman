@@ -1,7 +1,8 @@
 // The supervisor worktree (design "Supervisor worktree", owner ruling
-// 2026-11-15): its branch name, an entry of `git worktree list
-// --porcelain` as the core sees it, the conditions of the startup check,
-// and the typed failures of creating and identifying the worktree.
+// 2026-11-15, owner rulings on B11a 2026-11-17): its branch name, an entry
+// of `git worktree list --porcelain -z` as the core sees it, the reading
+// of the worktree directory, the conditions of the startup check, and the
+// typed failures of creating and identifying the worktree.
 import { Record, Schema } from "effect"
 import { Revision } from "./ids.ts"
 
@@ -31,7 +32,7 @@ export const WorktreeLock = Schema.Struct({ reason: Schema.Option(GitText) })
 export type WorktreeLock = typeof WorktreeLock.Type
 
 /**
- * One entry of `git worktree list --porcelain`. `branch` is the full ref
+ * One entry of `git worktree list --porcelain -z`. `branch` is the full ref
  * (`refs/heads/...`) and is none when the worktree is detached or bare;
  * `head` is none for a bare entry; `lock` is none when not locked.
  */
@@ -47,12 +48,54 @@ export const WorktreeEntry = Schema.Struct({
 export type WorktreeEntry = typeof WorktreeEntry.Type
 
 /**
- * The conditions of the startup check (design "Startup check"): the
- * recorded path is listed, it is on `refs/heads/<branch>`, and it is
- * locked. Values are spelled so they cannot be mistaken for porcelain keys.
+ * A worktree's git identity: its own git directory and the repository's
+ * common git directory, each absolute with symlinks resolved, as
+ * `rev-parse --absolute-git-dir` and `rev-parse --path-format=absolute
+ * --git-common-dir` print them run inside the worktree.
+ */
+export const GitIdentity = Schema.Struct({ gitDir: GitText, commonDir: GitText })
+/** A worktree's git identity; see {@link GitIdentity}. */
+export type GitIdentity = typeof GitIdentity.Type
+
+/**
+ * What the startup check found at the recorded path (owner ruling 5 on
+ * B11a, F9). `present` is whether a directory is there. `identity` is the
+ * git identity read inside it, none when it is absent or git does not see
+ * a repository there.
+ */
+export const WorktreeDirectory = Schema.Struct({
+  present: Schema.Boolean,
+  identity: Schema.Option(GitIdentity),
+})
+/** What the startup check found at the recorded path; see {@link WorktreeDirectory}. */
+export type WorktreeDirectory = typeof WorktreeDirectory.Type
+
+/**
+ * The raw reading of the recorded path that Runtime takes for the startup
+ * check: `present` is whether a directory is there (symlinks followed);
+ * `identity` holds the stdout of the two identity `rev-parse` commands,
+ * each with its trailing newline, and is none when the directory is
+ * absent or either command exits non-zero. Format decodes the stdout.
+ */
+export const DirectoryReading = Schema.Struct({
+  present: Schema.Boolean,
+  identity: Schema.Option(Schema.Struct({ gitDir: Schema.String, commonDir: Schema.String })),
+})
+/** The raw reading of the recorded path; see {@link DirectoryReading}. */
+export type DirectoryReading = typeof DirectoryReading.Type
+
+/**
+ * The conditions of the startup check (design "Startup check", owner
+ * ruling 5 on B11a): the recorded path is listed, a directory is present
+ * there, that directory has the recorded git identity, it is on
+ * `refs/heads/<branch>`, and it is locked. A listed registration alone
+ * does not show the worktree exists. Values are spelled so they cannot be
+ * mistaken for porcelain keys.
  */
 export const WorktreeConditions = {
   Listed: "path-listed",
+  Present: "directory-present",
+  Identity: "git-identity",
   OnBranch: "on-branch",
   Locked: "is-locked",
 } as const
@@ -81,6 +124,24 @@ export class WorktreeBranchExists extends Schema.TaggedError<WorktreeBranchExist
 export class WorktreePathExists extends Schema.TaggedError<WorktreePathExists>()(
   "WorktreePathExists",
   { path: GitText },
+) {}
+
+/**
+ * Creation found the new worktree other than requested (owner ruling 1 on
+ * B11a): its top level is not the requested path with symlinks resolved,
+ * or its HEAD is not `refs/heads/foreman/<name>`. `headRef` is what
+ * `rev-parse --symbolic-full-name HEAD` printed. The worktree is left in
+ * place, locked; nothing is cleaned up.
+ */
+export class WorktreeNotAsCreated extends Schema.TaggedError<WorktreeNotAsCreated>()(
+  "WorktreeNotAsCreated",
+  { requestedPath: GitText, toplevel: GitText, expectedRef: GitText, headRef: GitText },
+) {}
+
+/** A path could not be inspected (stat or realpath failed other than by absence). */
+export class PathUnreadable extends Schema.TaggedError<PathUnreadable>()(
+  "PathUnreadable",
+  { path: GitText, reason: Schema.String },
 ) {}
 
 /**
