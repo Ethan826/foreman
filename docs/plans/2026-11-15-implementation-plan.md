@@ -320,6 +320,33 @@ difference; foreman's own grants keep counting, so only outside use
 could be under-counted. Unverified: churn of period records and the
 interaction with rule P's carry-over test in Task B.
 
+### Found while writing TSDoc (2026-11-16)
+
+The documentation agent recorded these without fixing them:
+
+1. `fresher` in periods.ts lets any stamp from a different boot replace
+   the held one. That reads as "newer boot" only if seq order follows
+   boot order; a late-ingested reading from an older boot replaces a
+   newer stamp. This tightens (the older stamp is not fresh against the
+   current boot), but the rule should be stated or changed.
+2. `currentPeriod` folds readings in the order given and does not sort by
+   seq; seq order is an unenforced precondition on the caller (Task B).
+3. `measuredIncrease` requires exactly equal reset times while periods
+   allow `resetTolerance`; with reset-time jitter, steps go unmeasured
+   (review nit 6).
+4. `estimate`'s fallback was not raised to `minEstimatePoints`; being
+   fixed under O15 in the skills-and-AGENTS fix pass.
+5. Task B6: a Quota hold with an empty `windows` list (a provider with no
+   policy windows, Codex by default) would be released vacuously by the
+   rule "every window in windows has a post-hold reading that allows".
+   B6 must refuse or special-case an empty list.
+6. `level` filters grants by window only (a direct caller must pass one
+   provider's grants); `defaultCap` returns 100 for an unlisted window.
+   `pace` handles both.
+7. Codex `usedPercent` and `resetsAt` have no range or unit check; L2's
+   app-server read gives Unix seconds by its schema, still to be applied
+   in the Codex decoder.
+
 ---
 
 ## Part B: settled design, implementation needs the owner's approval

@@ -1,0 +1,10 @@
+{
+ "is_error": false,
+ "num_turns": 0,
+ "total_cost_usd": 0,
+ "window_lines": [
+  "Current session: 13% used \u00b7 resets Nov 16 at 6:40pm (local time)",
+  "Current week (all models): 24% used \u00b7 resets Nov 21 at 2am (local time)",
+  "Current week (Fable): 0% used \u00b7 resets Nov 21 at 2am (local time)"
+ ]
+}
