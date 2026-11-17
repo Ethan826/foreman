@@ -227,6 +227,38 @@ Added 2026-11-15. No new package: both ship inside the pinned `effect`.
   Pages actions are pinned by commit: `actions/configure-pages` v6.0.0,
   `actions/upload-pages-artifact` v5.0.0, `actions/deploy-pages` v5.0.1.
 
+## bun:sqlite (built into Bun 1.3.6), 2026-11-17
+
+- Why: Part B's shared usage ledger and project event logs are SQLite
+  files (design "Usage ledger", "Where the ledger lives"): WAL mode, one
+  `BEGIN IMMEDIATE` per write, a `busy_timeout`, unique keys that make a
+  repeated charge or cancel a no-op. The owner approved this intake with
+  Part B's first milestone.
+- Alternatives considered: `better-sqlite3` (a native npm module with an
+  install step and a prebuilt binary to trust; no gain under Bun);
+  `@effect/sql-sqlite-bun` (wraps the same driver, adds a dependency and
+  an abstraction the design does not need yet); a JSON file with a lock
+  (no transactions, no unique keys).
+- Footprint: no new package. `bun:sqlite` ships inside the Bun runtime the
+  project already pins (1.3.6 in CI). Only `src/runtime/` may import it;
+  the lint layer table bars `bun:*` from every core layer.
+- Fit: synchronous calls, wrapped in Effect at the Runtime boundary;
+  `PRAGMA journal_mode=WAL`, `PRAGMA busy_timeout`, and explicit
+  `BEGIN IMMEDIATE` ... `COMMIT` per write.
+- Version: `select sqlite_version()` under Bun 1.3.6 on the owner's Mac
+  reports 3.51.0. Bun's documentation says macOS builds use the system
+  SQLite library while Linux builds bundle their own, so CI may run a
+  different SQLite version (unverified). The code relies only on features
+  present in SQLite 3.x for many years (WAL, `BEGIN IMMEDIATE`, unique
+  constraints, `busy_timeout`).
+- Release cycle and maintenance: it changes only when Bun does; a Bun
+  upgrade is a review of this record.
+- Security and supply chain: nothing downloaded beyond Bun itself;
+  extension loading is compiled out (`OMIT_LOAD_EXTENSION` in the compile
+  options observed).
+- License: SQLite is public domain; Bun is MIT.
+- Pinning: by the Bun version (`bun-version: 1.3.6` in CI).
+
 ## Considered and declined
 
 - oxlint and biome: see above.
