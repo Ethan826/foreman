@@ -188,6 +188,16 @@ export class HoldCreated extends Schema.TaggedClass<HoldCreated>()(
   { hold: Hold },
 ) {}
 
+/**
+ * The owner's `release-protected`: releases the protected-path hold. With
+ * `accept`, the current digest becomes the new baseline; without it, the
+ * files matched the recorded digest again.
+ */
+export class ProtectedReleased extends Schema.TaggedClass<ProtectedReleased>()(
+  "ProtectedReleased",
+  { accept: Schema.Boolean },
+) {}
+
 /** Any project log event. */
 export const ProjectEvent = Schema.Union([
   Intended,
@@ -212,6 +222,7 @@ export const ProjectEvent = Schema.Union([
   RestoreRequested,
   RequestCompleted,
   HoldCreated,
+  ProtectedReleased,
 ])
 /** Any project log event; see {@link ProjectEvent}. */
 export type ProjectEvent = typeof ProjectEvent.Type
