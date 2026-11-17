@@ -13,7 +13,7 @@
 // Charges are always the estimate: no run report gives an authoritative
 // measurement in the quota's units.
 import { Array as Arr, Option, Schema } from "effect"
-import { Finished, Intended, type ProjectEvent } from "../domain/events.ts"
+import { Finished, Intended, Launched, type ProjectEvent } from "../domain/events.ts"
 import { GrantId, type OpId, type ProjectId } from "../domain/ids.ts"
 import { type LedgerSnapshot, WindowPoints } from "../domain/ledger.ts"
 import { grantViews, type GrantView } from "./counting.ts"
@@ -86,3 +86,58 @@ export const settleActions = (
   project: ProjectId,
 ): ReadonlyArray<SettleAction> =>
   Arr.flatMap(Arr.filter(grantViews(snapshot), isOpenOf(project)), actionFor(log))
+
+/**
+ * A step that was `Intended` and has not `Finished`: its grant stays open
+ * and keeps counting. `pgid` is the process group recorded by `Launched`,
+ * if one was. The owner decides what to do; nothing is signaled.
+ */
+export interface InFlight {
+  readonly opId: OpId
+  readonly grantId: GrantId
+  readonly pgid: Option.Option<number>
+}
+
+/** What the owner's `ledger settle` writes and what it leaves open. */
+export interface OwnerSettlement {
+  readonly actions: ReadonlyArray<SettleAction>
+  readonly inFlight: ReadonlyArray<InFlight>
+}
+
+/** The process group `Launched` recorded for `opId`, if any. */
+const pgidOf = (log: ReadonlyArray<ProjectEvent>, opId: OpId): Option.Option<number> =>
+  Option.map(
+    Arr.findFirst(
+      Arr.flatMap(log, (event) => (Schema.is(Launched)(event) ? [event] : [])),
+      (launch) => launch.opId === opId,
+    ),
+    (launch) => launch.pgid,
+  )
+
+/** The in-flight step of one open grant, if its step is in flight. */
+const inFlightOf =
+  (log: ReadonlyArray<ProjectEvent>) =>
+  (view: GrantView): ReadonlyArray<InFlight> =>
+    Option.match(intendedFor(log, view), {
+      onNone: () => [],
+      onSome: (intent) =>
+        Option.isSome(finishedOf(log, intent.opId))
+          ? []
+          : [{ opId: intent.opId, grantId: view.grant.grantId, pgid: pgidOf(log, intent.opId) }],
+    })
+
+/**
+ * The owner's `ledger settle` for `project` (plan Task B4): the same
+ * cancels and charges as the settle step, plus the steps still in flight,
+ * each with its recorded process group. It signals no process and runs no
+ * git command; their grants stay open until their steps finish or the
+ * owner resolves them.
+ */
+export const ownerSettle = (
+  log: ReadonlyArray<ProjectEvent>,
+  snapshot: LedgerSnapshot,
+  project: ProjectId,
+): OwnerSettlement => ({
+  actions: settleActions(log, snapshot, project),
+  inFlight: Arr.flatMap(Arr.filter(grantViews(snapshot), isOpenOf(project)), inFlightOf(log)),
+})

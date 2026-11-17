@@ -165,8 +165,8 @@ export const admit = (
 export const cancelLostRace = (store: LedgerStore, grantId: GrantId) =>
   store.transact((tx) => tx.append([new GrantCanceled({ grantId, cause: "lostRace" })]))
 
-/** The ledger row a settle action writes. */
-const rowOf = (action: SettleAction) =>
+/** The ledger row a settle action writes: a charge or an orphan cancel. */
+export const settleRowOf = (action: SettleAction) =>
   Schema.is(ChargeFromFinished)(action)
     ? new Charged({ grantId: action.grantId, endedAt: action.endedAt, points: action.points })
     : new GrantCanceled({ grantId: action.grantId, cause: "orphan" })
@@ -184,6 +184,6 @@ export const applySettle = (
 ) =>
   store.transact((tx) =>
     Effect.flatMap(tx.read, (snapshot) =>
-      tx.append(Arr.map(settleActions(log, snapshot, project), rowOf)),
+      tx.append(Arr.map(settleActions(log, snapshot, project), settleRowOf)),
     ),
   )

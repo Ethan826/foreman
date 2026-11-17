@@ -4,7 +4,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Option, Schema } from "effect"
 import { Clients } from "../../src/domain/clients.ts"
-import { Finished, Intended, type ProjectEvent } from "../../src/domain/events.ts"
+import { Finished, Intended, Launched, type ProjectEvent } from "../../src/domain/events.ts"
 import { GrantId, LedgerSeq, OpId, ProjectId, Revision, TrancheId } from "../../src/domain/ids.ts"
 import {
   Charged,
@@ -20,6 +20,7 @@ import { Windows } from "../../src/domain/window.ts"
 import {
   ChargeFromFinished,
   CancelOrphan,
+  ownerSettle,
   type SettleAction,
   settleActions,
 } from "../../src/features/settle.ts"
@@ -118,4 +119,19 @@ describe("settleActions property", () => {
     ({ states }) => matchesTheRule(states),
     { arbitrary: { runs: 500 } },
   )
+})
+
+describe("ownerSettle", () => {
+  it("lists in-flight steps with their recorded pgid and settles the rest", () => {
+    const launched = new Launched({ opId: OpId.make("op-2"), pgid: 4242 })
+    const result = ownerSettle([intended(1), finished(1), intended(2), launched, intended(3)], snapshotOf([grant(1), grant(2), grant(3), grant(4)]), alpha)
+    expect(result.actions).toEqual([
+      new ChargeFromFinished({ grantId: GrantId.make("g-1"), endedAt: 500, points: estimate }),
+      new CancelOrphan({ grantId: GrantId.make("g-4") }),
+    ])
+    expect(result.inFlight).toEqual([
+      { opId: "op-2", grantId: "g-2", pgid: Option.some(4242) },
+      { opId: "op-3", grantId: "g-3", pgid: Option.none() },
+    ])
+  })
 })
