@@ -113,4 +113,9 @@ describe("estimate", () => {
     const zeros = Arr.map(Arr.range(1, 3), () => finishedStep(Roles.Corrector, 0))
     expect(estimate(zeros, Roles.Corrector, defaultPolicy)(Windows.FiveHour)).toBe(1)
   })
+
+  it("floors the initial estimate too when it is below the minimum (O15)", () => {
+    const policy = { ...defaultPolicy, initialEstimate: 0, minEstimatePoints: 1 }
+    expect(estimate([], Roles.Implementer, policy)(Windows.FiveHour)).toBe(1)
+  })
 })

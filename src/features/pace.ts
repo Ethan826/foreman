@@ -8,11 +8,11 @@
 // frees no accounting room.
 import { Array as Arr, Number, Option, Schema, Struct } from "effect"
 import type { Client } from "../domain/clients.ts"
-import type { MonoStamp } from "../domain/clock.ts"
+import { microsPerMilli, type MonoStamp } from "../domain/clock.ts"
 import type { GrantPoints } from "../domain/grant.ts"
 import type { Policy } from "../domain/policy.ts"
 import { Window } from "../domain/window.ts"
-import type { Observation } from "../domain/observation.ts"
+import { type Observation, wholeWindowPercent } from "../domain/observation.ts"
 import { currentPeriod, type WindowPeriod } from "./periods.ts"
 
 /** Every policy window is usable and has room for the estimate. */
@@ -85,7 +85,7 @@ export const level = (
 export const defaultCap =
   (policy: Policy, provider: Client) =>
   (window: Window): number =>
-    100 -
+    wholeWindowPercent -
     Option.match(
       Arr.findFirst(
         policy.providers[provider].windows,
@@ -112,7 +112,7 @@ const isFresh = (
         seen.bootId === now.bootId &&
         Number.between(now.micros - seen.micros, {
           minimum: 0,
-          maximum: freshnessMillis * 1000,
+          maximum: freshnessMillis * microsPerMilli,
         }),
     ),
     () => false,

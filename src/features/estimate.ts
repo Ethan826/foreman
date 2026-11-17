@@ -7,7 +7,7 @@
 // during the step. A running agent can still use more than its estimate;
 // nothing here bounds real use.
 import { Array as Arr, Option, Order } from "effect"
-import type { MonoStamp } from "../domain/clock.ts"
+import { microsPerMilli, type MonoStamp } from "../domain/clock.ts"
 import type { Client } from "../domain/clients.ts"
 import type { Observation } from "../domain/observation.ts"
 import type { Policy } from "../domain/policy.ts"
@@ -110,7 +110,7 @@ export const measuredIncrease = (
   policy: Policy,
 ): Option.Option<number> =>
   Option.gen(function* () {
-    const freshness = policy.freshnessMillis * 1000
+    const freshness = policy.freshnessMillis * microsPerMilli
     const start = step.startMono.micros
     const end = step.endMono.micros
     const stamped = stampedIn(readings, provider, window, step)
@@ -122,29 +122,32 @@ export const measuredIncrease = (
     return Math.max(0, after.usedPercent - before.usedPercent)
   })
 
+/** How many of a role's latest finished steps the estimate looks at (R-P3). */
+const recentSteps = 5
+
 /**
  * The estimate in points for the next step of `role` in a window (R-P3).
  *
  * It looks at the role's last five finished steps (the last five of
  * `finished` with that role, so `finished` must be in finishing order).
  * If any of them was measured in the window, the estimate is the largest
- * measured increase, raised to `minEstimatePoints` if lower (O15).
- * Otherwise it is `initialEstimate`, which this function does not floor;
- * pacing applies the floor again at admission.
+ * measured increase; otherwise it is `initialEstimate`. Either way it is
+ * raised to `minEstimatePoints` if lower, because the one-point minimum
+ * applies to admission and reservations alike (O15).
  */
 export const estimate =
   (finished: ReadonlyArray<FinishedStep>, role: Role, policy: Policy) =>
   (window: Window): number => {
     const lastFive = Arr.takeRight(
       Arr.filter(finished, (step) => step.role === role),
-      5,
+      recentSteps,
     )
-    return Arr.match(
+    const unfloored = Arr.match(
       Arr.getSomes(Arr.map(lastFive, (step) => step.increase(window))),
       {
         onEmpty: () => policy.initialEstimate,
-        onNonEmpty: (increases) =>
-          Math.max(policy.minEstimatePoints, Arr.max(increases, Order.Number)),
+        onNonEmpty: (increases) => Arr.max(increases, Order.Number),
       },
     )
+    return Math.max(policy.minEstimatePoints, unfloored)
   }

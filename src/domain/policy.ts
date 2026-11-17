@@ -2,12 +2,13 @@
 // provider, reserve per provider and window, freshness, initialEstimate;
 // "Defaults", "Periods"). Point amounts are percentage points of a
 // window, 0 to 100.
-import { Array as Arr, Schema, Struct } from "effect"
+import { Array as Arr, Duration, Schema, Struct } from "effect"
 import { Client, Clients } from "./clients.ts"
+import { wholeWindowPercent } from "./observation.ts"
 import { Window, Windows } from "./window.ts"
 
 const percent = Schema.Number.check(
-  Schema.isBetween({ minimum: 0, maximum: 100 }),
+  Schema.isBetween({ minimum: 0, maximum: wholeWindowPercent }),
 )
 
 /**
@@ -69,6 +70,21 @@ export const Policy = Schema.Struct({
 /** The pacing policy; see {@link Policy}. */
 export type Policy = typeof Policy.Type
 
+/** Default reserve of the five-hour window, in percent. */
+const fiveHourReservePercent = 30
+/** Default reserve of the weekly window, in percent. */
+const weeklyReservePercent = 40
+/** Default freshness: the oldest a reading may be, in minutes. */
+const freshnessMinutes = 10
+/** Default estimate for a role with no measured step, in points. */
+const initialEstimatePoints = 15
+/** Default reset tolerance, in minutes. */
+const resetToleranceMinutes = 5
+/** Default drop tolerance, in points. */
+const dropTolerancePoints = 5
+/** Default floor on every estimate, in points (O15). */
+const minEstimatePoints = 1
+
 /**
  * The default policy. Confirmed by the user on 2026-11-14: reserve 30
  * percent of the five-hour window and 40 percent of the weekly window,
@@ -84,15 +100,15 @@ export const defaultPolicy: Policy = {
   providers: {
     [Clients.Claude]: {
       windows: [
-        { window: Windows.FiveHour, reservePercent: 30 },
-        { window: Windows.Weekly, reservePercent: 40 },
+        { window: Windows.FiveHour, reservePercent: fiveHourReservePercent },
+        { window: Windows.Weekly, reservePercent: weeklyReservePercent },
       ],
     },
     [Clients.Codex]: { windows: [] },
   },
-  freshnessMillis: 10 * 60 * 1000,
-  initialEstimate: 15,
-  resetToleranceMillis: 5 * 60 * 1000,
-  dropTolerancePoints: 5,
-  minEstimatePoints: 1,
+  freshnessMillis: Duration.toMillis(Duration.minutes(freshnessMinutes)),
+  initialEstimate: initialEstimatePoints,
+  resetToleranceMillis: Duration.toMillis(Duration.minutes(resetToleranceMinutes)),
+  dropTolerancePoints,
+  minEstimatePoints,
 }

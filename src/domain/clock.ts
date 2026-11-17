@@ -16,6 +16,12 @@ export const BootId = Schema.String.check(Schema.isNonEmpty()).pipe(
 export type BootId = typeof BootId.Type
 
 /**
+ * Microseconds in a millisecond. Policy durations are in milliseconds and
+ * monotonic stamps in microseconds; this converts the one to the other.
+ */
+export const microsPerMilli = 1000
+
+/**
  * A reading of the monotonic clock: the boot it was taken in and
  * CLOCK_MONOTONIC in whole microseconds (a non-negative integer).
  *

@@ -10,7 +10,7 @@
 // design says the exact shape of rate_limit_event is unknown until live
 // test L1). Unknown extra fields are ignored. Any other event type fails
 // to decode; the shell decides what an undecodable line means.
-import { Array as Arr, Option, pipe, Record, Schema } from "effect"
+import { Array as Arr, Duration, Option, pipe, Record, Schema } from "effect"
 import { type Window, Windows } from "../domain/window.ts"
 
 /** The wire tags of the Claude events decoded here. */
@@ -135,14 +135,21 @@ export interface ClaudeWindowReading {
   readonly resetsAt: Option.Option<number>
 }
 
+/** Hundredths of a point in a whole fraction (1.0): 100 percent of 100. */
+const hundredthsPerWhole = 10_000
+/** Hundredths of a point in one percentage point. */
+const hundredthsPerPoint = 100
+
 /**
  * Fraction to percent, rounded to a hundredth of a point so that 0.07
  * gives 7 rather than 7.000000000000001.
  */
 const toPercent = (fraction: number): number =>
-  Math.round(fraction * 10_000) / 100
+  Math.round(fraction * hundredthsPerWhole) / hundredthsPerPoint
 
-const secondsToMillis = (seconds: number): number => seconds * 1000
+/** Unix seconds to Unix milliseconds, through Effect's Duration. */
+const secondsToMillis = (seconds: number): number =>
+  Duration.toMillis(Duration.seconds(seconds))
 
 /**
  * The reading for one tracked window: `Option.none()` unless the entry is

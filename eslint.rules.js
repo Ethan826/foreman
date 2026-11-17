@@ -303,6 +303,37 @@ export const buildConfig = ({ tsconfigRootDir, ignores = [] }) => defineConfig([
       "functional/no-throw-statements": "error",
       "functional/no-let": "error",
       "functional/immutable-data": immutableData,
+      // readable-functional-code: nesting depth at most 3. Counts function
+      // expressions passed as call arguments only; nested blocks, ternaries
+      // and callbacks reached through a named helper escape.
+      "max-nested-callbacks": ["error", 3],
+    },
+  },
+  {
+    // Numbers other than 0 and 1 are named constants, and durations are
+    // Effect Durations (effect-v4, "Durations and named numbers"). A literal
+    // may stand only as the whole initializer of a `const`, so
+    // `Duration.minutes(10)` is flagged and `const freshnessMinutes = 10` is
+    // the place for it. detectObjects checks object property values, such
+    // as a default policy's fields. test/ is out of scope: a test's numbers
+    // are example data read beside the assertion they feed, and naming
+    // each would move the example away from what it shows. Blind spots: a
+    // number built from a string (`Number("10")`) or read from data escapes;
+    // so does a named const whose name says nothing.
+    files: ["src/**/*.ts"],
+    rules: {
+      "@typescript-eslint/no-magic-numbers": [
+        "error",
+        {
+          ignore: [0, 1],
+          detectObjects: true,
+          enforceConst: true,
+          ignoreEnums: false,
+          ignoreNumericLiteralTypes: false,
+          ignoreReadonlyClassProperties: false,
+          ignoreTypeIndexes: false,
+        },
+      ],
     },
   },
   ...layers.map((layer) => ({

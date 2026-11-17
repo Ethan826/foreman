@@ -64,6 +64,12 @@ const mustFail: Record<string, ReadonlyArray<Expected>> = {
   "src/domain/while.ts": [{ ruleId: "functional/no-loop-statements" }],
   "src/domain/let.ts": [{ ruleId: "functional/no-let" }],
   "src/domain/mutate.ts": [{ ruleId: "functional/immutable-data" }],
+  "src/domain/magic-numbers.ts": [
+    { ruleId: "@typescript-eslint/no-magic-numbers", message: "No magic number: 3" },
+    { ruleId: "@typescript-eslint/no-magic-numbers", message: "No magic number: 10" },
+    { ruleId: "@typescript-eslint/no-magic-numbers", message: "No magic number: 60_000" },
+  ],
+  "src/domain/nested-callbacks.ts": [{ ruleId: "max-nested-callbacks", message: "Too many nested callbacks (4)" }],
   "src/domain/parse.ts": [{ ruleId: "no-restricted-syntax", message: "JSON" }],
   "src/features/async.ts": [
     { ruleId: "no-restricted-syntax", message: "async" },
@@ -142,6 +148,46 @@ const lintFixtures = Effect.gen(function* () {
 
 const lintedFixtures = Layer.effect(LintedFixtures, lintFixtures)
 
+type Linted = Readonly<Record<string, ESLint.LintResult>>
+
+// The checks below are named helpers so the tests stay within the nesting
+// limit (max-nested-callbacks).
+const isReported = (result: ESLint.LintResult | undefined, want: Expected): boolean =>
+  (result?.messages ?? []).some(
+    (found) =>
+      found.ruleId === want.ruleId &&
+      (want.message === undefined || found.message.includes(want.message)),
+  )
+
+const missingIn = (linted: Linted): ReadonlyArray<string> =>
+  Object.entries(mustFail).flatMap(([file, expected]) =>
+    expected.flatMap((want) =>
+      isReported(linted[file], want) ? [] : [`${file}: ${want.ruleId} ${want.message ?? ""}`],
+    ),
+  )
+
+const parseErrorsIn = (linted: Linted): ReadonlyArray<string> =>
+  Object.entries(linted).flatMap(([file, result]) =>
+    result.messages
+      .filter((found) => found.ruleId === null)
+      .map((found) => `${file}:${String(found.line)}: ${found.message}`),
+  )
+
+const reportedIn = (linted: Linted): ReadonlyArray<string> =>
+  Object.entries(mustFail).flatMap(([file]) =>
+    (linted[file]?.messages ?? []).map((found) => `${file}: ${found.ruleId ?? "parse"}: ${found.message}`),
+  )
+
+const dirtyIn = (linted: Linted): ReadonlyArray<string> =>
+  clean.flatMap((file) => {
+    const result = linted[file]
+    return result === undefined
+      ? [`${file}: not linted`]
+      : result.messages.map(
+          (found) => `${file}:${String(found.line)}: ${found.ruleId ?? "parse"}: ${found.message}`,
+        )
+  })
+
 layer(lintedFixtures, { timeout: 120_000 })("lint fixtures", (it) => {
   it.effect("every fixture is a listed must-fail or a listed clean control", () =>
     Effect.gen(function* () {
@@ -154,25 +200,9 @@ layer(lintedFixtures, { timeout: 120_000 })("lint fixtures", (it) => {
   it.effect("each must-fail fixture reports its expected rule, and no parse error", () =>
     Effect.gen(function* () {
       const linted = yield* LintedFixtures
-      const missing = Object.entries(mustFail).flatMap(([file, expected]) =>
-        expected.flatMap((want) =>
-          (linted[file]?.messages ?? []).some(
-            (found) =>
-              found.ruleId === want.ruleId &&
-              (want.message === undefined || found.message.includes(want.message)),
-          )
-            ? []
-            : [`${file}: ${want.ruleId} ${want.message ?? ""}`],
-        ),
-      )
-      const parseErrors = Object.entries(linted).flatMap(([file, result]) =>
-        result.messages
-          .filter((found) => found.ruleId === null)
-          .map((found) => `${file}:${String(found.line)}: ${found.message}`),
-      )
-      const reported = Object.entries(mustFail).flatMap(([file]) =>
-        (linted[file]?.messages ?? []).map((found) => `${file}: ${found.ruleId ?? "parse"}: ${found.message}`),
-      )
+      const missing = missingIn(linted)
+      const parseErrors = parseErrorsIn(linted)
+      const reported = reportedIn(linted)
       expect({ missing, reported: missing.length === 0 ? [] : reported }).toEqual({
         missing: [],
         reported: [],
@@ -185,14 +215,7 @@ layer(lintedFixtures, { timeout: 120_000 })("lint fixtures", (it) => {
   it.effect("each clean control reports nothing", () =>
     Effect.gen(function* () {
       const linted = yield* LintedFixtures
-      const dirty = clean.flatMap((file) => {
-        const result = linted[file]
-        return result === undefined
-          ? [`${file}: not linted`]
-          : result.messages.map(
-              (found) => `${file}:${String(found.line)}: ${found.ruleId ?? "parse"}: ${found.message}`,
-            )
-      })
+      const dirty = dirtyIn(linted)
       expect(dirty).toEqual([])
     }),
     120_000,

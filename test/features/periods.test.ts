@@ -136,6 +136,10 @@ const prefixes = (readings: ReadonlyArray<Observation>) =>
 
 const runs = { arbitrary: { runs: 500 } }
 
+// Pairs two values; named so the property below stays within the nesting
+// limit (max-nested-callbacks).
+const pairOf = <A, B>(a: A, b: B) => [a, b] as const
+
 describe("currentPeriod properties (C16)", () => {
   it.prop(
     "highest never decreases within one periodSeq",
@@ -161,7 +165,7 @@ describe("currentPeriod properties (C16)", () => {
         const next = readings[i]
         if (before === undefined || after === undefined || next === undefined)
           return Arr.length(readings) <= 1
-        return Option.match(Option.zipWith(before, after, (a, b) => [a, b] as const), {
+        return Option.match(Option.zipWith(before, after, pairOf), {
           onNone: () => false,
           onSome: ([a, b]) =>
             b.periodSeq === a.periodSeq ||

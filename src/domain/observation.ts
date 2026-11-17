@@ -20,6 +20,9 @@ export type ObservationSource = typeof ObservationSource.Type
 
 const epochMillis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 
+/** A whole window in percent: the top of every percent range. */
+export const wholeWindowPercent = 100
+
 /**
  * One usage reading of a provider window.
  *
@@ -40,7 +43,7 @@ export const Observation = Schema.Struct({
   provider: Client,
   window: Window,
   usedPercent: Schema.Number.check(
-    Schema.isBetween({ minimum: 0, maximum: 100 }),
+    Schema.isBetween({ minimum: 0, maximum: wholeWindowPercent }),
   ),
   resetsAt: Schema.OptionFromOptionalKey(epochMillis),
   observedAt: epochMillis,
