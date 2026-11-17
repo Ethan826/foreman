@@ -58,6 +58,11 @@ Where the foreman work stands, for the next session.
    - The test now reports status, signal, spawn error, stderr and every
      BLOCK line on failure, and asserts no spawn error or signal, so a
      recurrence names its cause. No timeout or tolerance was changed.
+   Owner ruling 2026-11-17: the failure stays unexplained, with improved
+   diagnostics; it is not root-cause resolved, and the untracked-Markdown
+   probe shows a possible mechanism, not what happened. The gate keeps its
+   scan scope. A recurrence is captured and investigated, never erased by
+   a passing rerun. Part B's first milestone (B1 to B10) proceeds.
 8. Waiting on the owner: the accounting choice (deferred until L1 and L2
    reported; the arithmetic is to be rechecked before it is presented),
    O14 (Codex reset times roll forward while idle), approval of Part B,
