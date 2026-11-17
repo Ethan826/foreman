@@ -101,3 +101,16 @@ classDiagram
         increase
     }
 ```
+
+## Grants, holds and scheduling
+
+Part B's first milestone adds these pure modules. Each folds the project log or reads a ledger snapshot, and none reads a clock:
+
+- [`counting.ts`](counting.ts): which grants count, with the retirement rule injected (`ownerOnly` is choice 1).
+- [`settle.ts`](settle.ts): the settle step, which cancels orphan grants and charges finished steps at their estimate, and `ownerSettle` for `ledger settle`.
+- [`binding.ts`](binding.ts): the ledger binding check at startup.
+- [`holds.ts`](holds.ts): the holds left by the log and their release rules, and `quotaReleased` for readings.
+- [`waiver.ts`](waiver.ts) and [`spend-down.ts`](spend-down.ts): armed waivers, the active spend-down and the cap it sets.
+- [`review-queue.ts`](review-queue.ts): the review queue, its bound and unwinding.
+- [`backlog.ts`](backlog.ts): pre-approvals and the approval each tranche starts under.
+- [`schedule.ts`](schedule.ts): the next step, ordered by provider reset time (an invented heuristic, flagged in the design).
