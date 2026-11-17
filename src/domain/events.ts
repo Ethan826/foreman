@@ -76,6 +76,15 @@ export class Waived extends Schema.TaggedClass<Waived>()("Waived", {
   waiverId: WaiverId,
 }) {}
 
+/**
+ * The armed waiver `waiverId` expired unused: a launch attempt ended
+ * without launching a step of the waived provider (design "Waivers").
+ */
+export class WaiverExpired extends Schema.TaggedClass<WaiverExpired>()(
+  "WaiverExpired",
+  { waiverId: WaiverId },
+) {}
+
 /** The owner released the failure hold of operation `opId`. */
 export class Released extends Schema.TaggedClass<Released>()("Released", {
   opId: OpId,
@@ -223,6 +232,7 @@ export const ProjectEvent = Schema.Union([
   RequestCompleted,
   HoldCreated,
   ProtectedReleased,
+  WaiverExpired,
 ])
 /** Any project log event; see {@link ProjectEvent}. */
 export type ProjectEvent = typeof ProjectEvent.Type
