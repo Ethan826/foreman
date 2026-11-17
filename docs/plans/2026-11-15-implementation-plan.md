@@ -526,6 +526,13 @@ Done, on branch `part-b-m1`:
   overlap test passes with or without it and is not evidence for it.
 - `Launch.role` is the `Role` schema.
 
+Consumption: the original milestone's token use is unknown, estimated
+near or beyond the 1M authorization (milestone, review and both
+correction passes); it is not certified as within the cap. The owner
+authorized a separate 150k tokens on 2026-11-17 for the two remaining
+items below, to run in a fresh session; that allowance is accounted
+separately.
+
 Remaining, not done (checkpointed for budget; the owner decides):
 
 - F7's planned tests: a crash-sequence property run through the real
