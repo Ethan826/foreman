@@ -5,7 +5,8 @@
 // crashes and settles. A crash drops what live processes had not yet
 // written: an admitted step never writes its Intended, and an intended
 // step never writes its Finished. The assertions are invariants over the
-// stored rows; none of them recomputes what a settle should write.
+// stored rows; none of them recomputes what a settle should write. A
+// settle of one project writes no settlement row for another's grant.
 import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Effect, Match, Option, Schema } from "effect"
 import { mkdtempSync, rmSync } from "node:fs"
@@ -161,11 +162,28 @@ const crash = (world: World) =>
     world.awaitingFinished.clear()
   })
 
+// The grant each Charged or GrantCanceled row among `rows` settles.
+const settledGrants = (rows: ReadonlyArray<LedgerRow>) =>
+  Arr.flatMap(rows, (r) => (Schema.is(Charged)(r) || Schema.is(GrantCanceled)(r) ? [r.grantId] : []))
+
+// Project isolation: a settle of `project` writes no settlement row for a
+// grant of another project. The ledger is append-only, so the rows the
+// settle wrote are those after the `before` count.
+const settlesOnlyItsProject = (before: number, rows: ReadonlyArray<LedgerRow>, project: string) => {
+  const projectOf = new Map(Arr.flatMap(rows, (r) => (Schema.is(Grant)(r) ? [[r.grantId, r.project]] : [])))
+  for (const grantId of settledGrants(rows.slice(before))) {
+    expect({ settled: grantId, project: projectOf.get(grantId) }).toEqual({ settled: grantId, project })
+  }
+}
+
 const settle = (store: LedgerStore, world: World, project: string) =>
   Effect.gen(function* () {
     const log = [...logOf(world, project)]
+    const before = Arr.length(yield* rowsOf(store))
     yield* applySettle(store, log, ProjectId.make(project))
-    onlyInFlightLeftOpen(yield* rowsOf(store), log, project)
+    const rows = yield* rowsOf(store)
+    onlyInFlightLeftOpen(rows, log, project)
+    settlesOnlyItsProject(before, rows, project)
   })
 
 const step = (store: LedgerStore, world: World) => (op: Op) =>
