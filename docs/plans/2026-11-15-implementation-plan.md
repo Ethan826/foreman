@@ -649,6 +649,22 @@ stays with B15.
 
 No review dispatch, landing or push is authorized by this pass.
 
+Owner authorization, 2026-11-17 (for the three items above):
+
+- 90k tokens total, including verification and records. Target completion
+  by 60k; keep the remaining 30k for verification and checkpointing. If the
+  remaining work will not fit, checkpoint and return; do not extend the
+  allowance.
+- One fresh-context agent working inline, with no further delegation. Use
+  a harness-enforced token limit if one is available; time and tool-call
+  limits do not enforce a token budget (the Agent tool in the 2026-11-17
+  session offered none, so the measured usage it reports is the check).
+- The previous run used 157,322 tokens against 150,000: 7,322 over budget.
+  The new allowance does not retroactively cover that overrun.
+- Scope: the lock-child fixture exception, the project-isolation invariant
+  and its mutant, and both handle-leak fixes. No landing, push or
+  additional review dispatch.
+
 ### Task B11: Git and worktree handling
 
 **Files:** `src/runtime/git.ts` (clean git environment with the recorded `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `-c` overrides), `src/runtime/worktree.ts` (supervisor worktree creation as intent, effect, completion; review worktree `--lock --detach`; startup check), `src/runtime/protected.ts` (digest walk and compare), `src/runtime/commit.ts` (temporary index, `commit-tree` with `Op-Id` trailer, `update-ref HEAD <new> <base>`); tests in `test/runtime/` against repositories the test creates in a temporary directory.
