@@ -14,7 +14,7 @@ import {
   type ProjectLog,
   ProjectLogError,
 } from "../domain/events.ts"
-import { isSqliteBusy, sqliteReason } from "./sqlite.ts"
+import { isSqliteBusy, isWal, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
 
 const toError = (error: unknown) =>
   new ProjectLogError({
@@ -41,7 +41,6 @@ const decodeLast = (row: unknown) =>
   Effect.mapError(Schema.decodeUnknownEffect(Last)(row), schemaFailure("position"))
 
 const schemaSql: ReadonlyArray<string> = [
-  "PRAGMA journal_mode=WAL",
   "CREATE TABLE IF NOT EXISTS events (position INTEGER PRIMARY KEY, body TEXT NOT NULL)",
 ]
 
@@ -81,23 +80,19 @@ const appendTx = (
     return yield* insertAfter(db, expected, bodies)
   })
 
-const runInTransaction = <A, E>(db: Database, body: Effect.Effect<A, E>) =>
-  Effect.gen(function* () {
-    yield* withDb(() => {
-      db.exec("BEGIN IMMEDIATE")
-    })
-    const result = yield* Effect.onError(body, () =>
-      Effect.ignore(
-        withDb(() => {
-          db.exec("ROLLBACK")
-        }),
-      ),
-    )
-    yield* withDb(() => {
-      db.exec("COMMIT")
-    })
-    return result
-  })
+/** The connection's transaction steps, with SQLite errors mapped. */
+const connectionOf = (db: Database): TxConnection<ProjectLogError> => ({
+  begin: withDb(() => {
+    db.exec("BEGIN IMMEDIATE")
+  }),
+  commit: withDb(() => {
+    db.exec("COMMIT")
+  }),
+  rollback: withDb(() => {
+    db.exec("ROLLBACK")
+  }),
+  active: withDb(() => db.inTransaction),
+})
 
 const readFromDb = (db: Database, position: LogPosition) =>
   Effect.gen(function* () {
@@ -113,19 +108,32 @@ const readFromDb = (db: Database, position: LogPosition) =>
   })
 
 const logOf = (db: Database): ProjectLog => ({
-  append: (expected, events) => runInTransaction(db, appendTx(db, expected, events)),
+  append: (expected, events) => transaction(connectionOf(db), appendTx(db, expected, events)),
   readFrom: (position) => readFromDb(db, position),
 })
 
 const open = (path: string, busyTimeoutMillis: number) =>
-  withDb(() => {
-    const db = new Database(path, { create: true })
-    db.exec(`PRAGMA busy_timeout=${String(busyTimeoutMillis)}`)
-    Arr.forEach(schemaSql, (sql) => {
-      db.exec(sql)
-    })
-    return db
-  })
+  Effect.flatMap(
+    withDb(() => {
+      const db = new Database(path, { create: true })
+      db.exec(`PRAGMA busy_timeout=${String(busyTimeoutMillis)}`)
+      return { db, mode: db.query("PRAGMA journal_mode=WAL").get() }
+    }),
+    ({ db, mode }) =>
+      isWal(mode)
+        ? withDb(() => {
+            Arr.forEach(schemaSql, (sql) => {
+              db.exec(sql)
+            })
+            return db
+          })
+        : Effect.andThen(
+            Effect.sync(() => {
+              db.close()
+            }),
+            Effect.fail(new ProjectLogError({ reason: "WAL journal mode did not take effect" })),
+          ),
+  )
 
 /**
  * Opens (creating if needed) the project log at `path` for the scope, in

@@ -24,5 +24,7 @@ declare module "bun:sqlite" {
     query(sql: string): Statement
     /** Closes the connection. */
     close(): void
+    /** Whether a transaction is open on this connection. */
+    readonly inTransaction: boolean
   }
 }

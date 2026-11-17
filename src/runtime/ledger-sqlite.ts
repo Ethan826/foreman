@@ -32,7 +32,7 @@ import {
   SpendDown,
   SpendDownCanceled,
 } from "../domain/ledger.ts"
-import { isSqliteBusy, sqliteReason } from "./sqlite.ts"
+import { isSqliteBusy, isWal, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
 
 /** The table names (design "Where the ledger lives"). */
 const Tables = {
@@ -114,7 +114,6 @@ const uniqueGrantSql = (table: Table) =>
   `CREATE UNIQUE INDEX IF NOT EXISTS ${table}_grantId ON ${table} (grantId)`
 
 const schemaSql: ReadonlyArray<string> = [
-  "PRAGMA journal_mode=WAL",
   "CREATE TABLE IF NOT EXISTS ledgerSeq (id INTEGER PRIMARY KEY CHECK (id = 1), last INTEGER NOT NULL)",
   "INSERT OR IGNORE INTO ledgerSeq (id, last) VALUES (1, 0)",
   ...Arr.map(tables, tableSql),
@@ -206,37 +205,47 @@ const txOf = (db: Database): LedgerTx => ({
     pipe(Effect.forEach(rows, appendOne(db)), busyAsError, Effect.map(Arr.getSomes)),
 })
 
-const rollback = (db: Database) =>
-  Effect.ignore(
-    withDb(() => {
-      db.exec("ROLLBACK")
-    }),
-  )
+/** The connection's transaction steps, with SQLite errors mapped. */
+const connectionOf = (db: Database): TxConnection<LedgerBusy | LedgerError> => ({
+  begin: withDb(() => {
+    db.exec("BEGIN IMMEDIATE")
+  }),
+  commit: withDb(() => {
+    db.exec("COMMIT")
+  }),
+  rollback: withDb(() => {
+    db.exec("ROLLBACK")
+  }),
+  active: withDb(() => db.inTransaction),
+})
 
 const storeOf = (db: Database): LedgerStore => ({
-  transact: (body) =>
-    Effect.gen(function* () {
-      yield* withDb(() => {
-        db.exec("BEGIN IMMEDIATE")
-      })
-      const result = yield* Effect.onError(body(txOf(db)), () => rollback(db))
-      yield* withDb(() => {
-        db.exec("COMMIT")
-      })
-      return result
-    }),
+  transact: (body) => transaction(connectionOf(db), body(txOf(db))),
 })
 
 /** Opens the database, sets `busy_timeout` and creates any missing table. */
 const open = (path: string, busyTimeoutMillis: number) =>
-  withDb(() => {
-    const db = new Database(path, { create: true })
-    db.exec(`PRAGMA busy_timeout=${String(busyTimeoutMillis)}`)
-    Arr.forEach(schemaSql, (sql) => {
-      db.exec(sql)
-    })
-    return db
-  })
+  Effect.flatMap(
+    withDb(() => {
+      const db = new Database(path, { create: true })
+      db.exec(`PRAGMA busy_timeout=${String(busyTimeoutMillis)}`)
+      return { db, mode: db.query("PRAGMA journal_mode=WAL").get() }
+    }),
+    ({ db, mode }) =>
+      isWal(mode)
+        ? withDb(() => {
+            Arr.forEach(schemaSql, (sql) => {
+              db.exec(sql)
+            })
+            return db
+          })
+        : Effect.andThen(
+            Effect.sync(() => {
+              db.close()
+            }),
+            Effect.fail(new LedgerError({ reason: "WAL journal mode did not take effect" })),
+          ),
+  )
 
 /**
  * Opens (creating if needed) the ledger at `path` for the scope, in WAL mode
