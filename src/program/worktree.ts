@@ -1,62 +1,91 @@
 // The supervisor worktree's creation and startup check (design "Supervisor
 // worktree"; plan B11a and the owner's rulings on it): Runtime runs git
 // and reads the file system, Format decodes the raw output and Features
-// decides. Program only wires them (ruling 2). Creation lives here, not in
-// Runtime, because it ends in a Features check and Runtime imports only
-// Domain.
+// decides. Program performs the reads, passes them to Format and Features,
+// and sequences the prechecks, the add and the reads after it (ruling 2
+// and the ruling on R2 of the B11a review). Creation lives here because it
+// runs Features checks and Runtime imports only Domain.
 import { Effect, Option, Result } from "effect"
 import { WorktreeCreated } from "../domain/events.ts"
+import type { Revision } from "../domain/ids.ts"
 import type { DirectoryReading, GitIdentity, WorktreeDirectory } from "../domain/worktree.ts"
-import { GitOutputUndecodable } from "../domain/worktree.ts"
+import { GitOutputUndecodable, supervisorBranch } from "../domain/worktree.ts"
 import { checkWorktree } from "../features/worktree-check.ts"
 import { checkCreated } from "../features/worktree-created.ts"
-import { decodeRevParseLine, decodeRevParsePath } from "../format/rev-parse.ts"
+import { refuseExistingBranch, refuseExistingPath, requireAbsolute } from "../features/worktree-precheck.ts"
+import { decodeRevParseLine, decodeRevParsePath, decodeRevParseRevision } from "../format/rev-parse.ts"
 import { decodeWorktreeList } from "../format/worktree-list.ts"
+import { statOf } from "../runtime/file-paths.ts"
 import {
   addWorktreeWith,
   listWorktreesWith,
+  probeBranchWith,
+  readAddedWith,
+  readOwnerHeadWith,
   revParseArgs,
   runGit,
   worktreeListArgs,
   type RunGit,
-  type WorktreeRequest,
 } from "../runtime/worktree.ts"
 import { readDirectoryWith } from "../runtime/worktree-directory.ts"
 
+/** What creating the supervisor worktree needs (design "Creation"). */
+export interface WorktreeRequest {
+  /** The owner's checkout, read once for `rev-parse HEAD` and the branch check. */
+  readonly ownerCheckout: string
+  /** Where the worktree goes: an absolute path, `<stateDir>/worktree`, outside the owner's checkout. */
+  readonly path: string
+  /** The configured name; the branch is `foreman/<name>`. */
+  readonly name: string
+  /** The configured start revision; none means the owner's HEAD. */
+  readonly start: Option.Option<Revision>
+}
+
 /** A decoder of one command's output, as Format provides them. */
-type OutputDecoder = (text: string) => Result.Result<string, { readonly message: string }>
+type OutputDecoder<Value> = (text: string) => Result.Result<Value, { readonly message: string }>
 
 /**
- * {@link createWorktree} over an injected git runner. Adds the worktree
- * (Runtime), decodes each read (Format), and checks that the top level is
- * the requested path with symlinks resolved and that HEAD is
- * `refs/heads/foreman/<name>` (Features). The recorded `path` is git's
- * top level, the form `git worktree list` prints.
+ * {@link createWorktree} over an injected git runner. Requires an absolute
+ * path before anything runs (Features), resolves the base (Runtime reads,
+ * Format decodes), runs the branch and path prechecks (Runtime reads,
+ * Features decides), adds the worktree (Runtime), decodes each read after
+ * it (Format), and checks that the top level is the requested path with
+ * symlinks resolved and that HEAD is `refs/heads/foreman/<name>`
+ * (Features). The recorded `path` is git's top level, the form `git
+ * worktree list` prints.
  */
 export const createWorktreeWith = (run: RunGit) =>
   Effect.fn("createWorktree")(function* (request: WorktreeRequest) {
-    const added = yield* addWorktreeWith(run)(request)
+    const path = yield* Effect.fromResult(requireAbsolute(request.path))
+    const branch = supervisorBranch(request.name)
+    const base = yield* baseOf(run, request)
+    const probe = yield* probeBranchWith(run)(request.ownerCheckout, branch)
+    yield* Effect.fromResult(refuseExistingBranch(branch, probe))
+    yield* Effect.fromResult(refuseExistingPath(path, yield* statOf(path)))
+    yield* addWorktreeWith(run)(request.ownerCheckout, { branch, path, base })
+    const added = yield* readAddedWith(run)(path)
     const found = yield* Effect.all({
       toplevel: decoded(decodeRevParsePath, added.toplevel, revParseArgs.toplevel),
       headRef: decoded(decodeRevParseLine, added.headRef, revParseArgs.headRef),
     })
-    yield* Effect.fromResult(checkCreated(added, found))
+    yield* Effect.fromResult(checkCreated({ resolvedPath: added.resolvedPath, branch }, found))
     const identity = yield* identityOf(added)
-    return new WorktreeCreated({
-      path: found.toplevel,
-      branch: added.branch,
-      base: added.base,
-      ...identity,
-    })
+    return new WorktreeCreated({ path: found.toplevel, branch, base, ...identity })
   })
 
 /**
  * Creates the supervisor worktree (design "Creation") and returns the
- * fields of `WorktreeCreated`. Fails with `WorktreeBranchExists` or
- * `WorktreePathExists` before running `worktree add`, with
+ * fields of `WorktreeCreated`. Fails with `WorktreePathNotAbsolute` before
+ * any git command when the path is not absolute; with
+ * `WorktreeBranchExists` or `WorktreePathExists` before running `worktree
+ * add`; with `PathUnreadable` when `stat` cannot inspect the path; with
  * `WorktreeNotAsCreated` when the new worktree is not at the requested
- * path on its branch, and with `GitCommandFailed` (args, exit code and
- * stderr) when a git command fails. Nothing is cleaned up on any failure.
+ * path on its branch; and with `GitCommandFailed` (args, exit code and
+ * stderr) when a git command fails. The path is refused only if it exists
+ * when the precheck runs: an empty directory that appears between the
+ * precheck and the add may be accepted by git, and no lock prevents that.
+ * A branch created in that window makes the add fail. Nothing is cleaned
+ * up on any failure.
  */
 export const createWorktree = createWorktreeWith(runGit)
 
@@ -81,13 +110,28 @@ export const identifyWorktreeWith = (run: RunGit) =>
  * `git worktree list --porcelain -z` lists its path on
  * `refs/heads/<branch>`, locked, and the directory there is present with
  * the recorded git identity; otherwise fails with `WorktreeCheckFailed`
- * naming each failed condition, and `run` stops and reports. It never
+ * naming each failed condition, and `run` stops and reports. Fails with
+ * `PathUnreadable` when the recorded path cannot be inspected, and with
+ * `WorktreeRecordInvalid` when a recorded field is empty. It never
  * prunes, unlocks or removes anything.
  */
 export const identifyWorktree = identifyWorktreeWith(runGit)
 
+/** The start revision, or the owner's `rev-parse HEAD` read and decoded. */
+const baseOf = (run: RunGit, request: WorktreeRequest) =>
+  Option.match(request.start, {
+    onSome: (start) => Effect.succeed(start),
+    onNone: () => ownerHead(run, request.ownerCheckout),
+  })
+
+/** `git rev-parse HEAD` in the owner's checkout (Runtime), decoded as a revision (Format). */
+const ownerHead = (run: RunGit, ownerCheckout: string) =>
+  Effect.flatMap(readOwnerHeadWith(run)(ownerCheckout), (text) =>
+    decoded(decodeRevParseRevision, text, revParseArgs.ownerHead),
+  )
+
 /** One raw read decoded, or the typed failure naming its command. */
-const decoded = (decode: OutputDecoder, text: string, args: ReadonlyArray<string>) =>
+const decoded = <Value>(decode: OutputDecoder<Value>, text: string, args: ReadonlyArray<string>) =>
   Effect.fromResult(Result.mapError(decode(text), undecodable(args)))
 
 /** The two identity reads decoded as absolute paths. */

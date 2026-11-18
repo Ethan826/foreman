@@ -5,6 +5,7 @@
 // read by its own `rev-parse`, so no value is split from another at a
 // newline.
 import { Result, Schema, SchemaTransformation, String } from "effect"
+import { Revision } from "../domain/ids.ts"
 import { GitText } from "../domain/worktree.ts"
 
 /** The newline git prints after each value. */
@@ -23,13 +24,14 @@ const dropLineEnd = String.slice(0, -lineEndLength)
 const addLineEnd = (value: string): string => `${value}${lineEnd}`
 
 /** One output line: text ending in a newline, decoded to the text before it. */
-const lineOf = (value: Schema.Codec<string>) =>
+const lineOf = <Value>(value: Schema.Codec<Value, string>) =>
   Schema.String.check(Schema.isEndingWith(lineEnd)).pipe(
     Schema.decodeTo(value, SchemaTransformation.transform({ decode: dropLineEnd, encode: addLineEnd })),
   )
 
 const decodeLine = Schema.decodeUnknownResult(lineOf(GitText))
 const decodePathLine = Schema.decodeUnknownResult(lineOf(AbsolutePath))
+const decodeRevisionLine = Schema.decodeUnknownResult(lineOf(Revision))
 
 /**
  * Decodes one value of `rev-parse`, such as `--symbolic-full-name HEAD`:
@@ -46,3 +48,12 @@ export const decodeRevParseLine = (text: string): Result.Result<string, Schema.S
  */
 export const decodeRevParsePath = (text: string): Result.Result<string, Schema.SchemaError> =>
   decodePathLine(text)
+
+/**
+ * Decodes `rev-parse HEAD` in the owner's checkout as a {@link Revision}
+ * (owner ruling on R2 of the B11a review: Format decodes, not Runtime).
+ * Fails when there is no trailing newline or the text before it is not
+ * an object id.
+ */
+export const decodeRevParseRevision = (text: string): Result.Result<Revision, Schema.SchemaError> =>
+  decodeRevisionLine(text)

@@ -85,6 +85,16 @@ export const DirectoryReading = Schema.Struct({
 export type DirectoryReading = typeof DirectoryReading.Type
 
 /**
+ * What `stat` found at a path, following symlinks (owner ruling on R1 of
+ * the B11a review): none when nothing is there (ENOENT or ENOTDIR), and
+ * otherwise whether it is a directory. A permission or other I/O failure
+ * is not a reading; Runtime reports it as {@link PathUnreadable}.
+ */
+export const PathStat = Schema.Option(Schema.Struct({ directory: Schema.Boolean }))
+/** What `stat` found at a path; see {@link PathStat}. */
+export type PathStat = typeof PathStat.Type
+
+/**
  * The conditions of the startup check (design "Startup check", owner
  * ruling 5 on B11a): the recorded path is listed, a directory is present
  * there, that directory has the recorded git identity, it is on
@@ -124,6 +134,27 @@ export class WorktreeBranchExists extends Schema.TaggedError<WorktreeBranchExist
 export class WorktreePathExists extends Schema.TaggedError<WorktreePathExists>()(
   "WorktreePathExists",
   { path: GitText },
+) {}
+
+/**
+ * Creation refused: the requested path is not absolute (owner ruling on
+ * R3 of the B11a review). Git would resolve a relative path against the
+ * owner's checkout and read one starting with `-` as an option, so the
+ * path is checked before any precheck or git command. Nothing is created.
+ */
+export class WorktreePathNotAbsolute extends Schema.TaggedError<WorktreePathNotAbsolute>()(
+  "WorktreePathNotAbsolute",
+  { path: Schema.String },
+) {}
+
+/**
+ * The startup check was given a recorded worktree with an empty path,
+ * branch, git directory or common directory (owner ruling on R4 of the
+ * B11a review). `reason` is the schema's message. Nothing was checked.
+ */
+export class WorktreeRecordInvalid extends Schema.TaggedError<WorktreeRecordInvalid>()(
+  "WorktreeRecordInvalid",
+  { reason: Schema.String },
 ) {}
 
 /**

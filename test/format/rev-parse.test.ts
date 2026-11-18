@@ -2,7 +2,11 @@
 // removed, so a path containing or ending in a newline survives.
 import { describe, expect, it } from "@effect/vitest"
 import { Result } from "effect"
-import { decodeRevParseLine, decodeRevParsePath } from "../../src/format/rev-parse.ts"
+import {
+  decodeRevParseLine,
+  decodeRevParsePath,
+  decodeRevParseRevision,
+} from "../../src/format/rev-parse.ts"
 
 describe("decodeRevParsePath", () => {
   it("removes the one trailing newline", () => {
@@ -45,5 +49,21 @@ describe("decodeRevParseLine", () => {
 
   it("fails on a lone newline", () => {
     expect(Result.isFailure(decodeRevParseLine("\n"))).toBe(true)
+  })
+})
+
+describe("decodeRevParseRevision", () => {
+  const head = "065520b4b20208064890d33a402c12fb5bac9e47"
+
+  it("decodes `rev-parse HEAD` output as a revision", () => {
+    expect(decodeRevParseRevision(`${head}\n`)).toEqual(Result.succeed(head))
+  })
+
+  it("fails on output that is not an object id", () => {
+    expect(Result.isFailure(decodeRevParseRevision("HEAD\n"))).toBe(true)
+  })
+
+  it("fails on empty output", () => {
+    expect(Result.isFailure(decodeRevParseRevision(""))).toBe(true)
   })
 })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Option, Result } from "effect"
+import { Option, Result, Schema } from "effect"
 import type { WorktreeCondition, WorktreeDirectory, WorktreeEntry } from "../../src/domain/worktree.ts"
-import { WorktreeCheckFailed, WorktreeConditions } from "../../src/domain/worktree.ts"
+import { WorktreeCheckFailed, WorktreeConditions, WorktreeRecordInvalid } from "../../src/domain/worktree.ts"
 import { checkWorktree } from "../../src/features/worktree-check.ts"
 
 const recorded = {
@@ -122,5 +122,15 @@ describe("checkWorktree (startup check)", () => {
   it("reports only the listing when the path is not listed, whatever the directory", () => {
     const gone = { present: false, identity: Option.none() }
     expect(check([owner], gone)).toEqual(failedWith(WorktreeConditions.Listed))
+  })
+
+  it("refuses an empty recorded path with a typed failure, without throwing", () => {
+    const refused = checkWorktree({ ...recorded, path: "" }, [entry({})], present)
+    expect(Option.map(Result.getFailure(refused), Schema.is(WorktreeRecordInvalid))).toEqual(Option.some(true))
+  })
+
+  it("refuses an empty recorded branch with a typed failure, without throwing", () => {
+    const refused = checkWorktree({ ...recorded, branch: "" }, [entry({})], present)
+    expect(Option.map(Result.getFailure(refused), Schema.is(WorktreeRecordInvalid))).toEqual(Option.some(true))
   })
 })

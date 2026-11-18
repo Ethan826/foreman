@@ -3,15 +3,15 @@
 // worktrees, Runtime reads the directory, Format decodes and Features
 // decides. Each test makes its own repository and worktree.
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Option, Result } from "effect"
+import { Effect, Option, Result, Schema } from "effect"
 import { mkdirSync, rmSync } from "node:fs"
 import { decodeWorktreeList } from "../../src/format/worktree-list.ts"
 import { listWorktrees } from "../../src/runtime/worktree.ts"
 import type { WorktreeCreated } from "../../src/domain/events.ts"
-import { WorktreeCheckFailed, WorktreeConditions } from "../../src/domain/worktree.ts"
+import { PathUnreadable, WorktreeCheckFailed, WorktreeConditions } from "../../src/domain/worktree.ts"
 import type { WorktreeCondition } from "../../src/domain/worktree.ts"
 import { createWorktree, identifyWorktree } from "../../src/program/worktree.ts"
-import { git, withRepo } from "../runtime/git-repo.ts"
+import { git, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
 
 const createdAt = (owner: string, path: string) =>
   createWorktree({ ownerCheckout: owner, path, name: "t", start: Option.none() })
@@ -117,6 +117,23 @@ const reportsOtherRepository = (dir: string, owner: string) =>
     )
   })
 
+/** The path and reason of a `PathUnreadable` failure; none for any other failure. */
+const unreadable = (failure: unknown) =>
+  Schema.is(PathUnreadable)(failure)
+    ? Option.some({ path: failure.path, reason: failure.reason })
+    : Option.none()
+
+const reportsUnreadableDirectory = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    mkdirSync(`${dir}/locked`)
+    const worktree = yield* createdAt(owner, `${dir}/locked/worktree`)
+    const refused = yield* withUnsearchable(`${dir}/locked`, Effect.flip(identifyWorktree(worktree)))
+    expect(Option.map(unreadable(refused), (failure) => failure.path)).toEqual(Option.some(worktree.path))
+    expect(Option.map(unreadable(refused), (failure) => failure.reason)).toEqual(
+      Option.some(expect.stringContaining("EACCES")),
+    )
+  })
+
 describe("identifyWorktree (startup check)", () => {
   it.effect("passes for the created worktree", () => withRepo(passesForCreated))
 
@@ -135,4 +152,6 @@ describe("identifyWorktree (startup check)", () => {
   it.effect("reports an unrelated directory at the path as the wrong identity", () => withRepo(reportsUnrelatedDirectory))
 
   it.effect("reports another repository at the path as the wrong identity", () => withRepo(reportsOtherRepository))
+
+  it.effect("fails with PathUnreadable, not directory-present, under an unsearchable parent", () => withRepo(reportsUnreadableDirectory))
 })

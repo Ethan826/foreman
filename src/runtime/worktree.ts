@@ -3,22 +3,15 @@
 // owner's rulings on it): adding it from the owner's checkout, listing the
 // worktrees for the startup check (the directory reading is in
 // `worktree-directory.ts`).
-// Runtime returns raw output; Format decodes and Features decides, wired
-// in Program (ruling 2), since Runtime imports only Domain. Git runs with
+// Runtime runs commands and returns their raw output; Format decodes and
+// Features decides, and Program reads, decides and sequences (ruling 2 and
+// the ruling on R2 of the B11a review). Git runs with
 // the inherited environment; the clean environment and `-c` overrides are
 // B11's `git.ts` and not applied here. The owner's checkout is only read.
-import { Effect, Option, Schema, String } from "effect"
+import { Effect, Option } from "effect"
 import { execFile, type ExecFileError } from "node:child_process"
-import { existsSync } from "node:fs"
-import { Revision } from "../domain/ids.ts"
-import {
-  GitCommandFailed,
-  GitOutputUndecodable,
-  WorktreeBranchExists,
-  WorktreePathExists,
-  localBranchRef,
-  supervisorBranch,
-} from "../domain/worktree.ts"
+import type { Revision } from "../domain/ids.ts"
+import { GitCommandFailed, localBranchRef } from "../domain/worktree.ts"
 import { realpathOf } from "./file-paths.ts"
 
 /** What a finished git command printed and its exit code. */
@@ -38,23 +31,46 @@ export type RunGit = (
   args: ReadonlyArray<string>,
 ) => Effect.Effect<GitOutput, GitCommandFailed>
 
-/** What creating the supervisor worktree needs (design "Creation"). */
-export interface WorktreeRequest {
-  /** The owner's checkout, read once for `rev-parse HEAD` and the branch check. */
-  readonly ownerCheckout: string
-  /** Where the worktree goes: `<stateDir>/worktree`, outside the owner's checkout. */
+/** What `git worktree add` is asked to make. */
+export interface WorktreeAddition {
+  /** The short branch name to create, `foreman/<name>`. */
+  readonly branch: string
+  /** The absolute path of the new worktree. */
   readonly path: string
-  /** The configured name; the branch is `foreman/<name>`. */
-  readonly name: string
-  /** The configured start revision; none means the owner's HEAD. */
-  readonly start: Option.Option<Revision>
+  /** The revision the branch starts at. */
+  readonly base: Revision
+}
+
+/** A finished command's output together with the args it ran with. */
+export interface GitRun extends GitOutput {
+  /** The args git ran with. */
+  readonly args: ReadonlyArray<string>
+}
+
+/**
+ * The raw reads taken in the new worktree after `git worktree add`, for
+ * Program to decode and check. The four git reads are stdout with its
+ * trailing newline; `resolvedPath` is `realpath` of the requested path,
+ * not git output.
+ */
+export interface AddedReads {
+  /** The requested path with symlinks resolved, read after the add. */
+  readonly resolvedPath: string
+  /** Raw stdout of `rev-parse --show-toplevel` in the new worktree. */
+  readonly toplevel: string
+  /** Raw stdout of `rev-parse --symbolic-full-name HEAD` in the new worktree. */
+  readonly headRef: string
+  /** Raw stdout of `rev-parse --absolute-git-dir` in the new worktree. */
+  readonly gitDir: string
+  /** Raw stdout of `rev-parse --path-format=absolute --git-common-dir` in the new worktree. */
+  readonly commonDir: string
 }
 
 /** The lock reason `git worktree add --lock --reason` records. */
 const lockReason = "foreman"
 
-/** `rev-parse --verify --quiet`'s exit code when the ref does not exist. */
-const refMissingExit = 1
+/** git's separator between options and positional arguments. */
+const endOfOptions = "--"
 
 /** Runs git through `execFile`, reading stdout and stderr as UTF-8. */
 export const runGit: RunGit = (cwd, args) =>
@@ -72,64 +88,63 @@ export const worktreeListArgs = ["worktree", "list", "--porcelain", "-z"] as con
 
 /**
  * The single-value `rev-parse` reads, one command each so no value is
- * split from another at a newline. All four resolve symlinks (probed with
- * git 2.50.1). `headRef` prints a full ref, or `HEAD` when detached.
+ * split from another at a newline. The four path and ref reads resolve
+ * symlinks (probed with git 2.50.1). `headRef` prints a full ref, or `HEAD`
+ * when detached; `ownerHead` is the owner's HEAD revision for the base.
  */
 export const revParseArgs = {
   gitDir: ["rev-parse", "--absolute-git-dir"],
   commonDir: ["rev-parse", "--path-format=absolute", "--git-common-dir"],
   toplevel: ["rev-parse", "--show-toplevel"],
   headRef: ["rev-parse", "--symbolic-full-name", "HEAD"],
+  ownerHead: ["rev-parse", "HEAD"],
 } as const
 
 /**
- * What `git worktree add` produced, as raw reads for Program to decode
- * and check. The four git reads are stdout with its trailing newline;
- * `resolvedPath` is `realpath` of the requested path, not git output.
+ * The branch probe's command: `rev-parse --verify --quiet
+ * refs/heads/<branch>`, which exits 0 when the ref exists and 1 when not.
  */
-export interface AddedWorktree {
-  /** The short branch name, `foreman/<name>`. */
-  readonly branch: string
-  /** The revision the branch was created at. */
-  readonly base: Revision
-  /** The requested path with symlinks resolved, read after the add. */
-  readonly resolvedPath: string
-  /** Raw stdout of `rev-parse --show-toplevel` in the new worktree. */
-  readonly toplevel: string
-  /** Raw stdout of `rev-parse --symbolic-full-name HEAD` in the new worktree. */
-  readonly headRef: string
-  /** Raw stdout of `rev-parse --absolute-git-dir` in the new worktree. */
-  readonly gitDir: string
-  /** Raw stdout of `rev-parse --path-format=absolute --git-common-dir` in the new worktree. */
-  readonly commonDir: string
+export const branchProbeArgs = (branch: string): ReadonlyArray<string> => [
+  "rev-parse", "--verify", "--quiet", localBranchRef(branch),
+]
+
+/** The raw stdout of `git rev-parse HEAD` in the owner's checkout. */
+export const readOwnerHeadWith = (run: RunGit) => (ownerCheckout: string) =>
+  succeeded(run, ownerCheckout, revParseArgs.ownerHead)
+
+/**
+ * Runs the branch probe ({@link branchProbeArgs}) in the owner's checkout
+ * and reports its output and exit code, whatever the exit code.
+ */
+export const probeBranchWith = (run: RunGit) => (ownerCheckout: string, branch: string) => {
+  const args = branchProbeArgs(branch)
+  return Effect.map(run(ownerCheckout, args), (output): GitRun => ({ args, ...output }))
 }
 
 /**
- * Adds the supervisor worktree over an injected git runner (design
- * "Creation"). Resolves the base, refuses an existing branch or path
- * (with no cleanup), runs `git worktree add --lock --reason foreman -b
- * foreman/<name> <path> <base>`, and then takes the raw reads of
- * {@link AddedWorktree}. A failed command keeps its args, exit code and
- * stderr in {@link GitCommandFailed}, including the add when a race
- * defeats the prechecks. Program decodes and checks the reads.
+ * Runs `git worktree add --lock --reason foreman -b <branch> -- <path>
+ * <base>` in the owner's checkout. The `--` keeps a path that starts with
+ * `-` from reading as an option (git 2.50.1 accepts it there). A non-zero
+ * exit fails with {@link GitCommandFailed} keeping args, exit code and
+ * stderr. Nothing is checked first and nothing is cleaned up.
  */
-export const addWorktreeWith = (run: RunGit) =>
-  Effect.fn("addWorktree")(function* (request: WorktreeRequest) {
-    const branch = supervisorBranch(request.name)
-    const base = yield* resolveBase(run, request)
-    yield* refuseExistingBranch(run, request.ownerCheckout, branch)
-    yield* refuseExistingPath(request.path)
-    yield* succeeded(run, request.ownerCheckout, [
-      "worktree", "add", "--lock", "--reason", lockReason, "-b", branch, request.path, base,
-    ])
-    const resolvedPath = yield* realpathOf(request.path)
+export const addWorktreeWith = (run: RunGit) => (ownerCheckout: string, addition: WorktreeAddition) =>
+  Effect.asVoid(succeeded(run, ownerCheckout, worktreeAddArgs(addition)))
+
+/**
+ * Takes the raw reads of {@link AddedReads} at `path`: its `realpath`,
+ * then the four `rev-parse` commands run inside it, each required to exit 0.
+ */
+export const readAddedWith = (run: RunGit) =>
+  Effect.fn("readAdded")(function* (path: string) {
+    const resolvedPath = yield* realpathOf(path)
     const reads = yield* Effect.all({
-      toplevel: succeeded(run, request.path, revParseArgs.toplevel),
-      headRef: succeeded(run, request.path, revParseArgs.headRef),
-      gitDir: succeeded(run, request.path, revParseArgs.gitDir),
-      commonDir: succeeded(run, request.path, revParseArgs.commonDir),
+      toplevel: succeeded(run, path, revParseArgs.toplevel),
+      headRef: succeeded(run, path, revParseArgs.headRef),
+      gitDir: succeeded(run, path, revParseArgs.gitDir),
+      commonDir: succeeded(run, path, revParseArgs.commonDir),
     })
-    return { branch, base, resolvedPath, ...reads }
+    return { resolvedPath, ...reads }
   })
 
 /**
@@ -179,41 +194,8 @@ const succeeded = (run: RunGit, cwd: string, args: ReadonlyArray<string>) =>
         ),
   )
 
-/** The start revision, or `git rev-parse HEAD` in the owner's checkout. */
-const resolveBase = (run: RunGit, request: WorktreeRequest) =>
-  Option.match(request.start, {
-    onSome: (start) => Effect.succeed(start),
-    onNone: () => ownerHead(run, request.ownerCheckout),
-  })
-
-/** `git rev-parse HEAD` in the owner's checkout, decoded as a {@link Revision}. */
-const ownerHead = (run: RunGit, ownerCheckout: string) => {
-  const args = ["rev-parse", "HEAD"]
-  return Effect.flatMap(succeeded(run, ownerCheckout, args), (stdout) =>
-    Effect.mapError(
-      Schema.decodeUnknownEffect(Revision)(String.trim(stdout)),
-      (issue) => new GitOutputUndecodable({ args, reason: issue.message }),
-    ),
-  )
-}
-
-/** Fails with {@link WorktreeBranchExists} when `refs/heads/<branch>` exists. */
-const refuseExistingBranch = (run: RunGit, ownerCheckout: string, branch: string) => {
-  const args = ["rev-parse", "--verify", "--quiet", localBranchRef(branch)]
-  return Effect.flatMap(run(ownerCheckout, args), (output): Effect.Effect<
-    void,
-    WorktreeBranchExists | GitCommandFailed
-  > => {
-    if (output.exitCode === 0) return Effect.fail(new WorktreeBranchExists({ branch }))
-    if (output.exitCode === refMissingExit) return Effect.void
-    return Effect.fail(
-      new GitCommandFailed({ args, exitCode: Option.some(output.exitCode), stderr: output.stderr }),
-    )
-  })
-}
-
-/** Fails with {@link WorktreePathExists} when anything exists at `path`. */
-const refuseExistingPath = (path: string) =>
-  Effect.flatMap(Effect.sync(() => existsSync(path)), (exists) =>
-    exists ? Effect.fail(new WorktreePathExists({ path })) : Effect.void,
-  )
+/** The args of `git worktree add`, with `--` before the positional path and base. */
+const worktreeAddArgs = (addition: WorktreeAddition): ReadonlyArray<string> => [
+  "worktree", "add", "--lock", "--reason", lockReason, "-b", addition.branch,
+  endOfOptions, addition.path, addition.base,
+]

@@ -4,26 +4,40 @@
 // locked, and the directory at that path must be present with the
 // recorded git identity; if not, `run` stops and reports which condition
 // failed. Pure and total over the decoded listing and directory reading;
-// Program runs git and the decoders.
-import { Array as Arr, Option, Result } from "effect"
+// a recorded worktree with an empty field is a typed refusal, not a throw
+// (owner ruling on R4 of the B11a review). Program runs git and the
+// decoders.
+import { Array as Arr, Option, Result, Schema } from "effect"
 import type {
   GitIdentity,
   WorktreeCondition,
   WorktreeDirectory,
   WorktreeEntry,
 } from "../domain/worktree.ts"
-import { WorktreeCheckFailed, WorktreeConditions, localBranchRef } from "../domain/worktree.ts"
+import {
+  GitText,
+  WorktreeCheckFailed,
+  WorktreeConditions,
+  WorktreeRecordInvalid,
+  localBranchRef,
+} from "../domain/worktree.ts"
 
 /**
- * The recorded worktree, as `WorktreeCreated` holds it: its absolute
- * path, its short branch name (`foreman/<name>`) and its git identity.
+ * The recorded worktree, as `WorktreeCreated` holds it: its path,
+ * compared exactly with the listing's; its short branch name
+ * (`foreman/<name>`), whose ref `refs/heads/<branch>` the listing must
+ * show; and its git identity. Every field is non-empty text.
  */
-export interface RecordedWorktree extends GitIdentity {
-  /** The path recorded in `WorktreeCreated`, compared exactly with the listing's. */
-  readonly path: string
-  /** The short branch name; the listing must show `refs/heads/<branch>`. */
-  readonly branch: string
-}
+export const RecordedWorktree = Schema.Struct({
+  path: GitText,
+  branch: GitText,
+  gitDir: GitText,
+  commonDir: GitText,
+})
+/** The recorded worktree; see {@link RecordedWorktree}. */
+export type RecordedWorktree = typeof RecordedWorktree.Type
+
+const decodeRecorded = Schema.decodeUnknownResult(RecordedWorktree)
 
 /**
  * Checks the listing and the directory reading against the recorded
@@ -33,17 +47,33 @@ export interface RecordedWorktree extends GitIdentity {
  * condition that does not hold, in vocabulary order. When the path is not
  * listed, that is the only one reported; when the directory is absent,
  * its identity is not reported. A detached entry is not on the branch.
- * Paths compare as exact strings, with no normalizing.
+ * Paths compare as exact strings, with no normalizing. A recorded
+ * worktree with an empty field fails with {@link WorktreeRecordInvalid}
+ * and nothing is checked.
  */
 export const checkWorktree = (
   recorded: RecordedWorktree,
   entries: ReadonlyArray<WorktreeEntry>,
   directory: WorktreeDirectory,
-): Result.Result<WorktreeEntry, WorktreeCheckFailed> =>
-  Option.match(Arr.findFirst(entries, isAt(recorded.path)), {
-    onNone: () => Result.fail(failure(recorded, [WorktreeConditions.Listed])),
-    onSome: checkListed(recorded, directory),
-  })
+): Result.Result<WorktreeEntry, WorktreeCheckFailed | WorktreeRecordInvalid> =>
+  Result.flatMap(validRecord(recorded), checkRecorded(entries, directory))
+
+/** The recorded worktree when every field is non-empty; a typed refusal otherwise. */
+const validRecord = (recorded: RecordedWorktree): Result.Result<RecordedWorktree, WorktreeRecordInvalid> =>
+  Result.mapError(decodeRecorded(recorded), invalidRecord)
+
+/** A schema issue as the typed refusal of the record. */
+const invalidRecord = (issue: { readonly message: string }) =>
+  new WorktreeRecordInvalid({ reason: issue.message })
+
+/** Finds the recorded path's entry and checks it; a missing path is reported alone. */
+const checkRecorded =
+  (entries: ReadonlyArray<WorktreeEntry>, directory: WorktreeDirectory) =>
+  (recorded: RecordedWorktree): Result.Result<WorktreeEntry, WorktreeCheckFailed> =>
+    Option.match(Arr.findFirst(entries, isAt(recorded.path)), {
+      onNone: () => Result.fail(failure(recorded, [WorktreeConditions.Listed])),
+      onSome: checkListed(recorded, directory),
+    })
 
 /** Whether an entry is listed at exactly `path`. */
 const isAt = (path: string) => (entry: WorktreeEntry): boolean => entry.path === path

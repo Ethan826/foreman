@@ -3,7 +3,7 @@
 // config (never the global one), and one commit on `main`. Git runs
 // through the production `runGit`; a non-zero exit fails the test.
 import { Effect } from "effect"
-import { mkdtempSync, rmSync } from "node:fs"
+import { chmodSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { runGit } from "../../src/runtime/worktree.ts"
 
@@ -42,5 +42,27 @@ export const withRepo = <A, E>(use: (dir: string, owner: string) => Effect.Effec
     (dir) =>
       Effect.sync(() => {
         rmSync(dir, { recursive: true, force: true })
+      }),
+  )
+
+/** No permission bits: the directory can be neither listed nor searched. */
+const unsearchableMode = 0o000
+
+/** Owner read, write and search; group and others read and search. */
+const searchableMode = 0o755
+
+/**
+ * Runs `use` while `directory` is unsearchable (mode 000), and restores
+ * mode 755 afterwards so the temporary directory can be removed.
+ */
+export const withUnsearchable = <A, E>(directory: string, use: Effect.Effect<A, E>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      chmodSync(directory, unsearchableMode)
+    }),
+    () => use,
+    () =>
+      Effect.sync(() => {
+        chmodSync(directory, searchableMode)
       }),
   )

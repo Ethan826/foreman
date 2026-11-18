@@ -5,7 +5,7 @@
 // only; Format decodes it and Features decides.
 import { Effect, Option } from "effect"
 import type { DirectoryReading } from "../domain/worktree.ts"
-import { isDirectory } from "./file-paths.ts"
+import { statOf } from "./file-paths.ts"
 import { revParseArgs, runGit, type RunGit } from "./worktree.ts"
 
 /** The reading of a path with no directory at it. */
@@ -15,16 +15,20 @@ const absentDirectory: DirectoryReading = { present: false, identity: Option.non
  * {@link readDirectory} over an injected git runner. Reads whether a
  * directory is at `path` and, when one is, the two identity `rev-parse`
  * commands inside it. A command that exits non-zero there (no repository)
- * makes the identity none. Fails with `PathUnreadable` when the
- * path exists but cannot be inspected.
+ * makes the identity none. Nothing at the path, or a file that is not a
+ * directory, reads as absent. Fails with `PathUnreadable` when `stat`
+ * fails other than by absence, such as under an unsearchable parent.
  */
 export const readDirectoryWith = (run: RunGit) => (path: string) =>
-  Effect.flatMap(isDirectory(path), (present) =>
-    present ? readIdentity(run, path) : Effect.succeed(absentDirectory),
+  Effect.flatMap(statOf(path), (stat) =>
+    Option.exists(stat, isDirectoryStat) ? readIdentity(run, path) : Effect.succeed(absentDirectory),
   )
 
 /** The startup check's raw reading of the recorded path (owner ruling 5 on B11a). */
 export const readDirectory = readDirectoryWith(runGit)
+
+/** Whether `stat` found a directory, as opposed to some other file. */
+const isDirectoryStat = (found: { readonly directory: boolean }): boolean => found.directory
 
 /** A present directory with its identity reads, none unless both exit 0. */
 const readIdentity = (run: RunGit, path: string) =>

@@ -10,13 +10,15 @@ import { WorktreeCreated } from "../../src/domain/events.ts"
 import { Revision } from "../../src/domain/ids.ts"
 import {
   GitCommandFailed,
+  PathUnreadable,
   WorktreeBranchExists,
   WorktreeNotAsCreated,
   WorktreePathExists,
+  WorktreePathNotAbsolute,
 } from "../../src/domain/worktree.ts"
 import { createWorktree, createWorktreeWith, identifyWorktree } from "../../src/program/worktree.ts"
 import { revParseArgs, runGit, type RunGit } from "../../src/runtime/worktree.ts"
-import { emptyCommit, git, withRepo } from "../runtime/git-repo.ts"
+import { emptyCommit, git, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
 
 const request = (owner: string, path: string) => ({
   ownerCheckout: owner,
@@ -176,6 +178,62 @@ const raceKeepsGitDetails = (dir: string, owner: string) =>
     )
   })
 
+/** The real `runGit`, which first appends each command's args to `calls`. */
+const recording =
+  (calls: Array<ReadonlyArray<string>>): RunGit =>
+  (cwd, args) =>
+    Effect.andThen(
+      Effect.sync(() => {
+        calls.push(args)
+      }),
+      runGit(cwd, args),
+    )
+
+/** Whether a recorded command is `git worktree add`. */
+const isAdd = (args: ReadonlyArray<string>) => args[0] === "worktree" && args[1] === "add"
+
+/** The path and reason of a `PathUnreadable` failure; none for any other failure. */
+const unreadable = (failure: unknown) =>
+  Schema.is(PathUnreadable)(failure)
+    ? Option.some({ path: failure.path, reason: failure.reason })
+    : Option.none()
+
+const unreadablePathRefused = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    mkdirSync(`${dir}/locked`)
+    const path = `${dir}/locked/worktree`
+    const calls: Array<ReadonlyArray<string>> = []
+    const create = createWorktreeWith(recording(calls))
+    const refused = yield* withUnsearchable(`${dir}/locked`, Effect.flip(create(request(owner, path))))
+    expect(Option.map(unreadable(refused), (failure) => failure.path)).toEqual(Option.some(path))
+    expect(Option.map(unreadable(refused), (failure) => failure.reason)).toEqual(
+      Option.some(expect.stringContaining("EACCES")),
+    )
+    expect(calls.filter(isAdd)).toEqual([])
+    expect(existsSync(path)).toBe(false)
+  })
+
+const notAbsoluteRefused = (path: string) => (_dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const calls: Array<ReadonlyArray<string>> = []
+    const refused = yield* Effect.flip(createWorktreeWith(recording(calls))(request(owner, path)))
+    expect(refused).toEqual(new WorktreePathNotAbsolute({ path }))
+    expect(calls).toEqual([])
+    expect(existsSync(`${owner}/${path}`)).toBe(false)
+    expect(yield* git(owner, "branch", "--list", "foreman/*")).toBe("")
+  })
+
+const createdWithDashSegment = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const path = `${dir}/-worktree`
+    const calls: Array<ReadonlyArray<string>> = []
+    const created = yield* createWorktreeWith(recording(calls))(request(owner, path))
+    expect(created.path).toBe(realpathSync(path))
+    expect(yield* git(path, "symbolic-ref", "HEAD")).toBe("refs/heads/foreman/t")
+    const added = calls.filter(isAdd)
+    expect(added.map((args) => args.slice(-3, -1))).toEqual([["--", path]])
+  })
+
 describe("createWorktree", () => {
   it.effect("returns the created fields; the worktree is on its branch, locked", () => withRepo(createdOnBranchLocked))
 
@@ -196,4 +254,12 @@ describe("createWorktree", () => {
   it.effect("fails when HEAD is not refs/heads/foreman/<name>", () => withRepo(refusesOtherHead))
 
   it.effect("keeps git's args, exit code and stderr when a race defeats the branch precheck", () => withRepo(raceKeepsGitDetails))
+
+  it.effect("fails with PathUnreadable under an unsearchable parent and never runs the add", () => withRepo(unreadablePathRefused))
+
+  it.effect("refuses a relative path before running git", () => withRepo(notAbsoluteRefused("worktree")))
+
+  it.effect("refuses a dash-prefixed path before running git", () => withRepo(notAbsoluteRefused("-worktree")))
+
+  it.effect("creates an absolute path whose last segment starts with a dash, after --", () => withRepo(createdWithDashSegment))
 })

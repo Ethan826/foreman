@@ -12,4 +12,4 @@ Per the [design](../../docs/plans/2026-11-14-agent-supervisor-design.md) ("Archi
 
 ## Worktree startup check
 
-[`worktree.ts`](worktree.ts) wires the supervisor worktree. `createWorktree` adds it through Runtime, decodes each `rev-parse` read and runs `checkCreated`; it lives here because Runtime may not import Features. `identifyWorktree` lists the worktrees from the recorded common directory, reads the recorded directory, decodes both and passes them to `checkWorktree`. Neither cleans up, prunes or unlocks anything.
+[`worktree.ts`](worktree.ts) wires the supervisor worktree. `createWorktree` sequences creation. It first requires an absolute path. It reads the owner's HEAD, the branch probe and the path's `stat` through Runtime, decodes with Format, and gives the results to the Features prechecks. Then it runs the add, decodes the reads taken after it, and runs `checkCreated`. It lives here because Runtime may not import Features. `identifyWorktree` lists the worktrees from the recorded common directory, reads the recorded directory, decodes both and passes them to `checkWorktree`. Neither cleans up, prunes or unlocks anything.
