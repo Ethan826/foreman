@@ -1032,6 +1032,44 @@ review was read-only, and did not run the full suite.
 Consumption, measured by the harness: 110,779 tokens (20 tool calls,
 about 3.9 minutes).
 
+Owner rulings on the review (2026-11-17). B11a has cost 559,543 measured
+tokens plus coordination. The next pass closes these acceptance gaps
+only. It does not expand the contract or add machinery.
+
+Fix before landing:
+
+- R1: use stat alone, and tell absence apart from permission and other
+  I/O failures. Add the reproduced unreadable-parent regression test.
+- R2: fix it; no architectural exception. Format decodes, and Features
+  makes the semantic refusals. Program performs the reads and connects
+  the decisions. Runtime executes operations and reports their results.
+- R3: require an absolute destination before any precheck or execution,
+  and use git's argument separator where it is supported. Test relative
+  and dash-prefixed inputs.
+- R4: empty input is a typed refusal, not a throw.
+- R6: document the actual restriction. An existing path is refused at
+  precheck time, and an empty directory that appears afterward may be
+  accepted by git. Add no locking to enforce a stronger promise.
+
+Deferred, each with its trigger:
+
+- R5 (lenient `-z` decoder): before extending the listing decoder or
+  claiming strict validation.
+- R7 (closed-vocabulary gate): at the next lint-gate change. Until then,
+  coverage is incomplete. `test/lint/fixtures.test.ts` asserts only that
+  at least one closed-vocabulary message fires for
+  `lint-fixtures/src/features/bare-names.ts`, so removing any one name
+  from `closedNames` would still pass. `path-listed` and `is-locked` have
+  no fixture line, and the vocabulary list in AGENTS.md is out of date.
+- R8 (inherited git config and environment, English-message dependence
+  in a test): in the next B11 git-environment slice, which also removes
+  the dependence on English messages.
+
+Plan: one correction unit, then a targeted check of R1 to R4 and R6 plus
+the normal suite. No further review of the whole slice. Existing tests
+and findings stay. No landing or push. The unit's consumption is reported
+on its own.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
