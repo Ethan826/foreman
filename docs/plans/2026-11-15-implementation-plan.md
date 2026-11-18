@@ -1070,6 +1070,52 @@ the normal suite. No further review of the whole slice. Existing tests
 and findings stay. No landing or push. The unit's consumption is reported
 on its own.
 
+Review corrections (2026-11-17): complete, 0cbd879, on `b11a-worktree`.
+It is not landed or pushed.
+
+- R1: `statOf` (`src/runtime/file-paths.ts`) uses stat alone. ENOENT and
+  ENOTDIR read as absent, and any other error is `PathUnreadable`. The
+  startup check and the creation precheck both use it. Regression tests:
+  an unsearchable parent gives `PathUnreadable`, not
+  `directory-present`, and on creation the add never runs.
+- R2: Runtime runs commands and returns raw results (`readOwnerHeadWith`,
+  `probeBranchWith`, `addWorktreeWith`, `readAddedWith`). Format decodes
+  (`decodeRevParseRevision`). Features makes the refusals
+  (`src/features/worktree-precheck.ts`: `requireAbsolute`,
+  `refuseExistingBranch`, `refuseExistingPath`). Program sequences the
+  absolute check, base, branch probe, stat, add, post-add reads and
+  `checkCreated`.
+- R3: `requireAbsolute` runs before any git command, and `--` goes
+  before the add's positional arguments (git 2.50.1 accepts it,
+  confirmed by a real run). Relative and dash-prefixed inputs are refused
+  with no git command run, and an absolute path ending in `-worktree` is
+  created.
+- R4: `RecordedWorktree` is a schema of `GitText` fields, so an empty
+  path or branch gives `WorktreeRecordInvalid`, not a throw.
+- R6: the TSDoc on `createWorktree`, the precheck header and the READMEs
+  state the actual restriction. No locking was added.
+- The worker's small deviations: the owner's HEAD is decoded strictly
+  (exactly one newline), and there are new Domain errors
+  `WorktreePathNotAbsolute` and `WorktreeRecordInvalid` and a schema
+  `PathStat`.
+- Open, for the owner (the coordinator's targeted check): two small
+  semantic choices remain in Runtime, on the startup-check path, which
+  the review's R2 did not name. `readDirectoryWith`
+  (`src/runtime/worktree-directory.ts`) folds "a file, not a directory"
+  into absent, and it turns a non-zero `rev-parse` exit into "no
+  identity" (`stdoutOnSuccess`). The behavior is correct, and both fail
+  closed. Under ruling R2's wording, Runtime would report the stat result
+  and the exit codes, and Features would decide. The worker named both
+  and left them, because they were outside its brief.
+- Coordinator's targeted check: the R1 to R4 regression tests ran by name
+  and passed (53 tests in the four files). `gtimeout -k 5 300 bun run
+  check` PASS (0 blocking; the same 30 non-blocking notes).
+  `gtimeout -k 5 300 bun run test` PASS (47 files, 509 tests). No timeout
+  fired.
+- Consumption, measured by the harness: 158,596 tokens (50 tool calls,
+  about 7.2 minutes). B11a's measured total is now 718,139 tokens, plus
+  coordination.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
