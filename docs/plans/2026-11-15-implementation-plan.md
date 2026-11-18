@@ -1157,6 +1157,17 @@ R2 residue fixed (2026-11-18), 0c6298c:
 - Effort: inline, about 20 tool calls. The harness does not measure the
   coordinator's own tokens, so no token figure is claimed.
 
+B11a landed (2026-11-18, owner authorization): fast-forward of `main`
+from 3301437 to f9257c4 (15 commits, all with the noreply author email).
+There is no merge commit and nothing was pushed; `main` had not diverged.
+On `main`, `gtimeout -k 5 300 bun run check` PASS (0 blocking, 30
+non-blocking notes) and `gtimeout -k 5 300 bun run test` PASS (47 files,
+515 tests). After both passed, the `b11a-worktree` branch was deleted.
+R5, R7 and R8 stay deferred with their triggers (above), and F8 stays
+with B15. B11a's measured total is 718,139 tokens across four worker
+units, plus coordination that was not measured. The rest of B11 is not
+authorized.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
