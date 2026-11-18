@@ -48,51 +48,53 @@ export const WorktreeEntry = Schema.Struct({
 export type WorktreeEntry = typeof WorktreeEntry.Type
 
 /**
- * A worktree's git identity: its own git directory and the repository's
- * common git directory, each absolute with symlinks resolved, as
- * `rev-parse --absolute-git-dir` and `rev-parse --path-format=absolute
- * --git-common-dir` print them run inside the worktree.
- */
-export const GitIdentity = Schema.Struct({ gitDir: GitText, commonDir: GitText })
-/** A worktree's git identity; see {@link GitIdentity}. */
-export type GitIdentity = typeof GitIdentity.Type
-
-/**
- * What the startup check found at the recorded path (owner ruling 5 on
- * B11a, F9). `present` is whether a directory is there. `identity` is the
- * git identity read inside it, none when it is absent or git does not see
- * a repository there.
- */
-export const WorktreeDirectory = Schema.Struct({
-  present: Schema.Boolean,
-  identity: Schema.Option(GitIdentity),
-})
-/** What the startup check found at the recorded path; see {@link WorktreeDirectory}. */
-export type WorktreeDirectory = typeof WorktreeDirectory.Type
-
-/**
- * The raw reading of the recorded path that Runtime takes for the startup
- * check: `present` is whether a directory is there (symlinks followed);
- * `identity` holds the stdout of the two identity `rev-parse` commands,
- * each with its trailing newline, and is none when the directory is
- * absent or either command exits non-zero. Format decodes the stdout.
- */
-export const DirectoryReading = Schema.Struct({
-  present: Schema.Boolean,
-  identity: Schema.Option(Schema.Struct({ gitDir: Schema.String, commonDir: Schema.String })),
-})
-/** The raw reading of the recorded path; see {@link DirectoryReading}. */
-export type DirectoryReading = typeof DirectoryReading.Type
-
-/**
  * What `stat` found at a path, following symlinks (owner ruling on R1 of
  * the B11a review): none when nothing is there (ENOENT or ENOTDIR), and
- * otherwise whether it is a directory. A permission or other I/O failure
- * is not a reading; Runtime reports it as {@link PathUnreadable}.
+ * otherwise whether it is a directory, so a file and a directory stay
+ * distinct. A permission or other I/O failure is not a reading; Runtime
+ * reports it as {@link PathUnreadable}.
  */
 export const PathStat = Schema.Option(Schema.Struct({ directory: Schema.Boolean }))
 /** What `stat` found at a path; see {@link PathStat}. */
 export type PathStat = typeof PathStat.Type
+
+/** An identity `rev-parse` that exited 0, with the absolute path it printed. */
+export class IdentityPrinted extends Schema.TaggedClass<IdentityPrinted>()(
+  "IdentityPrinted",
+  { path: GitText },
+) {}
+
+/**
+ * An identity `rev-parse` that exited non-zero, as it does where git sees
+ * no repository, with its exit code and stderr kept for the report.
+ */
+export class IdentityExited extends Schema.TaggedClass<IdentityExited>()(
+  "IdentityExited",
+  { exitCode: Schema.Int, stderr: Schema.String },
+) {}
+
+/**
+ * One identity `rev-parse` as Format decoded it (owner ruling on the
+ * R2 residue, 2026-11-18): the path it printed, or how it exited. Whether
+ * either result identifies the recorded worktree is decided in Features.
+ */
+export const IdentityRead = Schema.Union([IdentityPrinted, IdentityExited])
+/** One decoded identity `rev-parse`; see {@link IdentityRead}. */
+export type IdentityRead = typeof IdentityRead.Type
+
+/**
+ * What the startup check found at the recorded path (owner ruling 5 on
+ * B11a, F9, and the ruling on the R2 residue). `stat` is what was there:
+ * nothing, a file or a directory. `identity` holds the two identity
+ * `rev-parse` results read inside a directory. It is none when the path
+ * is not a directory, because the commands are run only inside one.
+ */
+export const WorktreeDirectory = Schema.Struct({
+  stat: PathStat,
+  identity: Schema.Option(Schema.Struct({ gitDir: IdentityRead, commonDir: IdentityRead })),
+})
+/** What the startup check found at the recorded path; see {@link WorktreeDirectory}. */
+export type WorktreeDirectory = typeof WorktreeDirectory.Type
 
 /**
  * The conditions of the startup check (design "Startup check", owner

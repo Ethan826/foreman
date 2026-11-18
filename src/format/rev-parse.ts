@@ -6,7 +6,7 @@
 // newline.
 import { Result, Schema, SchemaTransformation, String } from "effect"
 import { Revision } from "../domain/ids.ts"
-import { GitText } from "../domain/worktree.ts"
+import { GitText, IdentityExited, IdentityPrinted, type IdentityRead } from "../domain/worktree.ts"
 
 /** The newline git prints after each value. */
 const lineEnd = "\n"
@@ -57,3 +57,24 @@ export const decodeRevParsePath = (text: string): Result.Result<string, Schema.S
  */
 export const decodeRevParseRevision = (text: string): Result.Result<Revision, Schema.SchemaError> =>
   decodeRevisionLine(text)
+
+/** The exit code of a `rev-parse` that printed its value. */
+const successExit = 0
+
+/**
+ * Decodes one identity `rev-parse` run, such as `--absolute-git-dir`
+ * inside the recorded path (owner ruling on the R2 residue of the B11a
+ * review). Exit 0 decodes its stdout as {@link decodeRevParsePath} does,
+ * into `IdentityPrinted`. Any other exit becomes `IdentityExited` with the
+ * exit code and stderr, with nothing decided about what the exit means.
+ * Fails only when a run that exited 0 printed something other than one
+ * absolute path.
+ */
+export const decodeIdentityRun = (run: {
+  readonly exitCode: number
+  readonly stdout: string
+  readonly stderr: string
+}): Result.Result<IdentityRead, Schema.SchemaError> =>
+  run.exitCode === successExit
+    ? Result.map(decodePathLine(run.stdout), (path) => new IdentityPrinted({ path }))
+    : Result.succeed(new IdentityExited({ exitCode: run.exitCode, stderr: run.stderr }))

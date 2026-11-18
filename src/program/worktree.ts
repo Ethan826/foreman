@@ -8,12 +8,12 @@
 import { Effect, Option, Result } from "effect"
 import { WorktreeCreated } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
-import type { DirectoryReading, GitIdentity, WorktreeDirectory } from "../domain/worktree.ts"
+import type { WorktreeDirectory } from "../domain/worktree.ts"
 import { GitOutputUndecodable, supervisorBranch } from "../domain/worktree.ts"
 import { checkWorktree } from "../features/worktree-check.ts"
 import { checkCreated } from "../features/worktree-created.ts"
 import { refuseExistingBranch, refuseExistingPath, requireAbsolute } from "../features/worktree-precheck.ts"
-import { decodeRevParseLine, decodeRevParsePath, decodeRevParseRevision } from "../format/rev-parse.ts"
+import { decodeIdentityRun, decodeRevParseLine, decodeRevParsePath, decodeRevParseRevision } from "../format/rev-parse.ts"
 import { decodeWorktreeList } from "../format/worktree-list.ts"
 import { statOf } from "../runtime/file-paths.ts"
 import {
@@ -25,9 +25,10 @@ import {
   revParseArgs,
   runGit,
   worktreeListArgs,
+  type GitOutput,
   type RunGit,
 } from "../runtime/worktree.ts"
-import { readDirectoryWith } from "../runtime/worktree-directory.ts"
+import { readDirectoryWith, type DirectoryReading } from "../runtime/worktree-directory.ts"
 
 /** What creating the supervisor worktree needs (design "Creation"). */
 export interface WorktreeRequest {
@@ -141,16 +142,20 @@ const identityOf = (raw: { readonly gitDir: string; readonly commonDir: string }
     commonDir: decoded(decodeRevParsePath, raw.commonDir, revParseArgs.commonDir),
   })
 
-/** The identity decoded into a directory reading's result. */
-const withIdentity =
-  (present: boolean) =>
-  (identity: Option.Option<GitIdentity>): WorktreeDirectory => ({ present, identity })
+/** The two identity runs decoded (Format), exit codes kept for Features to judge. */
+const identityRunsOf = (runs: { readonly gitDir: GitOutput; readonly commonDir: GitOutput }) =>
+  Effect.all({
+    gitDir: Effect.fromResult(Result.mapError(decodeIdentityRun(runs.gitDir), undecodable(revParseArgs.gitDir))),
+    commonDir: Effect.fromResult(
+      Result.mapError(decodeIdentityRun(runs.commonDir), undecodable(revParseArgs.commonDir)),
+    ),
+  })
 
-/** The directory reading with its identity decoded, when it has one. */
+/** The raw directory reading with its identity runs decoded, `stat` passed through. */
 const directoryOf = (reading: DirectoryReading) =>
   Effect.map(
-    Effect.transposeOption(Option.map(reading.identity, identityOf)),
-    withIdentity(reading.present),
+    Effect.transposeOption(Option.map(reading.identity, identityRunsOf)),
+    (identity): WorktreeDirectory => ({ stat: reading.stat, identity }),
   )
 
 /** Output a decoder refused, as a typed failure naming the command. */

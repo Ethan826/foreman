@@ -1,7 +1,13 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Option, Result, Schema } from "effect"
 import type { WorktreeCondition, WorktreeDirectory, WorktreeEntry } from "../../src/domain/worktree.ts"
-import { WorktreeCheckFailed, WorktreeConditions, WorktreeRecordInvalid } from "../../src/domain/worktree.ts"
+import {
+  IdentityExited,
+  IdentityPrinted,
+  WorktreeCheckFailed,
+  WorktreeConditions,
+  WorktreeRecordInvalid,
+} from "../../src/domain/worktree.ts"
 import { checkWorktree } from "../../src/features/worktree-check.ts"
 
 const recorded = {
@@ -11,10 +17,23 @@ const recorded = {
   commonDir: "/repo/owner/.git",
 }
 
-const present = {
-  present: true,
-  identity: Option.some({ gitDir: recorded.gitDir, commonDir: recorded.commonDir }),
-}
+/** What `stat` reports for a directory, and for a file. */
+const directoryStat = Option.some({ directory: true })
+const fileStat = Option.some({ directory: false })
+
+/** An identity command that exited as it does where git sees no repository. */
+const noRepository = new IdentityExited({ exitCode: 128, stderr: "fatal: not a git repository" })
+
+/** A directory whose identity commands printed `gitDir` and `commonDir`. */
+const directoryPrinting = (gitDir: string, commonDir: string): WorktreeDirectory => ({
+  stat: directoryStat,
+  identity: Option.some({ gitDir: new IdentityPrinted({ path: gitDir }), commonDir: new IdentityPrinted({ path: commonDir }) }),
+})
+
+/** Nothing at the path: no stat result and no identity reads. */
+const gone: WorktreeDirectory = { stat: Option.none(), identity: Option.none() }
+
+const present = directoryPrinting(recorded.gitDir, recorded.commonDir)
 
 const check = (entries: ReadonlyArray<WorktreeEntry>, directory: WorktreeDirectory = present) =>
   checkWorktree(recorded, entries, directory)
@@ -93,34 +112,44 @@ describe("checkWorktree (startup check)", () => {
   })
 
   it("reports a directory that is gone, and not its identity", () => {
-    const gone = { present: false, identity: Option.none() }
     expect(check([entry({})], gone)).toEqual(failedWith(WorktreeConditions.Present))
   })
 
   it("reports a directory that is not a git worktree", () => {
-    const plain = { present: true, identity: Option.none() }
+    const plain = { stat: directoryStat, identity: Option.some({ gitDir: noRepository, commonDir: noRepository }) }
     expect(check([entry({})], plain)).toEqual(failedWith(WorktreeConditions.Identity))
   })
 
   it("reports a directory with another git directory", () => {
-    const other = { present: true, identity: Option.some({ gitDir: "/other/.git", commonDir: "/other/.git" }) }
+    const other = directoryPrinting("/other/.git", "/other/.git")
     expect(check([entry({})], other)).toEqual(failedWith(WorktreeConditions.Identity))
   })
 
   it("reports a directory with the git directory but another common directory", () => {
-    const other = { present: true, identity: Option.some({ gitDir: recorded.gitDir, commonDir: "/other/.git" }) }
+    const other = directoryPrinting(recorded.gitDir, "/other/.git")
     expect(check([entry({})], other)).toEqual(failedWith(WorktreeConditions.Identity))
   })
 
+  it("reports a file at the path as no directory present, and not its identity", () => {
+    const file = { stat: fileStat, identity: Option.none() }
+    expect(check([entry({})], file)).toEqual(failedWith(WorktreeConditions.Present))
+  })
+
+  it("reports a directory whose common-directory command exited non-zero", () => {
+    const half = {
+      stat: directoryStat,
+      identity: Option.some({ gitDir: new IdentityPrinted({ path: recorded.gitDir }), commonDir: noRepository }),
+    }
+    expect(check([entry({})], half)).toEqual(failedWith(WorktreeConditions.Identity))
+  })
+
   it("reports the directory with the listing's other failures, in vocabulary order", () => {
-    const gone = { present: false, identity: Option.none() }
     expect(check([entry({ lock: Option.none() })], gone)).toEqual(
       failedWith(WorktreeConditions.Present, WorktreeConditions.Locked),
     )
   })
 
   it("reports only the listing when the path is not listed, whatever the directory", () => {
-    const gone = { present: false, identity: Option.none() }
     expect(check([owner], gone)).toEqual(failedWith(WorktreeConditions.Listed))
   })
 

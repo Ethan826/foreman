@@ -7,9 +7,9 @@
 // a recorded worktree with an empty field is a typed refusal, not a throw
 // (owner ruling on R4 of the B11a review). Program runs git and the
 // decoders.
-import { Array as Arr, Option, Result, Schema } from "effect"
+import { Array as Arr, Match, Option, Result, Schema } from "effect"
 import type {
-  GitIdentity,
+  IdentityRead,
   WorktreeCondition,
   WorktreeDirectory,
   WorktreeEntry,
@@ -88,24 +88,38 @@ const checkListed =
     })
 
 /**
- * The directory's conditions that do not hold: absent, or present without
- * the recorded identity. An absent directory has no identity to report.
+ * The directory's conditions that do not hold (owner ruling on the R2
+ * residue of the B11a review: this is where the reading is judged).
+ * Nothing at the path, or a file, means no directory is present, and a
+ * path that is not a directory has no identity to report. A directory
+ * fails the identity condition unless both identity commands printed
+ * exactly the recorded paths. A command that exited non-zero, as where
+ * git sees no repository, does not identify it.
  */
 const directoryFailures = (
   recorded: RecordedWorktree,
   directory: WorktreeDirectory,
 ): ReadonlyArray<WorktreeCondition> => {
-  if (!directory.present) return [WorktreeConditions.Present]
+  if (!Option.exists(directory.stat, isDirectoryStat)) return [WorktreeConditions.Present]
   return hasIdentity(recorded, directory) ? [] : [WorktreeConditions.Identity]
 }
 
-/** Whether the directory's git and common directories are exactly the recorded ones. */
-const hasIdentity = (recorded: RecordedWorktree, directory: WorktreeDirectory): boolean =>
-  Option.exists(directory.identity, isRecordedIdentity(recorded))
+/** Whether `stat` found a directory, as opposed to a file. */
+const isDirectoryStat = (found: { readonly directory: boolean }): boolean => found.directory
 
-/** Whether an identity equals the recorded one, field by field. */
-const isRecordedIdentity = (recorded: GitIdentity) => (identity: GitIdentity): boolean =>
-  identity.gitDir === recorded.gitDir && identity.commonDir === recorded.commonDir
+/** Whether both identity commands printed exactly the recorded git and common directories. */
+const hasIdentity = (recorded: RecordedWorktree, directory: WorktreeDirectory): boolean =>
+  Option.exists(
+    directory.identity,
+    (reads) => printed(reads.gitDir, recorded.gitDir) && printed(reads.commonDir, recorded.commonDir),
+  )
+
+/** Whether an identity command exited 0 and printed exactly `expected`. */
+const printed = (read: IdentityRead, expected: string): boolean =>
+  Match.valueTags(read, {
+    IdentityPrinted: (found) => found.path === expected,
+    IdentityExited: () => false,
+  })
 
 /** The listed entry's branch and lock conditions that do not hold, in vocabulary order. */
 const failedConditions = (

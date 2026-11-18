@@ -4,7 +4,7 @@
 // decides. Each test makes its own repository and worktree.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Result, Schema } from "effect"
-import { mkdirSync, rmSync } from "node:fs"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
 import { decodeWorktreeList } from "../../src/format/worktree-list.ts"
 import { listWorktrees } from "../../src/runtime/worktree.ts"
 import type { WorktreeCreated } from "../../src/domain/events.ts"
@@ -117,6 +117,16 @@ const reportsOtherRepository = (dir: string, owner: string) =>
     )
   })
 
+const reportsFileAtPath = (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const worktree = yield* created(dir, owner)
+    rmSync(worktree.path, { recursive: true, force: true })
+    writeFileSync(worktree.path, "not a worktree")
+    expect(yield* Effect.flip(identifyWorktree(worktree))).toEqual(
+      failedWith(worktree)(WorktreeConditions.Present),
+    )
+  })
+
 /** The path and reason of a `PathUnreadable` failure; none for any other failure. */
 const unreadable = (failure: unknown) =>
   Schema.is(PathUnreadable)(failure)
@@ -152,6 +162,8 @@ describe("identifyWorktree (startup check)", () => {
   it.effect("reports an unrelated directory at the path as the wrong identity", () => withRepo(reportsUnrelatedDirectory))
 
   it.effect("reports another repository at the path as the wrong identity", () => withRepo(reportsOtherRepository))
+
+  it.effect("reports a file at the path as no directory present", () => withRepo(reportsFileAtPath))
 
   it.effect("fails with PathUnreadable, not directory-present, under an unsearchable parent", () => withRepo(reportsUnreadableDirectory))
 })

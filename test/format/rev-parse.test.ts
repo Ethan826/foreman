@@ -2,7 +2,9 @@
 // removed, so a path containing or ending in a newline survives.
 import { describe, expect, it } from "@effect/vitest"
 import { Result } from "effect"
+import { IdentityExited, IdentityPrinted } from "../../src/domain/worktree.ts"
 import {
+  decodeIdentityRun,
   decodeRevParseLine,
   decodeRevParsePath,
   decodeRevParseRevision,
@@ -65,5 +67,23 @@ describe("decodeRevParseRevision", () => {
 
   it("fails on empty output", () => {
     expect(Result.isFailure(decodeRevParseRevision(""))).toBe(true)
+  })
+})
+
+describe("decodeIdentityRun", () => {
+  it("decodes a run that exited 0 into the path it printed", () => {
+    const run = { exitCode: 0, stdout: "/repo/.git/worktrees/w\n", stderr: "" }
+    expect(decodeIdentityRun(run)).toEqual(Result.succeed(new IdentityPrinted({ path: "/repo/.git/worktrees/w" })))
+  })
+
+  it("keeps a non-zero exit's code and stderr, and ignores its stdout", () => {
+    const run = { exitCode: 128, stdout: "ignored\n", stderr: "fatal: not a git repository\n" }
+    expect(decodeIdentityRun(run)).toEqual(
+      Result.succeed(new IdentityExited({ exitCode: 128, stderr: "fatal: not a git repository\n" })),
+    )
+  })
+
+  it("fails when a run that exited 0 printed a relative path", () => {
+    expect(Result.isFailure(decodeIdentityRun({ exitCode: 0, stdout: ".git\n", stderr: "" }))).toBe(true)
   })
 })
