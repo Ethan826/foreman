@@ -1168,6 +1168,72 @@ with B15. B11a's measured total is 718,139 tokens across four worker
 units, plus coordination that was not measured. The rest of B11 is not
 authorized.
 
+#### B11b: the clean git command environment (scoped 2026-11-18, not authorized)
+
+The owner asked for this slice to be scoped as one deliverable. It is not
+yet authorized, and the rest of B11 stays closed.
+
+Deliverable:
+
+- `src/runtime/git.ts`: a `RunGit` that runs every git command in the
+  design's clean environment ("Git environment", E7). The process
+  environment is exactly `PATH=/usr/bin:/bin`, `HOME=<empty directory>`,
+  `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null` and
+  `GIT_ATTR_SOURCE=<empty tree>`, with nothing inherited. Every command
+  gets `-c core.hooksPath=/dev/null -c core.fsmonitor=false -c
+  commit.gpgsign=false`. The empty home directory is injected; the
+  runner does not choose it.
+- No production path runs git with the inherited environment. Program's
+  `createWorktree` and `identifyWorktree` take the clean runner, and the
+  inherited-environment `runGit` stays only behind it as the process
+  call.
+- R8: the tests' git helper (`test/runtime/git-repo.ts`) and every
+  real-repository test run git in the clean environment. A hostile
+  global config or an inherited `GIT_DIR` in the test process does not
+  reach them. The one test that matches git's English stderr
+  (`test/program/worktree-create.test.ts:177`) asserts structure instead:
+  args, a non-zero exit and git's stderr passed through unchanged.
+- Tests first, against disposable repositories. Each run of `git worktree
+  add`, the `-z` listing, the `rev-parse` reads and the branch probe must
+  write no marker file from any of these, planted in the owner's
+  repository:
+  - a `post-checkout` hook, which `worktree add` would run;
+  - a smudge filter from `.gitattributes`, which the checkout in `worktree
+    add` would run;
+  - `core.fsmonitor`;
+  - `gpg.program` with `commit.gpgsign=true`;
+  - a hostile global config, which the parent's `HOME` or
+    `GIT_CONFIG_GLOBAL` would point to;
+  - an inherited `GIT_DIR`.
+
+  Each test must fail against the inherited-environment runner, shown
+  with that runner injected. The B11a tests keep passing.
+
+Excluded: the pinned `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR`
+environment for the supervisor's tree (it has no consumer yet, so it
+waits for the first drift or commit slice), `--no-verify` (no commit
+command yet), the startup refusal of attribute files that declare
+`filter`, `text`, `eol`, `ident` or `working-tree-encoding`, protected
+digests, the commit procedure, the review worktree, R5 and R7, new
+dependencies, and `package.json`.
+
+Sizing, from B11a's measurements. B11a's units cost 153,558 (the slice,
+five layers), 104,887 (stopped) and 190,319 (corrections), 110,779
+(review), and 158,596 (review corrections). B11b touches mainly one
+Runtime module, the Program wiring and the test helper, but its tests
+plant hostile git configuration in real repositories. A single worker
+unit should be expected near the B11a slice, about 150k. If B11a's
+pattern repeats, a review (about 110k) and one correction round (about
+150k) follow, about 400k in all. These are estimates from the
+measurements, not caps. Usage is measured afterward.
+
+Control, as in B11a: one worker, no delegation and no automatic
+follow-up. It checkpoints at completion or at the first scope conflict.
+Single-file runs use `gtimeout -k 5 60 bun run test <file>`, and the
+suite and check use `gtimeout -k 5 300`. No pattern kills. The brief
+names exact sections and line ranges, so the worker does not load whole
+documents.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
