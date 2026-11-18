@@ -1116,6 +1116,47 @@ It is not landed or pushed.
   about 7.2 minutes). B11a's measured total is now 718,139 tokens, plus
   coordination.
 
+Owner ruling on the R2 residue (2026-11-18): fix it inline in the
+coordinator's session; no worker and no review round. What was wrong was
+that distinctions were lost before the decision reached Features, not
+that the adapter had conditionals in it. Runtime may turn platform
+objects into plain observations (nothing, a file, a directory). It keeps
+the identity command's exit status and output, and Features decides.
+
+R2 residue fixed (2026-11-18), 0c6298c:
+
+- Runtime: `readDirectoryWith` returns `DirectoryReading` (now a Runtime
+  interface): the `PathStat` (nothing, file, directory) and, inside a
+  directory, both identity `rev-parse` results in full (exit code,
+  stdout, stderr), whatever they exited with. It no longer folds a file
+  into absent, or a non-zero exit into "no identity".
+- Format: `decodeIdentityRun` decodes a run that exited 0 into
+  `IdentityPrinted(path)`. It keeps a non-zero exit as
+  `IdentityExited(exitCode, stderr)` and decides nothing about it.
+- Features: `checkWorktree` judges the reading. Nothing or a file at the
+  path fails `directory-present`. A directory fails `git-identity` unless
+  both commands printed exactly the recorded paths.
+- Program: decodes the identity runs and passes `stat` through.
+- Domain: `WorktreeDirectory` is `{ stat, identity }`, with
+  `IdentityRead = IdentityPrinted | IdentityExited`. The unused
+  `GitIdentity` and Domain's `DirectoryReading` are removed.
+- Behavior kept: a real-repo test of a file at the path (reporting
+  `directory-present`) was added and passed before the move. It and the
+  existing real-repo identity cases (unrelated directory, another
+  repository, deleted directory, unsearchable parent) pass after it. New
+  unit cases cover a file, and a directory whose common-directory command
+  exited non-zero. New Format cases cover `decodeIdentityRun`.
+- Mutants, each applied in place and restored byte for byte: treating an
+  exited identity command as a match fails 3 tests, including the real
+  unrelated-directory test. Treating a file as a directory fails 2
+  (unit and real repository). Inverting `decodeIdentityRun`'s exit test
+  fails 2.
+- Checks: `gtimeout -k 5 300 bun run check` PASS (0 blocking, 30
+  non-blocking notes, unchanged). `gtimeout -k 5 300 bun run test` PASS
+  (47 files, 515 tests). No timeout fired.
+- Effort: inline, about 20 tool calls. The harness does not measure the
+  coordinator's own tokens, so no token figure is claimed.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
