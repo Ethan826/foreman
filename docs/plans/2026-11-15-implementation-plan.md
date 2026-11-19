@@ -724,6 +724,30 @@ caveat shape in `results-2026-11-16.md`. The rest are in `AGENTS.md` (4),
 `src/features/README.md` (2), and one each in the facade, format, program
 and runtime READMEs.
 
+### CI timeout of the F7 lifecycle property (2026-11-18)
+
+Failure: the `check` workflow failed on both pushes of 2026-11-18, the
+first to carry the F7 lifecycle property
+(`test/program/lifecycle-property.test.ts`, from 05f0be0). Both runs failed
+only on that test, which hit Vitest's 5-second default timeout: 5,033 ms
+on 87a878a (run 44447662828) and 5,073 ms on f72e161 (run 44451222917),
+on GitHub's `ubuntu-latest` runner. Locally the test takes about 1.5 s
+alone and about 2.6 s in the full suite. Its 200 histories each open a
+fresh SQLite ledger on disk in WAL mode and commit 20 to 40 transactions,
+so it is bound by disk sync speed, and the runner is slower at it. No
+assertion failed.
+
+Owner ruling (2026-11-18): option 1. That test alone gets an explicit
+60-second timeout (`propertyTimeoutMillis`). Its assertions and its 200
+histories are unchanged. The limit is provisional because the CI duration
+was unknown. A CI pass that comes close to it warrants investigation, and
+the next step would be cheaper histories, which needs the F7 review's
+agreement. Rejected: fewer runs, which would weaken the property.
+
+Verification: with the limit set to 100 ms, the test failed with "Test
+timed out in 100ms", so the option reaches Vitest. Restored to 60,000, it
+passed in 2.3 s.
+
 ### Task B11: Git and worktree handling
 
 **Files:** `src/runtime/git.ts` (clean git environment with the recorded `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and `-c` overrides), `src/runtime/worktree.ts` (supervisor worktree creation as intent, effect, completion; review worktree `--lock --detach`; startup check), `src/runtime/protected.ts` (digest walk and compare), `src/runtime/commit.ts` (temporary index, `commit-tree` with `Op-Id` trailer, `update-ref HEAD <new> <base>`); tests in `test/runtime/` against repositories the test creates in a temporary directory.

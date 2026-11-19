@@ -28,6 +28,12 @@ import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 const busyMillis = 50
 const now = 1_000_000
 const minuteMicros = 60_000_000
+// Provisional (2026-11-18): the 200 histories each open a synced SQLite
+// ledger on disk. They take about 2.6 s in the full local suite but ran
+// past Vitest's 5 s default on GitHub's ubuntu-latest runner (5,033 and
+// 5,073 ms, check runs 44447662828 and 44451222917). Measure on CI and
+// investigate if a pass comes close to this limit.
+const propertyTimeoutMillis = 60_000
 const boot = BootId.make("boot-a")
 const projects = ["alpha", "beta"] as const
 const context = { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback }
@@ -222,6 +228,6 @@ describe("grant lifecycle over generated histories", () => {
     "settles each grant at most once and leaves open only in-flight steps after a settle",
     { ops: Schema.Array(Op).check(Schema.isMinLength(20), Schema.isMaxLength(40)) },
     ({ ops }) => runHistory(ops),
-    { arbitrary: { runs: 200 } },
+    { arbitrary: { runs: 200 }, timeout: propertyTimeoutMillis },
   )
 })
