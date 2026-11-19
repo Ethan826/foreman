@@ -9,11 +9,16 @@
 // environment does not switch off) is `/usr/bin/env`, so the checked-out
 // file holds the environment git ran with. It must match the factory over
 // the real `startGit`, so production passes `startGit` and nothing else.
+// No git command of the startup check runs a program git could report
+// its environment through, so the third test pins the production
+// definition on the syntax tree: `worktreeProgram` is exactly
+// `worktreeProgramWith(startGit)`, with `startGit` from `runtime/git.ts`.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option } from "effect"
 import { readFileSync, writeFileSync } from "node:fs"
 import { worktreeProgram, worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type GitInvocation, type StartGit } from "../../src/runtime/git.ts"
+import ts from "typescript"
 import { emptyHome, git, withRepo } from "../runtime/git-repo.ts"
 
 /** The real process call, which first records each invocation in `calls`. */
@@ -105,7 +110,54 @@ const productionMatchesFactory = (dir: string, owner: string) =>
     )
   })
 
+/** The text of `src/program/worktree.ts`. */
+const programSource =
+  Object.values(
+    import.meta.glob<string>("../../src/program/worktree.ts", { query: "?raw", import: "default", eager: true }),
+  )[0] ?? ""
+
+/** Whether an import declaration binds the local name `startGit`. */
+const bindsStartGit = (statement: ts.ImportDeclaration) => {
+  const bindings = statement.importClause?.namedBindings
+  return (
+    bindings !== undefined &&
+    ts.isNamedImports(bindings) &&
+    bindings.elements.some((element) => element.name.text === "startGit")
+  )
+}
+
+/** The initializer of the exported `worktreeProgram`, and where `startGit` is imported from. */
+const productionDefinition = (text: string) => {
+  const file = ts.createSourceFile("worktree.ts", text, ts.ScriptTarget.ES2022, true)
+  const initializers = file.statements
+    .filter(ts.isVariableStatement)
+    .flatMap((statement) => statement.declarationList.declarations)
+    .filter((declaration) => declaration.name.getText() === "worktreeProgram")
+    .map((declaration) => declaration.initializer?.getText() ?? "")
+  const startGitSources = file.statements
+    .filter(ts.isImportDeclaration)
+    .filter(bindsStartGit)
+    .map((statement) => statement.moduleSpecifier.getText())
+  return { initializers, startGitSources }
+}
+
 describe("Program's git commands", () => {
+  it("defines production as the factory over startGit and nothing else", () => {
+    expect(productionDefinition(programSource)).toEqual({
+      initializers: ["worktreeProgramWith(startGit)"],
+      startGitSources: ['"../runtime/git.ts"'],
+    })
+  })
+
+  it("the production-definition check refuses a wrapped startGit or a hand-built program", () => {
+    const wrapped = `import { startGit } from "../runtime/git.ts"\nexport const worktreeProgram = worktreeProgramWith((i) => startGit(i))`
+    const handBuilt = `import { startGit } from "../runtime/git.ts"\nexport const worktreeProgram = (home: string) => ({ ...worktreeProgramWith(startGit)(home) })`
+    const renamed = `import { startGit as other } from "../runtime/git.ts"\nimport { startGit } from "./elsewhere.ts"\nexport const worktreeProgram = worktreeProgramWith(startGit)`
+    expect(productionDefinition(wrapped).initializers).not.toEqual(["worktreeProgramWith(startGit)"])
+    expect(productionDefinition(handBuilt).initializers).not.toEqual(["worktreeProgramWith(startGit)"])
+    expect(productionDefinition(renamed).startGitSources).not.toEqual(['"../runtime/git.ts"'])
+  })
+
   it.effect("creation and the startup check run every git command clean, with the overrides first", () =>
     withRepo(createdAndIdentified))
 
