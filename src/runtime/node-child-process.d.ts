@@ -27,7 +27,14 @@ declare module "node:fs" {
    * is ENOENT or ENOTDIR when nothing is there, or another code such as
    * EACCES when the path cannot be inspected.
    */
-  export function statSync(path: string): { isDirectory(): boolean }
+  export function statSync(path: string): {
+    /**
+     * Whether the entry, after following symbolic links, is a directory.
+     * False for a regular file or any other kind, which Runtime reports as
+     * "a file" rather than as nothing.
+     */
+    isDirectory(): boolean
+  }
   /** The absolute path with every symbolic link resolved; throws when it cannot be resolved. */
   export function realpathSync(path: string): string
 }

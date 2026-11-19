@@ -4,13 +4,45 @@
 // resolve a symbolic link, and to make a directory unsearchable and
 // restore it.
 declare module "node:fs" {
+  /**
+   * Creates a new, empty directory whose name is `prefix` followed by six
+   * random characters, and returns its path. Tests pass a prefix under
+   * `tmpdir()` so each test gets a directory no other run shares.
+   */
   export function mkdtempSync(prefix: string): string
+  /**
+   * Whether anything exists at `path`, following symbolic links; false for
+   * a dangling link. Never throws. Tests use it to watch for a marker file
+   * another process writes.
+   */
   export function existsSync(path: string): boolean
+  /**
+   * Creates one directory at `path`. Without the recursive option the
+   * parent must exist, and an existing entry at `path` throws EEXIST.
+   */
   export function mkdirSync(path: string): void
+  /**
+   * Writes `data` to `path` as UTF-8, creating the file or replacing its
+   * contents. The parent directory must exist.
+   */
   export function writeFileSync(path: string, data: string): void
+  /**
+   * Creates a symbolic link at `path` that points to `target`. `target` is
+   * stored as given and need not exist; an existing entry at `path` throws
+   * EEXIST.
+   */
   export function symlinkSync(target: string, path: string): void
   export function realpathSync(path: string): string
+  /**
+   * Sets the permission bits of `path` to `mode` (for example `0o000` to
+   * make a directory unsearchable, then `0o755` to restore it).
+   */
   export function chmodSync(path: string, mode: number): void
+  /**
+   * Removes `path`. With `recursive` it removes a directory and everything
+   * under it; with `force` a missing path is not an error. Tests call it
+   * with both to clean up their temporary directories.
+   */
   export function rmSync(
     path: string,
     options: { readonly recursive: boolean; readonly force: boolean },

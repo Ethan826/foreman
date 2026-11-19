@@ -227,11 +227,19 @@ export interface LedgerTx {
 }
 
 /**
- * The ledger as a capability. `transact` runs `body` inside one write
- * transaction (`BEGIN IMMEDIATE`): it commits if `body` succeeds and rolls
- * back, writing nothing, if `body` fails.
+ * The ledger as a capability: every read and write goes through
+ * {@link LedgerStore.transact}, so each one sees and assigns seqs in
+ * commit order.
  */
 export interface LedgerStore {
+  /**
+   * Runs `body` inside one write transaction (`BEGIN IMMEDIATE`). It commits
+   * if `body` succeeds and rolls back, writing nothing, if `body` fails; the
+   * failure is `body`'s own error. Fails with {@link LedgerBusy} when
+   * another writer held the write lock past `busy_timeout`, and with
+   * {@link LedgerError} on I/O, schema or decode failures; either way the
+   * transaction writes nothing. `tx` is valid only while `body` runs.
+   */
   readonly transact: <A, E>(
     body: (tx: LedgerTx) => Effect.Effect<A, E>,
   ) => Effect.Effect<A, E | LedgerBusy | LedgerError>
