@@ -105,7 +105,7 @@ sequenceDiagram
                     else refused by pacing
                         H->>L: create Quota hold for that provider, stop
                     else refused only by allocations
-                        Note over H: no hold; the project waits
+                        Note over H: no hold, and the project waits
                     end
                 end
             end

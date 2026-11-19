@@ -1,11 +1,11 @@
 // The clean git runner (design "Git environment", E7; plan B11b). The
 // process call is checked against real child processes: an executable
-// named `git` that is `/usr/bin/env` prints exactly the environment it was
-// given, and shows which PATH resolved it. The clean runner is checked
+// named `git` that runs `/usr/bin/env` prints exactly the environment it
+// was given, and shows which PATH resolved it. The clean runner is checked
 // with a recording process call beneath it.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs"
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { GitCommandFailed } from "../../src/domain/worktree.ts"
 import { cleanGitWith, startGit, type GitInvocation, type StartGit } from "../../src/runtime/git.ts"
@@ -21,10 +21,22 @@ const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>)
       }),
   )
 
-/** Makes `<dir>/bin/git` a link to `/usr/bin/env` and returns `<dir>/bin`. */
+/**
+ * A `git` script that prints its environment. It must not be a link to
+ * `/usr/bin/env`: on ubuntu-26.04, `env` is a link to the uutils multi-call
+ * binary, which picks its tool by the name it was run as and exits 1 for
+ * `git` (CI run 44537828893). The script runs `env` by its own path and
+ * has it drop only `PWD` and `SHLVL`, which `/bin/sh` itself adds (bash
+ * re-exports `SHLVL` on `exec` even after `unset`). An inherited copy of
+ * those two is the one leak this check cannot see.
+ */
+const envScript = "#!/bin/sh\nexec /usr/bin/env -u PWD -u SHLVL\n"
+
+/** Writes `<dir>/bin/git` as {@link envScript} and returns `<dir>/bin`. */
 const envNamedGit = (dir: string) => {
   mkdirSync(`${dir}/bin`)
-  symlinkSync("/usr/bin/env", `${dir}/bin/git`)
+  writeFileSync(`${dir}/bin/git`, envScript)
+  chmodSync(`${dir}/bin/git`, 0o755)
   return `${dir}/bin`
 }
 
