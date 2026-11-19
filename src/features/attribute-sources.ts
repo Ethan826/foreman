@@ -3,7 +3,8 @@
 // rulings of 2026-11-19). Option A reads no declaration and matches no
 // path: a `.gitattributes` entry of the revision passes only as a regular
 // blob of blank and comment lines, `<commonDir>/info/attributes` only when
-// absent or empty, and `core.attributesFile` only when unset. Every other
+// absent or empty, `core.attributesFile` only when unset, and the config
+// only when it lists no conditional include (option R). Every other
 // reading, including a failed read, is a refusal and never a pass (ruling
 // 4). Pure and total; Program reads the sources through Runtime.
 import { Array as Arr, Match, Option, Result, String } from "effect"
@@ -12,6 +13,7 @@ import type {
   AttributeRefusal,
   AttributeRefusalReason,
   AttributesEntryRead,
+  AttributeSource,
   FileReading,
   GitResult,
   TreeEntry,
@@ -44,7 +46,10 @@ const blankLine = /^[ \t]*\r?$/
 /** The modes of a regular blob: a file, and an executable file. */
 const regularBlobModes: ReadonlyArray<string> = ["100644", "100755"]
 
-/** `git config --get`'s exit codes: the value printed, and the key unset. */
+/**
+ * The exit codes of `git config --get` and `--get-regexp`: a value
+ * printed, and nothing matched.
+ */
 const configExits = { printed: 0, unset: 1 } as const
 
 /** `git cat-file`'s exit code when it printed the blob. */
@@ -65,8 +70,9 @@ export const isRegularBlob = (entry: TreeEntry): boolean =>
  * Judges the reading of one revision and repository (plan B11c,
  * contract). Succeeds with the revision when every `.gitattributes` entry
  * is a regular blob of blank and comment lines, `info/attributes` is
- * absent or an empty regular file, and `core.attributesFile` is unset
- * (exit 1). Otherwise fails with every refusal, in source order. A blank
+ * absent or an empty regular file, `core.attributesFile` is unset (exit
+ * 1), and the `includeif.` listing matched nothing (exit 1). Otherwise
+ * fails with every refusal, in source order. A blank
  * line holds only spaces and tabs and at most a final CR; a comment line
  * begins with `#` at its first character, so an indented `#` is refused.
  */
@@ -79,12 +85,13 @@ export const checkAttributeSources = (
       Result.fail(new AttributeSourcesRefused({ revision: reading.revision, refusals })),
   })
 
-/** Every refusal of the reading, tree first, then `info/attributes`, then the setting. */
+/** Every refusal of the reading: tree, `info/attributes`, the setting, then conditional includes. */
 const refusalsOf = (reading: AttributeReading): ReadonlyArray<AttributeRefusal> =>
   Arr.flatten([
     treeRefusals(reading.tree),
     infoRefusals(reading.infoAttributes.path, reading.infoAttributes.reading),
-    settingRefusals(reading.attributesFile),
+    configRefusals(AttributeSources.AttributesFile, reading.attributesFile),
+    configRefusals(AttributeSources.ConditionalInclude, reading.conditionalIncludes),
   ])
 
 /** The tree's refusals: each entry's, or one read failure for the whole tree. */
@@ -132,17 +139,20 @@ const infoRefusals = (path: string, reading: FileReading): ReadonlyArray<Attribu
   })
 }
 
-/** The setting's refusals: none when unset, the value when set, a read failure otherwise. */
-const settingRefusals = (run: GitResult): ReadonlyArray<AttributeRefusal> => {
+/**
+ * A config read's refusals: none when nothing matched (exit 1), what it
+ * printed when something did (exit 0), a read failure otherwise.
+ */
+const configRefusals = (source: AttributeSource, run: GitResult): ReadonlyArray<AttributeRefusal> => {
   if (run.exitCode === configExits.unset) return []
   return run.exitCode === configExits.printed
-    ? [settingRefusal(AttributeRefusalReasons.Configured, run.stdout)]
-    : [settingRefusal(AttributeRefusalReasons.ReadFailed, exitDetail(run))]
+    ? [configRefusal(source, AttributeRefusalReasons.Configured, run.stdout)]
+    : [configRefusal(source, AttributeRefusalReasons.ReadFailed, exitDetail(run))]
 }
 
-/** A refusal of the setting, which has no path or line. */
-const settingRefusal = (reason: AttributeRefusalReason, detail: string) =>
-  refusal(AttributeSources.AttributesFile, reason, Option.none(), Option.none(), detail)
+/** A refusal of a config read, which has no path or line. */
+const configRefusal = (source: AttributeSource, reason: AttributeRefusalReason, detail: string) =>
+  refusal(source, reason, Option.none(), Option.none(), detail)
 
 /** A read failure of the whole tree. */
 const treeFailure = (detail: string) =>

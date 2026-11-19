@@ -90,7 +90,10 @@ describe("a read failure is a refusal", () => {
   )
   it.effect(
     "a git config that exits 2",
-    refusedWhenExiting("config", 2, [[Sources.AttributesFile, Reasons.ReadFailed, "exit 2: config made to fail\n"]]),
+    refusedWhenExiting("config", 2, [
+      [Sources.AttributesFile, Reasons.ReadFailed, "exit 2: config made to fail\n"],
+      [Sources.ConditionalInclude, Reasons.ReadFailed, "exit 2: config made to fail\n"],
+    ]),
   )
   it.effect(
     "an ls-tree that exits non-zero",

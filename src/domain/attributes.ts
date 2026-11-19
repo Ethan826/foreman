@@ -5,7 +5,8 @@
 // gives. Option A refuses any attribute content rather than decoding
 // declarations: a `.gitattributes` entry of the revision may hold only
 // blank and comment lines, `<commonDir>/info/attributes` must be absent or
-// empty, and the repository may not set `core.attributesFile`. A read
+// empty, the repository may not set `core.attributesFile`, and its config
+// may hold no conditional include (option R of 2026-11-19). A read
 // failure is a refusal (ruling 4).
 import { Record, Schema } from "effect"
 import { Revision } from "./ids.ts"
@@ -126,23 +127,31 @@ export type FileReading = typeof FileReading.Type
 
 /**
  * Everything the attribute check reads for one revision and repository:
- * the revision's `.gitattributes` entries, `<commonDir>/info/attributes`
- * and the run of `git config --get core.attributesFile`.
+ * the revision's `.gitattributes` entries, `<commonDir>/info/attributes`,
+ * the run of `git config --get core.attributesFile` and the run of `git
+ * config --get-regexp '^includeif\.'`, which lists every conditional
+ * include key git reads whatever its condition (option R).
  */
 export const AttributeReading = Schema.Struct({
   revision: Revision,
   tree: TreeReading,
   infoAttributes: Schema.Struct({ path: GitText, reading: FileReading }),
   attributesFile: GitResult,
+  conditionalIncludes: GitResult,
 })
 /** The attribute check's raw reading; see {@link AttributeReading}. */
 export type AttributeReading = typeof AttributeReading.Type
 
-/** The attribute sources the check reads (plan B11c, contract). */
+/**
+ * The attribute sources the check reads (plan B11c, contract). A
+ * conditional include counts as one because it can set
+ * `core.attributesFile` in a context the check does not evaluate.
+ */
 export const AttributeSources = {
   Tree: "revision-gitattributes",
   InfoAttributes: "info-attributes",
   AttributesFile: "core-attributes-file",
+  ConditionalInclude: "conditional-include",
 } as const
 /** One attribute source; see {@link AttributeSources}. */
 export const AttributeSource = Schema.Literals(Record.values(AttributeSources))
@@ -152,7 +161,8 @@ export type AttributeSource = typeof AttributeSource.Type
 /**
  * Why a source was refused: it has content (a line that is not blank or
  * a comment, or any content in `info/attributes`), it is not a regular
- * file or blob, the setting is configured, or reading it failed.
+ * file or blob, the setting or a conditional include is configured, or
+ * reading it failed.
  */
 export const AttributeRefusalReasons = {
   Content: "has-content",
@@ -182,11 +192,11 @@ export const AttributeRefusal = Schema.Struct({
 export type AttributeRefusal = typeof AttributeRefusal.Type
 
 /**
- * The revision or repository has an attribute source that option A
- * refuses (plan B11c). `refusals` lists every one, in source order: the
- * tree in listing and line order, then `info/attributes`, then
- * `core.attributesFile`. Creation refuses before `worktree add`; the
- * startup check stops `run`.
+ * The revision or repository has an attribute source that option A or
+ * option R refuses (plan B11c). `refusals` lists every one, in source
+ * order: the tree in listing and line order, then `info/attributes`, then
+ * `core.attributesFile`, then the conditional includes. Creation refuses
+ * before `worktree add`; the startup check stops `run`.
  */
 export class AttributeSourcesRefused extends Schema.TaggedError<AttributeSourcesRefused>()(
   "AttributeSourcesRefused",

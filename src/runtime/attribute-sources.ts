@@ -1,6 +1,7 @@
 // The attribute check's reads (plan B11c, deliverable): the revision's
 // tree listing, each `.gitattributes` blob, the repository's
-// `core.attributesFile` setting and `<commonDir>/info/attributes`. Raw
+// `core.attributesFile` setting, the conditional include keys and
+// `<commonDir>/info/attributes`. Raw
 // results only: each git run's exit code and output, whatever it exited
 // with, and what `lstat` and a read found at the file. Format decodes and
 // Features judges. Every command runs through an injected `RunGit`;
@@ -35,6 +36,13 @@ export const attributeArgs = {
   blob: (object: Revision): ReadonlyArray<string> => ["cat-file", "blob", object],
   /** The repository's setting; exit 1 means unset. */
   attributesFile: ["config", "--get", "core.attributesFile"],
+  /**
+   * Every conditional include key git reads, whatever its condition:
+   * section names print in lower case, so any spelling of `includeIf`
+   * matches, and a key in a file an unconditional `include.path` reaches
+   * is listed. Exit 1 means none.
+   */
+  conditionalIncludes: ["config", "--get-regexp", "^includeif\\."],
 } as const
 
 /** The path git reads repository-wide attributes from: `<commonDir>/info/attributes`. */
@@ -49,6 +57,10 @@ export const readBlobWith = (run: RunGit) => (cwd: string, object: Revision) => 
 
 /** Runs `git config --get core.attributesFile` in `cwd` and returns the run, whatever it exited with. */
 export const readAttributesFileSettingWith = (run: RunGit) => (cwd: string) => run(cwd, attributeArgs.attributesFile)
+
+/** Runs `git config --get-regexp '^includeif\.'` in `cwd` and returns the run, whatever it exited with. */
+export const readConditionalIncludesWith = (run: RunGit) => (cwd: string) =>
+  run(cwd, attributeArgs.conditionalIncludes)
 
 /**
  * What is at `path`, read without following a symlink: nothing, the kind

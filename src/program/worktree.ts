@@ -54,8 +54,9 @@ export interface WorktreeProgram {
    * fields of `WorktreeCreated`. Fails with `WorktreePathNotAbsolute`
    * before any git command when the path is not absolute; with
    * `AttributeSourcesRefused` when the base revision or the repository has
-   * an attribute source that option A refuses (plan B11c), checked before
-   * the branch and path prechecks; with `WorktreeBranchExists` or
+   * an attribute source that option A refuses, or the config holds any
+   * conditional include (option R; plan B11c), checked in the owner's
+   * checkout before the branch and path prechecks; with `WorktreeBranchExists` or
    * `WorktreePathExists` before running `worktree add`; with `PathUnreadable` when `stat` cannot inspect the
    * path; with `WorktreeNotAsCreated` when the new worktree is not at the
    * requested path on its branch; and with `GitCommandFailed` (args, exit
@@ -72,9 +73,10 @@ export interface WorktreeProgram {
    * `refs/heads/<branch>`, locked, and the directory there is present with
    * the recorded git identity; otherwise fails with `WorktreeCheckFailed`
    * naming each failed condition, and `run` stops and reports. When those
-   * hold, the attribute check runs from the common directory against the
-   * recorded `base` (plan B11c) and fails with `AttributeSourcesRefused`;
-   * no working tree's `.gitattributes` is read. Fails with
+   * hold, the attribute check runs inside the supervisor worktree, so its
+   * `config.worktree` applies, against the recorded `base` (plan B11c) and
+   * fails with `AttributeSourcesRefused`, including for any conditional
+   * include (option R); no working tree's `.gitattributes` is read. Fails with
    * `PathUnreadable` when the recorded path cannot be inspected, and with
    * `WorktreeRecordInvalid` when a recorded field is empty. It never
    * prunes, unlocks or removes anything.
@@ -121,8 +123,9 @@ export const createWorktreeWith = (run: RunGit) =>
  * {@link WorktreeProgram.identifyWorktree} over an injected git runner. Lists the worktrees
  * from the recorded common directory, so the check runs even when the
  * worktree's own path is gone, and reads the recorded path's directory.
- * The attribute check runs after the worktree conditions pass, from the
- * common directory against the recorded base.
+ * The attribute check runs after the worktree conditions pass, inside
+ * the supervisor worktree, whose path they have just shown present,
+ * against the recorded base.
  */
 export const identifyWorktreeWith = (run: RunGit) =>
   Effect.fn("identifyWorktree")(function* (worktree: WorktreeCreated) {
@@ -133,7 +136,7 @@ export const identifyWorktreeWith = (run: RunGit) =>
     const reading = yield* readDirectoryWith(run)(worktree.path)
     const directory = yield* directoryOf(reading)
     const entry = yield* Effect.fromResult(checkWorktree(worktree, entries, directory))
-    const site = { cwd: worktree.commonDir, commonDir: worktree.commonDir }
+    const site = { cwd: worktree.path, commonDir: worktree.commonDir }
     yield* checkAttributeSourcesWith(run)(site, worktree.base)
     return entry
   })

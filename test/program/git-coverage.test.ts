@@ -44,6 +44,9 @@ const command = (invocation: GitInvocation) =>
 const startsWithOverrides = (invocation: GitInvocation) =>
   overrides.every((each, index) => invocation.args[index] === each)
 
+/** Whether an invocation reads config: creation reads it in the owner's checkout, startup in the worktree. */
+const isConfigRead = (invocation: GitInvocation) => command(invocation)[0] === "config"
+
 const createdAndIdentified = (dir: string, owner: string) =>
   Effect.gen(function* () {
     writeFileSync(`${owner}/.gitattributes`, "# comments only\n")
@@ -59,6 +62,7 @@ const createdAndIdentified = (dir: string, owner: string) =>
       ["ls-tree", "--full-tree", "-r", "-t", "-z", created.base],
       ["cat-file", "blob", blob],
       ["config", "--get", "core.attributesFile"],
+      ["config", "--get-regexp", "^includeif\\."],
     ]
     expect(calls.map(command)).toEqual([
       ["rev-parse", "HEAD"],
@@ -75,6 +79,7 @@ const createdAndIdentified = (dir: string, owner: string) =>
       ["rev-parse", "--path-format=absolute", "--git-common-dir"],
       ...attributeReads,
     ])
+    expect(calls.filter(isConfigRead).map((each) => each.cwd)).toEqual([owner, owner, created.path, created.path])
     expect(calls.filter((each) => !startsWithOverrides(each))).toEqual([])
     expect(calls.map((each) => each.env)).toEqual(
       calls.map(() => ({

@@ -1,10 +1,13 @@
 // The attribute check's wiring (plan B11c, option A; owner rulings 3 and
 // 4 of 2026-11-19): Runtime lists the revision's tree, reads each
-// `.gitattributes` blob, reads `<commonDir>/info/attributes` and the
-// `core.attributesFile` setting; Format decodes the listing; Features
-// selects the entries to read and judges the whole reading. Creation runs
-// it before `git worktree add` and the startup check against the recorded
-// revision, both through the one clean runner of `worktreeProgramWith`.
+// `.gitattributes` blob, reads `<commonDir>/info/attributes`, the
+// `core.attributesFile` setting and the conditional include keys (option
+// R); Format decodes the listing; Features selects the entries to read and
+// judges the whole reading. Creation runs it in the owner's checkout before
+// `git worktree add`, and the startup check runs it inside the supervisor
+// worktree against the recorded revision, so that worktree's
+// `config.worktree` applies; both go through the one clean runner of
+// `worktreeProgramWith`.
 import { Array as Arr, Effect, Match, Option } from "effect"
 import type { AttributesEntryRead, TreeEntry, TreeReading } from "../domain/attributes.ts"
 import { TreeListed } from "../domain/attributes.ts"
@@ -16,13 +19,18 @@ import {
   listTreeWith,
   readAttributesFileSettingWith,
   readBlobWith,
+  readConditionalIncludesWith,
   readFileAt,
 } from "../runtime/attribute-sources.ts"
 import type { RunGit } from "../runtime/git.ts"
 
 /** Where the attribute check runs: a directory of the repository and its common directory. */
 export interface AttributeCheckSite {
-  /** The directory git runs in: the owner's checkout, or the recorded common directory. */
+  /**
+   * The directory git runs in, whose context decides which config files
+   * apply: the owner's checkout at creation, the supervisor worktree at
+   * startup.
+   */
   readonly cwd: string
   /** The repository's common git directory, which holds `info/attributes`. */
   readonly commonDir: string
@@ -34,6 +42,14 @@ export interface AttributeCheckSite {
  * `AttributeSourcesRefused` listing every refusal otherwise. A git run's
  * non-zero exit and an undecodable listing are refusals; it fails with
  * `GitCommandFailed` only when git could not start.
+ *
+ * Stated dependency, not checked: the check does not read
+ * `$HOME/.config/git/attributes`, which git keeps in force under the
+ * clean environment (probed for plan B11c). What keeps that file out of
+ * force is the empty, private `HOME` that the eventual Runtime caller
+ * creates and owns (B11b ruling 2) and passes to `worktreeProgramWith`.
+ * A caller that passes a `HOME` holding that file lets its attributes
+ * apply, whatever this check finds.
  */
 export const checkAttributeSourcesWith = (run: RunGit) =>
   Effect.fn("checkAttributeSources")(function* (site: AttributeCheckSite, revision: Revision) {
@@ -41,8 +57,9 @@ export const checkAttributeSourcesWith = (run: RunGit) =>
     const path = infoAttributesPath(site.commonDir)
     const reading = yield* readFileAt(path)
     const attributesFile = yield* readAttributesFileSettingWith(run)(site.cwd)
+    const conditionalIncludes = yield* readConditionalIncludesWith(run)(site.cwd)
     return yield* Effect.fromResult(
-      checkAttributeSources({ revision, tree, infoAttributes: { path, reading }, attributesFile }),
+      checkAttributeSources({ revision, tree, infoAttributes: { path, reading }, attributesFile, conditionalIncludes }),
     )
   })
 

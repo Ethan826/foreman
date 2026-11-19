@@ -33,11 +33,13 @@ const reading = (parts: {
   readonly tree?: TreeReading
   readonly info?: FileReading
   readonly attributesFile?: GitResult
+  readonly conditionalIncludes?: GitResult
 }): AttributeReading => ({
   revision,
   tree: parts.tree ?? new TreeListed({ files: [] }),
   infoAttributes: { path: infoPath, reading: parts.info ?? new FileAbsent() },
   attributesFile: parts.attributesFile ?? unset,
+  conditionalIncludes: parts.conditionalIncludes ?? unset,
 })
 
 const refusal = (
@@ -184,12 +186,33 @@ describe("checkAttributeSources", () => {
     )
   })
 
-  it("lists every refusal in source order: tree, info/attributes, then the setting", () => {
+  it("refuses any conditional include listed (exit 0), and any listing exit other than 0 or 1", () => {
+    const listing = (reason: AttributeRefusal["reason"], detail: string) =>
+      refusal(AttributeSources.ConditionalInclude, reason, Option.none(), Option.none(), detail)
+    const listed = "includeif.onbranch:foreman/**.path /x/selected\n"
+    expect(checkAttributeSources(reading({ conditionalIncludes: exited(0, listed) }))).toEqual(
+      refused(listing(AttributeRefusalReasons.Configured, listed)),
+    )
+    expect(checkAttributeSources(reading({ conditionalIncludes: exited(128, "", "fatal: bad config\n") }))).toEqual(
+      refused(listing(AttributeRefusalReasons.ReadFailed, "exit 128: fatal: bad config\n")),
+    )
+    expect(checkAttributeSources(reading({ conditionalIncludes: exited(2) }))).toEqual(
+      refused(listing(AttributeRefusalReasons.ReadFailed, "exit 2: ")),
+    )
+  })
+
+  it("lists every refusal in source order: tree, info/attributes, the setting, then conditional includes", () => {
     const tree = new TreeListed({ files: [blobFile(".gitattributes", "* -text\n")] })
     const info = new FileFound({ kind: FileKinds.File, content: "x" })
-    const result = checkAttributeSources(reading({ tree, info, attributesFile: exited(0, "/y\n") }))
+    const conditionalIncludes = exited(0, "includeif.gitdir:/z.path /w\n")
+    const result = checkAttributeSources(reading({ tree, info, attributesFile: exited(0, "/y\n"), conditionalIncludes }))
     expect(Result.map(Result.flip(result), (failure) => failure.refusals.map((each) => each.source))).toEqual(
-      Result.succeed([AttributeSources.Tree, AttributeSources.InfoAttributes, AttributeSources.AttributesFile]),
+      Result.succeed([
+        AttributeSources.Tree,
+        AttributeSources.InfoAttributes,
+        AttributeSources.AttributesFile,
+        AttributeSources.ConditionalInclude,
+      ]),
     )
   })
 })
