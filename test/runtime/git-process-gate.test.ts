@@ -6,11 +6,18 @@
 // What counts as starting a process or reading the parent environment:
 // importing, re-exporting, `import()`ing or `require()`ing
 // `node:child_process`, `child_process`, `node:cluster` or `bun`; any
-// reference to the `Bun` or `process` globals. Blind spots: a process
-// started through another module this gate does not name (a native
-// addon, a worker that imports child_process, `bun:ffi`), a specifier
-// computed at run time, and an `execFile` reached through an alias such
-// as `const run = execFile`. The must-fail cases below show what it
+// reference to the `Bun` or `process` globals. A module with a syntax
+// error fails outright, since its tree may not show all its code.
+//
+// Blind spots: a process started through another module this gate does
+// not name (a native addon, a worker that imports child_process,
+// `bun:ffi`), a specifier computed at run time, and an `execFile` reached
+// through an alias such as `const run = execFile`. It also cannot see a
+// module that imports `startGit` from git.ts and passes it an environment
+// other than the clean one. On the paths that creation and the startup
+// check take, `test/program/git-coverage.test.ts` catches that, because
+// the bypassed command drops out of its recorded sequence; on any other
+// path nothing does. The must-fail cases below show what this gate
 // detects.
 import { describe, expect, it } from "@effect/vitest"
 import ts from "typescript"
@@ -80,18 +87,33 @@ const nodesOf = (text: string): ReadonlyArray<ts.Node> => {
 }
 
 /**
- * What a module does that the gate forbids: a process module imported
- * (unless `mayStartProcesses`), a process global referenced, or an
- * `execFile` call without an explicit `env`.
+ * The syntax errors TypeScript reports for a module, as findings. A module
+ * that does not parse may hold code the syntax tree does not show, so the
+ * gate fails it rather than judge a partial tree.
  */
-export const processFindings = (text: string, mayStartProcesses: boolean): ReadonlyArray<string> =>
-  nodesOf(text).flatMap((node) => [
+const parseFindings = (text: string): ReadonlyArray<string> =>
+  (
+    ts.transpileModule(text, {
+      reportDiagnostics: true,
+      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
+    }).diagnostics ?? []
+  ).map((diagnostic) => `does not parse: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`)
+
+/**
+ * What a module does that the gate forbids: a syntax error, a process
+ * module imported (unless `mayStartProcesses`), a process global
+ * referenced, or an `execFile` call without an explicit `env`.
+ */
+export const processFindings = (text: string, mayStartProcesses: boolean): ReadonlyArray<string> => [
+  ...parseFindings(text),
+  ...nodesOf(text).flatMap((node) => [
     ...importedBy(node)
       .filter((name) => processModules.includes(name) && !mayStartProcesses)
       .map((name) => `imports ${name}`),
     ...(ts.isIdentifier(node) && isGlobalReference(node) ? [`references ${node.text}`] : []),
     ...(ts.isCallExpression(node) && isExecFileWithoutEnv(node) ? ["execFile without env"] : []),
-  ])
+  ]),
+]
 
 /** The number of `execFile` calls in a module. */
 const execFileCalls = (text: string) =>
@@ -122,6 +144,14 @@ describe("process gate must-fail cases", () => {
     ["the parent environment", `const home = process.env.HOME`, ["references process"]],
   ])("flags %s outside git.ts", (_name, text, expected) => {
     expect(processFindings(text, false)).toEqual(expected)
+  })
+
+  it.each([
+    ["an unclosed import list", `import { execFile from "node:child_process"`],
+    ["an unterminated string", `const program = "git`],
+    ["a stray brace", `export const run = () => { startGit() }}`],
+  ])("flags a module that does not parse: %s", (_name, text) => {
+    expect(processFindings(text, true).filter((finding) => finding.startsWith("does not parse:"))).not.toEqual([])
   })
 
   it.each([

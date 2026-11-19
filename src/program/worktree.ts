@@ -5,7 +5,8 @@
 // and sequences the prechecks, the add and the reads after it (ruling 2
 // and the ruling on R2 of the B11a review). Creation lives here because it
 // runs Features checks and Runtime imports only Domain. The production
-// entry points run every git command through the clean runner (plan B11b).
+// entry points, `worktreeProgram`, run every git command through the clean
+// runner (plan B11b).
 import { Effect, Option, Result } from "effect"
 import { WorktreeCreated } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
@@ -17,7 +18,7 @@ import { refuseExistingBranch, refuseExistingPath, requireAbsolute } from "../fe
 import { decodeIdentityRun, decodeRevParseLine, decodeRevParsePath, decodeRevParseRevision } from "../format/rev-parse.ts"
 import { decodeWorktreeList } from "../format/worktree-list.ts"
 import { statOf } from "../runtime/file-paths.ts"
-import { cleanGit, type GitOutput, type RunGit } from "../runtime/git.ts"
+import { cleanGitWith, startGit, type GitOutput, type RunGit, type StartGit } from "../runtime/git.ts"
 import {
   addWorktreeWith,
   listWorktreesWith,
@@ -41,11 +42,44 @@ export interface WorktreeRequest {
   readonly start: Option.Option<Revision>
 }
 
+/**
+ * The worktree entry points over one git runner, as
+ * {@link worktreeProgramWith} builds them.
+ */
+export interface WorktreeProgram {
+  /**
+   * Creates the supervisor worktree (design "Creation") and returns the
+   * fields of `WorktreeCreated`. Fails with `WorktreePathNotAbsolute`
+   * before any git command when the path is not absolute; with
+   * `WorktreeBranchExists` or `WorktreePathExists` before running
+   * `worktree add`; with `PathUnreadable` when `stat` cannot inspect the
+   * path; with `WorktreeNotAsCreated` when the new worktree is not at the
+   * requested path on its branch; and with `GitCommandFailed` (args, exit
+   * code and stderr) when a git command fails. The path is refused only if
+   * it exists when the precheck runs: an empty directory that appears
+   * between the precheck and the add may be accepted by git, and no lock
+   * prevents that. A branch created in that window makes the add fail.
+   * Nothing is cleaned up on any failure.
+   */
+  readonly createWorktree: ReturnType<typeof createWorktreeWith>
+  /**
+   * The startup check: succeeds with the recorded worktree's entry when
+   * `git worktree list --porcelain -z` lists its path on
+   * `refs/heads/<branch>`, locked, and the directory there is present with
+   * the recorded git identity; otherwise fails with `WorktreeCheckFailed`
+   * naming each failed condition, and `run` stops and reports. Fails with
+   * `PathUnreadable` when the recorded path cannot be inspected, and with
+   * `WorktreeRecordInvalid` when a recorded field is empty. It never
+   * prunes, unlocks or removes anything.
+   */
+  readonly identifyWorktree: ReturnType<typeof identifyWorktreeWith>
+}
+
 /** A decoder of one command's output, as Format provides them. */
 type OutputDecoder<Value> = (text: string) => Result.Result<Value, { readonly message: string }>
 
 /**
- * {@link createWorktree} over an injected git runner. Requires an absolute
+ * {@link WorktreeProgram.createWorktree} over an injected git runner. Requires an absolute
  * path before anything runs (Features), resolves the base (Runtime reads,
  * Format decodes), runs the branch and path prechecks (Runtime reads,
  * Features decides), adds the worktree (Runtime), decodes each read after
@@ -74,25 +108,7 @@ export const createWorktreeWith = (run: RunGit) =>
   })
 
 /**
- * Creates the supervisor worktree (design "Creation") and returns the
- * fields of `WorktreeCreated`. Every git command runs through the clean
- * runner with `home`, an empty directory the caller provides, as HOME.
- * Fails with `WorktreePathNotAbsolute` before any git command when the
- * path is not absolute; with
- * `WorktreeBranchExists` or `WorktreePathExists` before running `worktree
- * add`; with `PathUnreadable` when `stat` cannot inspect the path; with
- * `WorktreeNotAsCreated` when the new worktree is not at the requested
- * path on its branch; and with `GitCommandFailed` (args, exit code and
- * stderr) when a git command fails. The path is refused only if it exists
- * when the precheck runs: an empty directory that appears between the
- * precheck and the add may be accepted by git, and no lock prevents that.
- * A branch created in that window makes the add fail. Nothing is cleaned
- * up on any failure.
- */
-export const createWorktree = (home: string) => createWorktreeWith(cleanGit(home))
-
-/**
- * {@link identifyWorktree} over an injected git runner. Lists the worktrees
+ * {@link WorktreeProgram.identifyWorktree} over an injected git runner. Lists the worktrees
  * from the recorded common directory, so the check runs even when the
  * worktree's own path is gone, and reads the recorded path's directory.
  */
@@ -108,18 +124,23 @@ export const identifyWorktreeWith = (run: RunGit) =>
   })
 
 /**
- * The startup check, with every git command run through the clean runner
- * with `home`, an empty directory the caller provides, as HOME. It
- * succeeds with the recorded worktree's entry when `git worktree list
- * --porcelain -z` lists its path on
- * `refs/heads/<branch>`, locked, and the directory there is present with
- * the recorded git identity; otherwise fails with `WorktreeCheckFailed`
- * naming each failed condition, and `run` stops and reports. Fails with
- * `PathUnreadable` when the recorded path cannot be inspected, and with
- * `WorktreeRecordInvalid` when a recorded field is empty. It never
- * prunes, unlocks or removes anything.
+ * The worktree entry points with every git command run through
+ * `cleanGitWith(start)(home)`: one clean runner shared by creation and
+ * the startup check. `home` is an empty directory the caller creates and
+ * owns; nothing here checks it.
  */
-export const identifyWorktree = (home: string) => identifyWorktreeWith(cleanGit(home))
+export const worktreeProgramWith =
+  (start: StartGit) =>
+  (home: string): WorktreeProgram => {
+    const run = cleanGitWith(start)(home)
+    return { createWorktree: createWorktreeWith(run), identifyWorktree: identifyWorktreeWith(run) }
+  }
+
+/**
+ * The production entry points: {@link worktreeProgramWith} over the real
+ * process call, `startGit` (plan B11b).
+ */
+export const worktreeProgram = worktreeProgramWith(startGit)
 
 /** The start revision, or the owner's `rev-parse HEAD` read and decoded. */
 const baseOf = (run: RunGit, request: WorktreeRequest) =>

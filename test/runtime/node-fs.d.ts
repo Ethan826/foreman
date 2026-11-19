@@ -2,7 +2,8 @@
 // runtime tests use to make and remove a temporary directory, to
 // signal readiness between processes through a file, and to make and
 // resolve a symbolic link, to make a directory unsearchable and
-// restore it, and to write executable scripts for the git hazard tests.
+// restore it, to write executable scripts for the git hazard tests, and
+// to read the file a git filter wrote.
 declare module "node:fs" {
   /**
    * Creates a new, empty directory whose name is `prefix` followed by six
@@ -26,6 +27,8 @@ declare module "node:fs" {
    * contents. The parent directory must exist.
    */
   export function writeFileSync(path: string, data: string): void
+  /** Reads the whole file at `path` as UTF-8 text; throws when it cannot be read. */
+  export function readFileSync(path: string, encoding: "utf8"): string
   /**
    * Creates a symbolic link at `path` that points to `target`. `target` is
    * stored as given and need not exist; an existing entry at `path` throws
