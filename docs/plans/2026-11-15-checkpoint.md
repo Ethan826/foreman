@@ -4,7 +4,7 @@ Where the foreman work stands, for the next session.
 
 ## Current state
 
-Work is stopped at an approval gate on local `main`. The implementation
+Work is stopped at an approval gate on `main`. The implementation
 plan's task records and owner rulings govern the scope; writing down a
 slice does not authorize it.
 
@@ -19,18 +19,28 @@ slice does not authorize it.
   identity command results until Features decides. Fresh verification
   during this status update: `bun run check` passed (0 blocking prose
   findings, 29 advisory notes); `bun run test` passed (47 files, 515 tests).
-- B11b is scoped in 1f35d61 and is not authorized. It would supply the clean
-  git command environment and address R8, including the tests' git
-  helper and the English-stderr assertion. The estimate is about 150k
-  tokens for one worker, or about 400k with a review and correction
-  round. These are estimates, not caps. Nothing is running.
+- B11b landed 2026-11-18 by fast-forward, after a Codex review, one
+  correction pass and a correction review that passed. Every production
+  git command runs in the clean environment (design E7), through
+  `worktreeProgram` and `cleanGit`. Hazard tests trigger each hazard for
+  real, and coverage tests observe the production entry points. Measured
+  worker use: 457,553 tokens in two passes, against an estimate of about
+  400k. On the landed content: `bun run docs` (no warnings), `bun run
+  check` (0 blocking, 29 notes) and `bun run test` (53 files, 604 tests)
+  pass.
+- CI: the F7 lifecycle property timed out on GitHub's runner. It has a
+  provisional 60-second limit (83870d8), and it passed on CI in 6,486 ms.
 - The rest of B11 and B12 to B18 remain unauthorized. L3 waits on B16;
-  L4 waits on B13 to B15. No push is authorized.
+  L4 waits on B13 to B15. Each push needs the owner's OK.
 
 Deferred findings keep their recorded triggers: R5 before extending the
 listing decoder or claiming strict validation; R7 at the next lint-gate
 change; F8 with B15. Re-vendoring the prose linter from the skills
-repository and the editorial pass on the docs remain open.
+repository and the editorial pass on the docs remain open. From B11b:
+the `gate-integrity` lift (a local draft is in
+[the B11b review note](2026-11-18-b11b-scope-review.md); writing to the
+skills repository needs authorization), and splitting
+`test/program/admission.test.ts` (261 lines).
 
 The 2026-11-16 owner rulings resolved the old checkpoint's accounting,
 O14 and O15 questions for the initial implementation: owner-only retire
@@ -40,10 +50,8 @@ establish Codex reset semantics. The Claude decoder's `unifiedWindows`
 change and its review correction are recorded in the implementation
 plan. These items are no longer waiting on the decisions listed below.
 
-Status wording reviewed 2026-11-18: replaced the obsolete approval limit
-and pending-live-test list with dated outcomes and the B11b approval
-boundary. Historical failures, measurement limits and deferred findings
-remain in the record.
+Historical failures, measurement limits and deferred findings remain in
+the implementation plan's record.
 
 ## Earlier checkpoint: done
 

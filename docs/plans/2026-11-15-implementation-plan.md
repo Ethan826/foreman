@@ -746,7 +746,8 @@ agreement. Rejected: fewer runs, which would weaken the property.
 
 Verification: with the limit set to 100 ms, the test failed with "Test
 timed out in 100ms", so the option reaches Vitest. Restored to 60,000, it
-passed in 2.3 s.
+passed in 2.3 s. On CI (check run 44453713682, 83870d8) it passed in
+6,486 ms, about 11 percent of the limit.
 
 ### Task B11: Git and worktree handling
 
@@ -1192,10 +1193,11 @@ with B15. B11a's measured total is 718,139 tokens across four worker
 units, plus coordination that was not measured. The rest of B11 is not
 authorized.
 
-#### B11b: the clean git command environment (scoped and authorized 2026-11-18; corrected, awaiting review)
+#### B11b: the clean git command environment (scoped, authorized and landed 2026-11-18)
 
-The owner asked for this slice to be scoped as one deliverable. It is not
-yet authorized, and the rest of B11 stays closed.
+Scoped 2026-11-18, at the owner's request, as one deliverable. It was
+not authorized when scoped; the authorization follows the control
+paragraph below. The rest of B11 stays closed.
 
 Deliverable:
 
@@ -1298,7 +1300,7 @@ stopped at completion with no scope conflict.
   about 14.5 minutes), against an estimate of about 150k.
 
 Codex review (2026-11-18), recorded in
-`2026-11-18-b11b-scope-review.md`: the runner and production wiring are
+[the B11b review note](2026-11-18-b11b-scope-review.md): the runner and production wiring are
 correct. Three findings:
 
 1. Important: the coverage test drove the `...With` functions, so it never
@@ -1361,8 +1363,33 @@ rebased onto f72e161 without conflicts, and the original commit became
 - Open, for the owner: `test/program/admission.test.ts` is 261 lines.
   It was over the limit before B11b and is unchanged.
 
-Not done: landing and push. The branch is based on f72e161, while
-`main` is at 83870d8, so it needs a rebase before landing.
+Correction review (2026-11-18, Codex, in the review note): passes, and
+all three findings are closed. The reviewer checked the combined content
+of the corrections and 83870d8 (604 tests, check with 29 notes, docs
+without warnings). In the reviewer's own copy, the production-only
+mutant failed exactly 2 tests, and removing parse detection failed
+exactly 3. The reviewer accepted the API change and the extra split, and
+asked for no further review round.
+
+B11b landed (2026-11-18): the branch was rebased onto 83870d8 without
+conflicts, which renamed the commits to 11e83c3 (the slice), db85d5e and
+7d66480 (corrections) and d3e8bc1 (this record). `main` was
+fast-forwarded with no merge commit, and nothing was pushed. On the
+rebased branch, `bun run docs` PASS (no warnings), `bun run check` PASS
+(0 blocking, 29 notes) and `bun run test` PASS (53 files, 604 tests).
+The review note is committed beside this plan.
+
+Handoff items from B11b, open and not blocking:
+
+- Owning-skill lift (AGENTS.md, "Lint"). The reusable lesson of review
+  finding 1 belongs in `gate-integrity`. A test that injects a compliant
+  helper does not show that the production entry point builds that
+  helper. The draft text and its proposed check are in the review note,
+  under "Local draft for the owning skill". Nothing has been written to
+  the skills repository; that needs the owner's authorization.
+- Cleanup: split `test/program/admission.test.ts` (261 lines) under the
+  250-line limit. A mechanical change, proposed separately.
+- R5 and R7 stay deferred with their triggers, and F8 stays with B15.
 
 ### Task B12: Step runner (in-session process control)
 

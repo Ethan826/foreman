@@ -10,12 +10,15 @@ checkpoints.
 Status (2026-11-18): the owner approved the design at revision 6.1; its
 open items stay open unless a later owner ruling resolves them. Part A
 landed on 2026-11-16, Part B milestone 1 (B1 to B10) on 2026-11-17, and
-B11a (supervisor worktree creation and identity) on 2026-11-18, all on
-local `main`. Work is stopped at an approval gate. B11b (clean git
-command environment, including review item R8) is scoped in
-`docs/plans/2026-11-15-implementation-plan.md` but is not authorized.
-The rest of B11 and B12 to B18 are not authorized. `bun run check`
-(tsc, ESLint and the prose gate) and `bun run test` must pass before any commit.
+B11a (supervisor worktree creation and identity) and B11b (every git
+command in the clean environment, including review item R8) on
+2026-11-18, all on `main`. Production git runs only through
+`worktreeProgram` and `cleanGit` in `src/runtime/git.ts`. Work is stopped
+at an approval gate: the rest of B11 and B12 to B18 are not authorized,
+and scoping a slice does not authorize it. `bun run check` (tsc, ESLint
+and the prose gate) and `bun run test` must pass before any commit, and
+`bun run docs` must build without warnings, as CI's docs workflow
+requires.
 
 Live tests L1 (Claude usage readings) and L2 (Codex usage windows) ran on
 2026-11-16 and both came back positive; results and limits are in
