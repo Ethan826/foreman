@@ -1391,19 +1391,18 @@ Handoff items from B11b, open and not blocking:
   250-line limit. A mechanical change, proposed separately.
 - R5 and R7 stay deferred with their triggers, and F8 stays with B15.
 
-#### B11c: refuse attribute declarations that the clean environment changes (scoped 2026-11-18, revised 2026-11-19, not authorized)
+#### B11c: refuse attribute sources at creation and startup (scoped 2026-11-18, revised 2026-11-19, authorized 2026-11-19 as option A)
 
 Why next: B11b's empty attribute source stops `.gitattributes` filters,
 but it also changes what git does with any conversion declaration, and
-it leaves two attribute sources in force. The design refuses, at
-startup, a repository whose attribute files declare `filter`, `text`,
-`eol`, `ident` or `working-tree-encoding` ("Git environment",
-restrictions table row "No attribute-driven conversion"). The startup
-check already exists to use this, and the commit procedure needs it
-before any commit is safe. The design's other caller, `approve --base`,
-waits for B15.
+it leaves two attribute sources in force. The design refuses a
+repository whose attribute files declare `filter`, `text`, `eol`,
+`ident` or `working-tree-encoding` ("Git environment", restrictions
+table row "No attribute-driven conversion"). The startup check already
+exists to use this, and the commit procedure needs it before any commit
+is safe. The design's other caller, `approve --base`, waits for B15.
 
-Revision 2026-11-19. The first scope (3ed0c25) read effective values
+History of the scope. The first scope (3ed0c25) read effective values
 with `git check-attr` over the revision's tracked paths.
 [The B11c scope review](2026-11-18-b11c-scope-review.md) showed that it
 cannot establish the contract:
@@ -1416,8 +1415,9 @@ cannot establish the contract:
   under the empty attribute source. An explicit unset is a declaration
   whose loss changes behavior.
 
-`check-attr` stays in the tests as git's reference for effective values,
-with that narrower claim.
+The revision (d845cfd) offered option A, which refuses any attribute
+content, and option B, which decodes declarations with a hand-written
+parser checked by a bounded `check-attr` oracle.
 
 Attribute sources under the clean environment (probes 2026-11-19, git
 2.50.1, a scratch repository with a marker-writing smudge filter):
@@ -1430,99 +1430,88 @@ Attribute sources under the clean environment (probes 2026-11-19, git
 | `<gitDir>/info/attributes` of a linked worktree | Not read (the filter did not run) |
 | `core.attributesFile` set in the repository's `config` | Fully in force (the filter ran during `worktree add`). `GIT_CONFIG_GLOBAL=/dev/null` removes only the global setting. |
 
-Contract, for the owner to choose (question 1). Both options refuse
-before any checkout, read only blobs, files and config, and run no git
-command that applies attributes.
+Owner rulings (2026-11-19, on the Codex review of d845cfd):
 
-- Option A, conservative: refuse when any attribute source has content.
-  That means a revision with any `.gitattributes` blob holding a line
-  other than blank lines and `#` comments, a non-empty
-  `<commonDir>/info/attributes`, or `core.attributesFile` set in the
-  repository's config. This needs no attribute parser. It also refuses
-  benign uses (`linguist-*`, `export-ignore`, `diff=`, `*.png binary`).
-- Option B, recommended: refuse what the clean environment changes or
-  leaves in force. In-force sources (`<commonDir>/info/attributes` and
-  `core.attributesFile`) are refused as in option A, since they act in
-  full, including `diff` and `merge` drivers. For the revision's
-  `.gitattributes` blobs, a line is refused if any of its attribute
-  tokens names `filter`, `text`, `eol`, `ident`, `working-tree-encoding`
-  or the legacy `crlf`, in any state (`attr`, `-attr`, `!attr`,
-  `attr=value`). The built-in `binary` macro is refused too, and so is an
-  `[attr]` macro definition that names any of these or `binary`. A line
-  the decoder cannot read is refused, never skipped. Because the rule
-  matches declarations and not paths, C3 and C4 are refused whatever
-  files exist.
+1. Option A. For the first version, rejecting benign attributes is
+   accepted rather than building and maintaining a git-attribute decoder.
+   Option B's bounded effective-value oracle would not, by itself,
+   establish the declaration-wide rule. The decoder and the oracle are
+   dropped from this slice.
+2. A `core.attributesFile` configured in the repository is refused.
+   `cleanGit` is unchanged: silently overriding the setting would add
+   another behavior difference to account for.
+3. Creation and startup both check, and creation checks before `worktree
+   add`.
+4. A read failure is a refusal.
 
-Option B decodes the line format published in gitattributes(5): a
-pattern, which may be C-quoted, and then whitespace-separated attribute
-tokens. That is a hand-written decoder of a published format. By
-`compose-published-primitives` it is flagged, and it refuses on any
-doubt. A bounded oracle checks its soundness: for generated attribute
-files that the decoder passes, `git check-attr` over generated paths
-reports unspecified for every conversion attribute. The test cannot
-show completeness, because the decoder may refuse lines git would accept
-harmlessly. That is the safe direction, and refused lines are reported
-by name.
+Contract (option A). A revision and repository pass only when all of
+these hold:
+
+- Every tree entry of the revision whose last path component is
+  `.gitattributes` is a regular blob, and each of its lines is blank
+  (only spaces, tabs or a final CR) or begins with `#`. Any other line
+  is refused. So is an entry of another kind (a symbolic link, a tree, a
+  submodule).
+- `<commonDir>/info/attributes` is absent, or is an empty regular file.
+  Any content, or a file of another kind, is refused.
+- `git config --get core.attributesFile` in the repository exits 1
+  (unset). If it prints a value, that is refused, and any other exit is
+  refused as a read failure.
+- If any of these reads fails, the result is a refusal and never a pass.
+
+The rule reads no declaration and matches no paths, so C2, C3 and C4 are
+refused like any other content.
 
 Deliverable:
 
-- Runtime: read the revision's `.gitattributes` blobs (`git ls-tree -r -z
-  <revision>`, then `git cat-file blob`), `<commonDir>/info/attributes`
-  as a file, and `git config --get core.attributesFile`, all through
-  `cleanGit`. None of these commands applies attributes.
-- Format: the option B line decoder, or option A's content test. Either
-  returns the offending source, line number and token.
-- Features: a pure judgment that lists every refusal.
-- Program: creation checks the base revision before `worktree add`, and
-  the startup check gains a condition run against the recorded revision.
-  Both use `worktreeProgram`, and the coverage test's command sequence
-  extends to the new commands.
+- Runtime: `git ls-tree -r -z <revision>` (modes, types and paths), `git
+  cat-file blob` for each `.gitattributes` entry, `git config --get
+  core.attributesFile`, all through `cleanGit`, which applies no
+  attributes, and a file read of `<commonDir>/info/attributes`. Runtime
+  returns raw results: exit codes, output and stat kinds.
+- Format: decode the `-z` tree listing strictly. An unreadable record is
+  a refusal (R5's lesson).
+- Features: a pure judgment that lists every refusal with its source, and
+  its line number where there is one.
+- Program: `worktreeProgram`'s creation checks the base revision before
+  `worktree add`, and the startup check gains a condition run against
+  the recorded revision. The coverage test's command sequence extends to
+  the new commands.
 
 Acceptance cases (tests first, disposable repositories):
 
 - The review's three counterexamples are refused: C3's unmatched
   declaration, C4's declaration that cancels itself, and C2's `* -text`.
-- A filter in `<commonDir>/info/attributes`, and one in a file that
-  `core.attributesFile` names, are refused before `worktree add`. A
-  planted marker filter writes nothing. A control run of `worktree add`
-  without the check writes the marker, which shows the hazard is real.
-- Each conversion attribute is refused in each state, in the root and a
-  nested `.gitattributes`, as are `binary` and a macro definition that
-  names one. A quoted pattern is decoded, and a line the decoder cannot
-  read is refused.
-- Under option B, a repository whose only attributes are benign
-  (`*.md linguist-documentation`, `export-ignore`) passes. A repository
-  with no attribute source passes under both options.
-- The working tree's `.gitattributes` is not read, which matches git
-  under the clean environment.
-- Option B only: the bounded `check-attr` oracle above.
+- A filter in `<commonDir>/info/attributes`, and one in a file that a
+  repository `core.attributesFile` names, are refused at creation before
+  `worktree add`. A planted marker filter writes nothing. A control run
+  of `worktree add` without the check writes the marker, which shows the
+  hazard is real.
+- A nested `.gitattributes` with content is refused, as is a
+  `.gitattributes` that is a symbolic link. Each read failure is refused:
+  an unreadable `info/attributes`, a non-zero `cat-file` exit, and a
+  `git config` exit other than 0 or 1.
+- Passing cases: no attribute source; a `.gitattributes` holding only
+  comments and blank lines, including with CRLF endings; an empty
+  `info/attributes`.
+- The startup check refuses a recorded revision that gained a
+  `.gitattributes` with content. The working tree's `.gitattributes` is
+  not read, which matches git under the clean environment.
 
-Excluded: `approve --base` (B15), the pinned `GIT_DIR`/`GIT_WORK_TREE`/
-`GIT_COMMON_DIR` environment, protected digests, the commit procedure,
-the review worktree, `--no-verify`, a new `-c core.attributesFile`
-override in `cleanGit`, R5 and R7 beyond the new decoder, new
-dependencies and `package.json`.
+Excluded: option B's decoder and oracle, `approve --base` (B15), the
+pinned `GIT_DIR`/`GIT_WORK_TREE`/`GIT_COMMON_DIR` environment, protected
+digests, the commit procedure, the review worktree, `--no-verify`, any
+change to `cleanGit` or its overrides, R5 and R7 beyond the new decoder,
+new dependencies and `package.json`.
 
-Questions for the owner before authorizing:
-
-1. Option A or option B? Recommendation: B. It keeps benign attributes
-   working, and the decoder refuses on doubt. A is the choice if no
-   hand-written decoder is acceptable.
-2. Should `core.attributesFile` in the repository's config be refused
-   when it is set (as scoped), or should `cleanGit` override it with
-   `-c core.attributesFile=/dev/null`? Recommendation: refuse. The
-   override would also hide the setting from the owner's view of what
-   foreman runs, and it changes B11b's landed runner.
-3. Creation and startup both refuse (the review's answer), creation
-   before `worktree add`. No question remains here; it is listed so the
-   change from the first scope is on record.
-
-Sizing and control. Larger than the first scope, because of the decoder
-and its oracle: about 150k for a fresh worker under option B (less under
-A), plus a focused review. Same control: one worker with a short brief,
-no delegation, no automatic follow-up, `gtimeout` on every run, no
-pattern kills. `bun run docs`, `bun run check` and `bun run test` must
-pass.
+Sizing and control. Without the decoder and its oracle, the slice is a
+strict tree-listing decoder, a content test, one Features judgment,
+Program wiring at two points, and real-repository tests. About 100k for
+a fresh worker (B11a's five-layer slice measured 153,558), plus a focused
+review. One worker with a short brief, no delegation, no automatic
+follow-up, `gtimeout` on every run, no pattern kills. `bun run docs`,
+`bun run check` and `bun run test` must pass. The worker stops for
+review.
 
 The rest of B11 after this slice: the pinned environment for the
 supervisor's tree, the protected digest (`src/runtime/protected.ts`), the
