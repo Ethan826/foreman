@@ -234,11 +234,14 @@ export interface LedgerTx {
 export interface LedgerStore {
   /**
    * Runs `body` inside one write transaction (`BEGIN IMMEDIATE`). It commits
-   * if `body` succeeds and rolls back, writing nothing, if `body` fails; the
-   * failure is `body`'s own error. Fails with {@link LedgerBusy} when
+   * if `body` succeeds. If `body` fails, it rolls back and returns `body`'s
+   * own error, and nothing is written. Fails with {@link LedgerBusy} when
    * another writer held the write lock past `busy_timeout`, and with
-   * {@link LedgerError} on I/O, schema or decode failures; either way the
-   * transaction writes nothing. `tx` is valid only while `body` runs.
+   * {@link LedgerError} on I/O, schema or decode failures. A failed COMMIT
+   * is rolled back if the transaction is still open, and its error is
+   * returned. The exception is a failed ROLLBACK: its error replaces
+   * `body`'s, and the connection's state, including whether anything was
+   * written, is then unknown. `tx` is valid only while `body` runs.
    */
   readonly transact: <A, E>(
     body: (tx: LedgerTx) => Effect.Effect<A, E>,
