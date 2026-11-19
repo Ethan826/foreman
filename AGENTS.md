@@ -7,18 +7,23 @@ before the next tranche. It paces launches against the user's
 subscription windows, renews context with every step, and keeps durable
 checkpoints.
 
-Status (2026-11-15): the owner approved the design at revision 6.1; its
-open items stay open. Implementation is approved only for the first code
-slice: project setup, Domain types, Format decoders and the pure pacing
-function. Runtime, process control, git handling,
-permissions, storage and recovery code are not approved. `bun run check`
+Status (2026-11-18): the owner approved the design at revision 6.1; its
+open items stay open unless a later owner ruling resolves them. Part A
+landed on 2026-11-16, Part B milestone 1 (B1 to B10) on 2026-11-17, and
+B11a (supervisor worktree creation and identity) on 2026-11-18, all on
+local `main`. Work is stopped at an approval gate. B11b (clean git
+command environment, including review item R8) is scoped in
+`docs/plans/2026-11-15-implementation-plan.md` but is not authorized.
+The rest of B11 and B12 to B18 are not authorized. `bun run check`
 (tsc, ESLint and the prose gate) and `bun run test` must pass before any commit.
 
-Pending live tests that must update code when they run: L1 (Claude
-usage reading and `rate_limit_event` shape: update `src/format/claude.ts`),
-L2 (Codex usage windows: add the Codex windows to the default policy in
-`src/domain/policy.ts`; until then every Codex launch needs a waiver),
-L3 (permissions), L4 (crash and restart).
+Live tests L1 (Claude usage readings) and L2 (Codex usage windows) ran on
+2026-11-16 and both came back positive; results and limits are in
+`research/live/results-2026-11-16.md`. L3 (permissions) waits on B16;
+L4 (crash and restart) waits on B13 to B15. No live client call is
+authorized by this status update.
+Until the Codex windows enter the default policy, every Codex launch
+needs a waiver.
 
 Start with `docs/plans/2026-11-14-agent-supervisor-design.md`; its
 decision record and the finished Ralph trial are beside it. Do not repeat

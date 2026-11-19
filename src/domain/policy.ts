@@ -93,8 +93,12 @@ const minEstimatePoints = 1
  * resetTolerance 5 minutes and dropTolerance 5 points. minEstimate 1 point
  * (owner ruling 2026-11-16, O15).
  *
- * TODO(design "Pacing", live test L2): Codex windows are not known; the
- * default lists none, so pacing answers Unknown for Codex.
+ * TODO(design "Pacing", O14): live test L2 (2026-11-16) measured Codex's
+ * five-hour and weekly windows, but an idle Codex window's reset time
+ * appears to roll forward, so they stay out of the default until the
+ * owner settles Codex's reset semantics. Until then the default lists
+ * none, pacing answers Unknown for Codex, and every Codex launch needs a
+ * waiver.
  */
 export const defaultPolicy: Policy = {
   providers: {

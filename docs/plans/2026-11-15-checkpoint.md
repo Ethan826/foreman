@@ -1,8 +1,51 @@
-# Checkpoint 2026-11-15
+# Checkpoint (updated 2026-11-18)
 
 Where the foreman work stands, for the next session.
 
-## Done
+## Current state
+
+Work is stopped at an approval gate on local `main`. The implementation
+plan's task records and owner rulings govern the scope; writing down a
+slice does not authorize it.
+
+- Part A landed 2026-11-16: Domain types, period membership, pacing and
+  estimates per role and window. L1 and L2 ran that day and both came
+  back positive; see [the live-test results](../../research/live/results-2026-11-16.md).
+- Part B milestone 1 (B1 to B10) landed 2026-11-17 by fast-forward:
+  ledger, admission and settle, event log, holds, waivers, review queue,
+  scheduler and backlog, including the review corrections.
+- B11a landed 2026-11-18 by fast-forward: supervisor worktree creation
+  and identity. The last R2 correction, 0c6298c, keeps stat kinds and
+  identity command results until Features decides. Fresh verification
+  during this status update: `bun run check` passed (0 blocking prose
+  findings, 29 advisory notes); `bun run test` passed (47 files, 515 tests).
+- B11b is scoped in 1f35d61 and is not authorized. It would supply the clean
+  git command environment and address R8, including the tests' git
+  helper and the English-stderr assertion. The estimate is about 150k
+  tokens for one worker, or about 400k with a review and correction
+  round. These are estimates, not caps. Nothing is running.
+- The rest of B11 and B12 to B18 remain unauthorized. L3 waits on B16;
+  L4 waits on B13 to B15. No push is authorized.
+
+Deferred findings keep their recorded triggers: R5 before extending the
+listing decoder or claiming strict validation; R7 at the next lint-gate
+change; F8 with B15. Re-vendoring the prose linter from the skills
+repository and the editorial pass on the docs remain open.
+
+The 2026-11-16 owner rulings resolved the old checkpoint's accounting,
+O14 and O15 questions for the initial implementation: owner-only retire
+through the first runtime milestone, the tolerance-based period rule as
+a pacing heuristic, and a one-point minimum estimate. They do not
+establish Codex reset semantics. The Claude decoder's `unifiedWindows`
+change and its review correction are recorded in the implementation
+plan. These items are no longer waiting on the decisions listed below.
+
+Status wording reviewed 2026-11-18: replaced the obsolete approval limit
+and pending-live-test list with dated outcomes and the B11b approval
+boundary. Historical failures, measurement limits and deferred findings
+remain in the record.
+
+## Earlier checkpoint: done
 
 - Design revision 4 (usage ledger, review queue and scheduler,
   pre-approved backlog, role-swap suggestions, durable layer kept
@@ -15,7 +58,7 @@ Where the foreman work stands, for the next session.
   with its drift test, orientation docs, and a stability tripwire for
   effect/workflow.
 
-## Next
+## Earlier checkpoint: next (superseded by current state above)
 
 1. Done: final independent reviews of the design through revision 6.1;
    the owner approved revision 6.1 on 2026-11-15 (see the ruling at the
