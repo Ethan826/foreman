@@ -4,6 +4,8 @@ Foreman is a small personal supervisor for coding agents. It will drive unmodifi
 
 Foreman is meant to pace its launches against the user's subscription usage windows, start every step with fresh context, and keep durable checkpoints so a crash or restart does not lose its place.
 
+The [API reference](https://ethan826.github.io/foreman/) documents every exported declaration in `src/` from its TSDoc. CI rebuilds it on each push to `main`. For the design in plain words, read [docs/how-it-works.md](docs/how-it-works.md).
+
 ## Status
 
 The owner approved the design at revision 6.1 on 2026-11-15. Its open items (O1 to O13 and a few others) stay open, and approving the design authorized no new code. The approved first code slice is project setup, Domain types, Format decoders for Claude and Codex output, the pure pacing function, and their tests. The pacing function in the code still follows revision 3 and has to be brought up to revision 6.1. Nothing runs agents yet. The usage ledger, holds, the review queue, worktrees, process control, permissions and recovery are designed but not approved for implementation and not written.
@@ -30,7 +32,7 @@ Imports point inward. Domain imports nothing. Features and Format are the pure c
 
 ## How it works
 
-For sequence diagrams of a tranche and of a launch attempt, the hold states, a plain-words account of pacing, and what exists today, read [docs/how-it-works.md](docs/how-it-works.md). Each `src/` layer has a README linked from there. The API reference, generated from the TSDoc in `src/` by `bun run docs`, is published at https://ethan826.github.io/foreman/.
+For sequence diagrams of a tranche and of a launch attempt, the hold states, a plain-words account of pacing, and what exists today, read [docs/how-it-works.md](docs/how-it-works.md). Each `src/` layer has a README linked from there. `bun run docs` builds the [API reference](https://ethan826.github.io/foreman/) from the TSDoc in `src/`.
 
 ## Why not Ralph
 
@@ -54,9 +56,10 @@ Install dependencies with `bun install`. Then:
 bun run check   # tsc, ESLint and the prose check
 bun run test    # vitest run
 bun run diagram # rewrite docs/diagrams/onion.svg
+bun run docs    # build the API reference into site/
 ```
 
-Both must pass before a commit.
+`check` and `test` must pass before a commit.
 
 ## Design and reviews
 
