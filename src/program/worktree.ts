@@ -4,7 +4,8 @@
 // decides. Program performs the reads, passes them to Format and Features,
 // and sequences the prechecks, the add and the reads after it (ruling 2
 // and the ruling on R2 of the B11a review). Creation lives here because it
-// runs Features checks and Runtime imports only Domain.
+// runs Features checks and Runtime imports only Domain. The production
+// entry points run every git command through the clean runner (plan B11b).
 import { Effect, Option, Result } from "effect"
 import { WorktreeCreated } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
@@ -16,6 +17,7 @@ import { refuseExistingBranch, refuseExistingPath, requireAbsolute } from "../fe
 import { decodeIdentityRun, decodeRevParseLine, decodeRevParsePath, decodeRevParseRevision } from "../format/rev-parse.ts"
 import { decodeWorktreeList } from "../format/worktree-list.ts"
 import { statOf } from "../runtime/file-paths.ts"
+import { cleanGit, type GitOutput, type RunGit } from "../runtime/git.ts"
 import {
   addWorktreeWith,
   listWorktreesWith,
@@ -23,10 +25,7 @@ import {
   readAddedWith,
   readOwnerHeadWith,
   revParseArgs,
-  runGit,
   worktreeListArgs,
-  type GitOutput,
-  type RunGit,
 } from "../runtime/worktree.ts"
 import { readDirectoryWith, type DirectoryReading } from "../runtime/worktree-directory.ts"
 
@@ -76,8 +75,10 @@ export const createWorktreeWith = (run: RunGit) =>
 
 /**
  * Creates the supervisor worktree (design "Creation") and returns the
- * fields of `WorktreeCreated`. Fails with `WorktreePathNotAbsolute` before
- * any git command when the path is not absolute; with
+ * fields of `WorktreeCreated`. Every git command runs through the clean
+ * runner with `home`, an empty directory the caller provides, as HOME.
+ * Fails with `WorktreePathNotAbsolute` before any git command when the
+ * path is not absolute; with
  * `WorktreeBranchExists` or `WorktreePathExists` before running `worktree
  * add`; with `PathUnreadable` when `stat` cannot inspect the path; with
  * `WorktreeNotAsCreated` when the new worktree is not at the requested
@@ -88,7 +89,7 @@ export const createWorktreeWith = (run: RunGit) =>
  * A branch created in that window makes the add fail. Nothing is cleaned
  * up on any failure.
  */
-export const createWorktree = createWorktreeWith(runGit)
+export const createWorktree = (home: string) => createWorktreeWith(cleanGit(home))
 
 /**
  * {@link identifyWorktree} over an injected git runner. Lists the worktrees
@@ -107,8 +108,10 @@ export const identifyWorktreeWith = (run: RunGit) =>
   })
 
 /**
- * The startup check: succeeds with the recorded worktree's entry when
- * `git worktree list --porcelain -z` lists its path on
+ * The startup check, with every git command run through the clean runner
+ * with `home`, an empty directory the caller provides, as HOME. It
+ * succeeds with the recorded worktree's entry when `git worktree list
+ * --porcelain -z` lists its path on
  * `refs/heads/<branch>`, locked, and the directory there is present with
  * the recorded git identity; otherwise fails with `WorktreeCheckFailed`
  * naming each failed condition, and `run` stops and reports. Fails with
@@ -116,7 +119,7 @@ export const identifyWorktreeWith = (run: RunGit) =>
  * `WorktreeRecordInvalid` when a recorded field is empty. It never
  * prunes, unlocks or removes anything.
  */
-export const identifyWorktree = identifyWorktreeWith(runGit)
+export const identifyWorktree = (home: string) => identifyWorktreeWith(cleanGit(home))
 
 /** The start revision, or the owner's `rev-parse HEAD` read and decoded. */
 const baseOf = (run: RunGit, request: WorktreeRequest) =>

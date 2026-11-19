@@ -1,8 +1,8 @@
 // The project has no Node type package; this declares the calls the
 // runtime tests use to make and remove a temporary directory, to
 // signal readiness between processes through a file, and to make and
-// resolve a symbolic link, and to make a directory unsearchable and
-// restore it.
+// resolve a symbolic link, to make a directory unsearchable and
+// restore it, and to write executable scripts for the git hazard tests.
 declare module "node:fs" {
   /**
    * Creates a new, empty directory whose name is `prefix` followed by six

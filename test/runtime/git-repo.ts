@@ -1,23 +1,47 @@
 // Test helper: a disposable git repository in a temporary directory, with
 // user.name, user.email and commit.gpgsign set in the repository's own
-// config (never the global one), and one commit on `main`. Git runs
-// through the production `runGit`; a non-zero exit fails the test.
+// config, and one commit on `main`. Git runs through the production
+// clean runner (`cleanGit`, plan B11b and review item R8), so a global
+// config, hooks or an inherited GIT_DIR in the test process do not reach
+// it; a non-zero exit fails the test.
+import { afterAll } from "@effect/vitest"
 import { Effect } from "effect"
 import { chmodSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { runGit } from "../../src/runtime/worktree.ts"
+import { cleanGit, type RunGit } from "../../src/runtime/git.ts"
 
-/** Runs git in `cwd` and returns its trimmed stdout; a non-zero exit is a test failure. */
-export const git = (cwd: string, ...args: ReadonlyArray<string>) =>
-  Effect.flatMap(runGit(cwd, args), (output) =>
-    output.exitCode === 0
-      ? Effect.succeed(output.stdout.trim())
-      : Effect.fail(`git ${args.join(" ")} exited ${String(output.exitCode)}: ${output.stderr}`),
-  )
+/**
+ * The empty directory that every clean git run in this test file uses as
+ * HOME. Made once per test file and removed after its tests.
+ */
+export const emptyHome = mkdtempSync(`${tmpdir()}/foreman-home-`)
 
-/** Makes a commit with no changes on the current branch. */
-export const emptyCommit = (repo: string, message: string) =>
-  git(repo, "commit", "--quiet", "--allow-empty", "-m", message)
+afterAll(() => {
+  rmSync(emptyHome, { recursive: true, force: true })
+})
+
+/** The production clean runner over {@link emptyHome}. */
+export const cleanRun: RunGit = cleanGit(emptyHome)
+
+/** Runs git through `run` in `cwd` and returns its trimmed stdout; a non-zero exit is a test failure. */
+export const gitWith =
+  (run: RunGit) =>
+  (cwd: string, ...args: ReadonlyArray<string>) =>
+    Effect.flatMap(run(cwd, args), (output) =>
+      output.exitCode === 0
+        ? Effect.succeed(output.stdout.trim())
+        : Effect.fail(`git ${args.join(" ")} exited ${String(output.exitCode)}: ${output.stderr}`),
+    )
+
+/** {@link gitWith} over the clean runner. */
+export const git = gitWith(cleanRun)
+
+/** Makes a commit with no changes on the current branch, through `run`. */
+export const emptyCommitWith = (run: RunGit) => (repo: string, message: string) =>
+  gitWith(run)(repo, "commit", "--quiet", "--allow-empty", "-m", message)
+
+/** {@link emptyCommitWith} over the clean runner. */
+export const emptyCommit = emptyCommitWith(cleanRun)
 
 const initRepo = (repo: string) =>
   Effect.gen(function* () {
@@ -27,6 +51,10 @@ const initRepo = (repo: string) =>
     yield* emptyCommit(repo, "first")
   })
 
+/** Makes an initialized repository with one commit at `<dir>/<name>`. */
+export const makeRepo = (dir: string, name: string) =>
+  Effect.andThen(git(dir, "init", "--quiet", "-b", "main", name), initRepo(`${dir}/${name}`))
+
 /**
  * Runs `use` with a fresh temporary directory holding an initialized
  * repository at `<dir>/owner`, and removes the directory afterwards.
@@ -34,11 +62,7 @@ const initRepo = (repo: string) =>
 export const withRepo = <A, E>(use: (dir: string, owner: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-worktree-`)),
-    (dir) =>
-      Effect.andThen(
-        Effect.andThen(git(dir, "init", "--quiet", "-b", "main", "owner"), initRepo(`${dir}/owner`)),
-        use(dir, `${dir}/owner`),
-      ),
+    (dir) => Effect.andThen(makeRepo(dir, "owner"), use(dir, `${dir}/owner`)),
     (dir) =>
       Effect.sync(() => {
         rmSync(dir, { recursive: true, force: true })

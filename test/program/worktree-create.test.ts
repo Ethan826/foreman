@@ -1,8 +1,9 @@
 // Creating the supervisor worktree against disposable repositories (design
 // "Supervisor worktree", "Creation"; plan B11a and owner rulings 1 and 3 on
 // it). Each test makes its own repository in a temporary directory;
-// nothing touches the global config. Some tests wrap the real `runGit` to
-// alter one command's output or to act just before one command runs.
+// every git command, the tests' own included, runs through the clean
+// runner (plan B11b, R8). Some tests wrap the clean runner to alter one
+// command's output or to act just before one command runs.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
 import { existsSync, mkdirSync, realpathSync, symlinkSync } from "node:fs"
@@ -17,8 +18,9 @@ import {
   WorktreePathNotAbsolute,
 } from "../../src/domain/worktree.ts"
 import { createWorktree, createWorktreeWith, identifyWorktree } from "../../src/program/worktree.ts"
-import { revParseArgs, runGit, type RunGit } from "../../src/runtime/worktree.ts"
-import { emptyCommit, git, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
+import type { GitOutput, RunGit } from "../../src/runtime/git.ts"
+import { revParseArgs } from "../../src/runtime/worktree.ts"
+import { cleanRun, emptyCommit, emptyHome, git, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
 
 const request = (owner: string, path: string) => ({
   ownerCheckout: owner,
@@ -37,7 +39,7 @@ const ownerState = (owner: string) =>
 const createdOnBranchLocked = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const base = yield* git(owner, "rev-parse", "HEAD")
-    const created = yield* createWorktree(request(owner, `${dir}/worktree`))
+    const created = yield* createWorktree(emptyHome)(request(owner, `${dir}/worktree`))
     const top = yield* git(created.path, "rev-parse", "--show-toplevel")
     const commonDir = yield* git(owner, "rev-parse", "--absolute-git-dir")
     expect(Schema.is(WorktreeCreated)(created)).toBe(true)
@@ -59,7 +61,7 @@ const startsFromGivenRevision = (dir: string, owner: string) =>
       yield* git(owner, "rev-parse", "HEAD"),
     )
     yield* emptyCommit(owner, "second")
-    const created = yield* createWorktree({
+    const created = yield* createWorktree(emptyHome)({
       ...request(owner, `${dir}/worktree`),
       start: Option.some(start),
     })
@@ -70,7 +72,7 @@ const startsFromGivenRevision = (dir: string, owner: string) =>
 const existingBranchRefused = (dir: string, owner: string) =>
   Effect.gen(function* () {
     yield* git(owner, "branch", "foreman/t")
-    const refused = yield* Effect.flip(createWorktree(request(owner, `${dir}/worktree`)))
+    const refused = yield* Effect.flip(createWorktree(emptyHome)(request(owner, `${dir}/worktree`)))
     expect(refused).toEqual(new WorktreeBranchExists({ branch: "foreman/t" }))
     expect(existsSync(`${dir}/worktree`)).toBe(false)
   })
@@ -79,7 +81,7 @@ const existingPathRefused = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const path = `${dir}/worktree`
     mkdirSync(path)
-    const refused = yield* Effect.flip(createWorktree(request(owner, path)))
+    const refused = yield* Effect.flip(createWorktree(emptyHome)(request(owner, path)))
     expect(refused).toEqual(new WorktreePathExists({ path }))
     const branches = yield* git(owner, "branch", "--list", "foreman/*")
     expect(branches).toBe("")
@@ -88,33 +90,41 @@ const existingPathRefused = (dir: string, owner: string) =>
 const ownerUnchanged = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const before = yield* ownerState(owner)
-    yield* createWorktree(request(owner, `${dir}/worktree`))
+    yield* createWorktree(emptyHome)(request(owner, `${dir}/worktree`))
     const after = yield* ownerState(owner)
     expect(after).toEqual(before)
     expect(after.branch).toBe("refs/heads/main")
     expect(after.status).toBe("")
   })
 
-/** The real `runGit`, with the stdout of the command `args` replaced by `stdout`. */
+/** The clean runner, with the stdout of the command `args` replaced by `stdout`. */
 const overriding =
   (args: ReadonlyArray<string>, stdout: string): RunGit =>
   (cwd, called) =>
-    Effect.map(runGit(cwd, called), (output) =>
+    Effect.map(cleanRun(cwd, called), (output) =>
       called.join(" ") === args.join(" ") ? { ...output, stdout } : output,
     )
 
-/** The real `runGit`, which first creates `foreman/t` in `owner` when `worktree add` is called. */
+/**
+ * The clean runner, which first creates `foreman/t` in `owner` when
+ * `worktree add` is called, and keeps that command's args and output in
+ * `added`.
+ */
 const racingBranch =
-  (owner: string): RunGit =>
+  (owner: string, added: Array<{ readonly args: ReadonlyArray<string>; readonly output: GitOutput }>): RunGit =>
   (cwd, called) =>
     called[0] === "worktree" && called[1] === "add"
-      ? Effect.andThen(runGit(owner, ["branch", "foreman/t"]), runGit(cwd, called))
-      : runGit(cwd, called)
+      ? Effect.tap(Effect.andThen(cleanRun(owner, ["branch", "foreman/t"]), cleanRun(cwd, called)), (output) =>
+          Effect.sync(() => {
+            added.push({ args: called, output })
+          }),
+        )
+      : cleanRun(cwd, called)
 
 const createdWithNewline = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const path = `${dir}/work\ntree`
-    const created = yield* createWorktree(request(owner, path))
+    const created = yield* createWorktree(emptyHome)(request(owner, path))
     expect(created.path).toBe(realpathSync(path))
     expect(created.path).toContain("\n")
     expect(created.gitDir).toBe(yield* git(path, "rev-parse", "--absolute-git-dir"))
@@ -126,9 +136,9 @@ const createdThroughSymlink = (dir: string, owner: string) =>
   Effect.gen(function* () {
     mkdirSync(`${dir}/real`)
     symlinkSync(`${dir}/real`, `${dir}/link`)
-    const created = yield* createWorktree(request(owner, `${dir}/link/worktree`))
+    const created = yield* createWorktree(emptyHome)(request(owner, `${dir}/link/worktree`))
     expect(created.path).toBe(realpathSync(`${dir}/real/worktree`))
-    const entry = yield* identifyWorktree(created)
+    const entry = yield* identifyWorktree(emptyHome)(created)
     expect(entry.path).toBe(created.path)
   })
 
@@ -166,19 +176,22 @@ const refusesOtherHead = (dir: string, owner: string) =>
 const raceKeepsGitDetails = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const path = `${dir}/worktree`
-    const refused = yield* Effect.flip(createWorktreeWith(racingBranch(owner))(request(owner, path)))
-    expect(refused).toBeInstanceOf(GitCommandFailed)
+    const added: Array<{ readonly args: ReadonlyArray<string>; readonly output: GitOutput }> = []
+    const refused = yield* Effect.flip(createWorktreeWith(racingBranch(owner, added))(request(owner, path)))
+    expect(added.length).toBe(1)
+    const ran = Option.fromNullishOr(added[0])
     const failed = Schema.is(GitCommandFailed)(refused) ? Option.some(refused) : Option.none()
+    expect(Option.isSome(failed)).toBe(true)
+    expect(Option.map(failed, (each) => each.args)).toEqual(Option.map(ran, (each) => each.args))
     expect(Option.map(failed, (each) => each.args.slice(0, 2))).toEqual(Option.some(["worktree", "add"]))
     expect(Option.map(failed, (each) => each.args.includes(path))).toEqual(Option.some(true))
-    expect(Option.flatMap(failed, (each) => each.exitCode)).not.toEqual(Option.some(0))
-    expect(Option.isSome(Option.flatMap(failed, (each) => each.exitCode))).toBe(true)
-    expect(Option.map(failed, (each) => each.stderr)).toEqual(
-      Option.some(expect.stringContaining("'foreman/t' already exists")),
-    )
+    expect(Option.flatMap(failed, (each) => each.exitCode)).toEqual(Option.map(ran, (each) => each.output.exitCode))
+    expect(Option.exists(Option.flatMap(failed, (each) => each.exitCode), (code) => code !== 0)).toBe(true)
+    expect(Option.map(failed, (each) => each.stderr)).toEqual(Option.map(ran, (each) => each.output.stderr))
+    expect(Option.exists(failed, (each) => each.stderr !== "")).toBe(true)
   })
 
-/** The real `runGit`, which first appends each command's args to `calls`. */
+/** The clean runner, which first appends each command's args to `calls`. */
 const recording =
   (calls: Array<ReadonlyArray<string>>): RunGit =>
   (cwd, args) =>
@@ -186,7 +199,7 @@ const recording =
       Effect.sync(() => {
         calls.push(args)
       }),
-      runGit(cwd, args),
+      cleanRun(cwd, args),
     )
 
 /** Whether a recorded command is `git worktree add`. */

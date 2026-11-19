@@ -8,7 +8,8 @@
 import { Effect, Option } from "effect"
 import type { PathStat } from "../domain/worktree.ts"
 import { statOf } from "./file-paths.ts"
-import { revParseArgs, runGit, type GitOutput, type RunGit } from "./worktree.ts"
+import type { GitOutput, RunGit } from "./git.ts"
+import { revParseArgs } from "./worktree.ts"
 
 /**
  * The raw reading of the recorded path. `stat` is what `stat` found:
@@ -23,7 +24,8 @@ export interface DirectoryReading {
 }
 
 /**
- * {@link readDirectory} over an injected git runner. Stats `path` and,
+ * The startup check's raw reading of the recorded path (owner ruling 5 on
+ * B11a), with git run through `run`. Stats `path` and,
  * when a directory is there, runs the two identity `rev-parse` commands
  * inside it and keeps their results whatever they exit with. Fails with
  * `PathUnreadable` when `stat` fails other than by absence, such as under
@@ -33,9 +35,6 @@ export const readDirectoryWith = (run: RunGit) => (path: string) =>
   Effect.flatMap(statOf(path), (stat) =>
     Option.exists(stat, isDirectoryStat) ? readIdentity(run, path, stat) : Effect.succeed(withoutIdentity(stat)),
   )
-
-/** The startup check's raw reading of the recorded path (owner ruling 5 on B11a). */
-export const readDirectory = readDirectoryWith(runGit)
 
 /** Whether `stat` found a directory, the only place git can run. */
 const isDirectoryStat = (found: { readonly directory: boolean }): boolean => found.directory

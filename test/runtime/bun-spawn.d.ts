@@ -1,6 +1,7 @@
 // The project has no Bun type package; this declares the parts of Bun
 // 1.3.6 that the cross-process tests and their child fixtures use:
 // `spawn` from "bun", the Bun executable's path, the child's arguments,
+// the process environment that the git hazard tests set and restore,
 // and `import.meta.dirname` for paths relative to a test file.
 declare module "bun" {
   /** A running child process started by {@link spawn}. */
@@ -32,6 +33,8 @@ declare const process: {
   readonly execPath: string
   /** The executable, the script, then the script's arguments. */
   readonly argv: ReadonlyArray<string>
+  /** The process environment; a child started without its own inherits it. */
+  readonly env: Record<string, string>
 }
 
 interface ImportMeta {
