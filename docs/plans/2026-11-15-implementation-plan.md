@@ -1192,7 +1192,7 @@ with B15. B11a's measured total is 718,139 tokens across four worker
 units, plus coordination that was not measured. The rest of B11 is not
 authorized.
 
-#### B11b: the clean git command environment (scoped 2026-11-18, not authorized)
+#### B11b: the clean git command environment (scoped and authorized 2026-11-18; corrected, awaiting review)
 
 The owner asked for this slice to be scoped as one deliverable. It is not
 yet authorized, and the rest of B11 stays closed.
@@ -1257,6 +1257,112 @@ Single-file runs use `gtimeout -k 5 60 bun run test <file>`, and the
 suite and check use `gtimeout -k 5 300`. No pattern kills. The brief
 names exact sections and line ranges, so the worker does not load whole
 documents.
+
+Authorization (2026-11-18): the owner authorized B11b within this scope,
+with the acceptance wording from the Codex scope review: activate each
+hazard with a command that actually triggers it, and separately verify
+that every production git path gets the clean environment and the
+overrides. One worker, no delegation, no automatic follow-up, then stop
+for Codex review.
+
+Result (2026-11-18): complete, on `b11b-git-env`, as c30e9bf. The worker
+stopped at completion with no scope conflict.
+
+- Runtime `src/runtime/git.ts`: `cleanGitWith(start)(home)` puts the
+  three `-c` overrides first and passes exactly the five variables.
+  `startGit` always takes an explicit environment, and the `execFile`
+  declaration requires `env`, so no production path can inherit the
+  parent's. Bun 1.3.6 resolves `git` on the given `env.PATH`, not the
+  parent's; tests guard this.
+- Hazards: each one ran against a disposable repository and was detected
+  with the inherited runner and prevented with the clean runner. The
+  hook, the `.gitattributes` smudge filter and `core.fsmonitor` were
+  triggered by `worktree add`. On git 2.50.1 no production read runs
+  fsmonitor. `gpg.program` was triggered by a commit made only in the
+  test. A hostile global config, through `HOME` and through
+  `GIT_CONFIG_GLOBAL`, was triggered by `worktree add`. A parent `GIT_DIR`
+  changed which repository `rev-parse` selected.
+- Coverage: a recording test checks the exact 10-command sequence of
+  creation and the startup check, the overrides on every command, and
+  exactly five variables. A syntax-tree gate over `src/` allows process
+  imports only in `git.ts` and requires `env` on every `execFile`.
+- R8: the test git helper runs clean, and the English-stderr match is
+  replaced by checks of the args, the exit code and the exact stderr.
+- Removed: `runGit`, `listWorktrees` and `readDirectory`, which used the
+  inherited environment and had no callers in `src/`.
+- Coordinator's check: `bun run check` PASS (0 blocking, 29 notes).
+  `bun run test` PASS (51 files, 598 tests). Two of the worker's 12
+  mutants were rerun (`GIT_ATTR_SOURCE` dropped; only `hooksPath`
+  dropped), and each failed 3 tests, as reported.
+- Consumption, measured by the harness: 203,829 tokens (62 tool calls,
+  about 14.5 minutes), against an estimate of about 150k.
+
+Codex review (2026-11-18), recorded in
+`2026-11-18-b11b-scope-review.md`: the runner and production wiring are
+correct. Three findings:
+
+1. Important: the coverage test drove the `...With` functions, so it never
+   observed the exported production wrappers. A variable added only in
+   the wrappers passed every test and check.
+2. Minor: the process gate ignored TypeScript parse diagnostics.
+3. Minor: `test/program/git-hazards.test.ts` had 272 lines, against the
+   house limit of 250.
+
+Owner rulings on the worker's questions (2026-11-18, through the
+review): setting the parent's `HOME`, `GIT_CONFIG_GLOBAL` or `GIT_DIR`
+for one test and restoring it afterwards is acceptable. The eventual
+Runtime caller creates and owns the empty home, and the runner does not
+check that it is empty. One home per test file, removed after the file's
+tests, is acceptable. The gate's blind spot is acceptable if it is stated
+accurately.
+
+Corrections (2026-11-18), the same worker resumed. The branch was
+rebased onto f72e161 without conflicts, and the original commit became
+04c9ca4. Corrections are in 65203ac and 4be950c.
+
+- Finding 1: production is now exactly `worktreeProgram =
+  worktreeProgramWith(startGit)`, and the coverage test drives the same
+  factory with a recording `StartGit`. A real-process test reads the
+  environment git actually ran with: a smudge filter in
+  `.git/info/attributes` runs `/usr/bin/env` and writes the environment
+  into the checked-out file. It requires the production entry points and
+  the factory over `startGit` to match. The comparison ignores `GIT_DIR`,
+  and the clean values must also be present. Apple's `/usr/bin/git` shim
+  adds variables such as `SDKROOT`, so the test cannot assert an exact
+  environment. The startup check runs no command that can report its
+  environment, so a syntax-tree test pins `worktreeProgram`'s definition.
+  The gate's header now states its blind spot accurately: a module that
+  calls `startGit` directly is caught only on the paths creation and the
+  startup check take.
+- Finding 2: the gate turns syntax diagnostics into findings, with three
+  new must-fail cases.
+- Finding 3: the hazard tests are split into `git-hazard-fixtures.ts`
+  (95 lines), `git-hazards.test.ts` (76) and
+  `git-parent-environment.test.ts` (151). Beyond the findings,
+  `worktree-create.test.ts` (278 lines) was split as well, into 139 and
+  166.
+- Worker's mutants: the reviewer's (an extra variable only in the
+  production definition) failed 2 tests. An extra variable in the
+  factory, or a different runner for the startup check, failed 1 each.
+  Swapping only the startup check's runner in the production definition
+  failed nothing after 65203ac and 1 test after 4be950c. Ignoring parse
+  diagnostics failed the 3 new cases.
+- API change: the entry points are `worktreeProgram(home).createWorktree`
+  and `.identifyWorktree`. Nothing in `src/` calls them yet.
+- Coordinator's check: `bun run docs` PASS (no warnings), `bun run check`
+  PASS (0 blocking, 29 notes), and `bun run test` PASS (53 files, 604
+  tests). I reapplied the reviewer's mutant to the production definition,
+  and it failed the same 2 tests. No changed file is over 250 lines, and
+  no config, lint, package or CI file changed.
+- Consumption, measured by the harness: 253,724 tokens (31 tool calls,
+  about 7 minutes). The resumed worker carried its earlier context, so
+  this pass cost more than the first. B11b's measured total is 457,553
+  tokens, plus coordination that was not measured.
+- Open, for the owner: `test/program/admission.test.ts` is 261 lines.
+  It was over the limit before B11b and is unchanged.
+
+Not done: landing and push. The branch is based on f72e161, while
+`main` is at 83870d8, so it needs a rebase before landing.
 
 ### Task B12: Step runner (in-session process control)
 
