@@ -1391,6 +1391,74 @@ Handoff items from B11b, open and not blocking:
   250-line limit. A mechanical change, proposed separately.
 - R5 and R7 stay deferred with their triggers, and F8 stays with B15.
 
+#### B11c: refuse conversion attributes at startup (scoped 2026-11-18, not authorized)
+
+Why next: B11b's empty attribute source stops `.gitattributes` filters
+but also drops line-ending and encoding conversion. The design therefore
+refuses, at startup, a repository whose attribute files declare
+`filter`, `text`, `eol`, `ident` or `working-tree-encoding` ("Git
+environment", restrictions table row "No attribute-driven conversion").
+A filter declared in `info/attributes` still runs in the clean
+environment (E7), which B11b's real-process test relies on. This slice
+has a consumer that already exists (the startup check), and the commit
+procedure needs it before any commit is safe. The design's other caller,
+`approve --base`, waits for B15.
+
+Deliverable:
+
+- Read the declarations with git's own parser, not a hand-written one.
+  Run `git check-attr -z --stdin --source <revision> filter text eol
+  ident working-tree-encoding` over the revision's paths (`git ls-tree -r
+  -z --name-only <revision>`), through `cleanGit`. This covers nested
+  `.gitattributes`, macros (`[attr]`) and `info/attributes` the way git
+  applies them.
+- Format: decode the `-z` output (path, attribute, value) into Domain
+  values. An unparsable record is refused, not skipped (R5's lesson).
+- Features: a pure judgment. Each path and attribute whose value is
+  `set` or a string is a declaration, and the result lists every one;
+  `unspecified` passes. Whether `unset` (for example `-text` or the
+  `binary` macro) passes is question 1 below.
+- Program: the startup check gains a condition for the declared
+  conversions, run against the recorded revision. Creation from a base
+  revision refuses the same way, if the owner agrees (question 2).
+- Tests first, against disposable repositories. Each attribute, declared
+  in each of the root `.gitattributes`, a nested `.gitattributes`, the
+  common directory's `info/attributes` and a macro, is refused by name.
+  A repository with none passes. A test shows that `--source` reads the
+  revision even with `GIT_ATTR_SOURCE` set to the empty tree, since the
+  clean environment sets it. The coverage test's command sequence
+  extends to the new commands.
+
+Excluded: `approve --base` (B15), the pinned `GIT_DIR`/`GIT_WORK_TREE`/
+`GIT_COMMON_DIR` environment, protected digests, the commit procedure,
+the review worktree, `--no-verify`, R5 and R7 beyond the new decoder, new
+dependencies and `package.json`.
+
+Questions for the owner before authorizing:
+
+1. Is an explicit unset (`-text`, `binary`) a declaration? It turns
+   conversion off, so it is harmless under the empty attribute source.
+   Recommendation: allow it, and refuse only set and string values.
+2. Should creation also refuse a base revision with conversions, or only
+   startup? Recommendation: both, so no worktree is ever made that
+   startup would refuse.
+3. Paths are the revision's tracked files. An untracked file that matches
+   a conversion pattern is not checked; the protected digest (a later
+   slice) covers changes to the attribute files themselves.
+   Recommendation: accept this for now.
+
+Sizing and control. Smaller than B11b: one Format decoder, one Features
+function, Program wiring and real-repository tests. A fresh worker with a
+short brief, as the owner asked, at about 120k by B11a and B11b's
+measurements, plus a focused review. Same control: one worker, no
+delegation, no automatic follow-up, `gtimeout` on every run, no pattern
+kills. `bun run docs` is a required check alongside check and test.
+
+The rest of B11 after this slice: the pinned environment for the
+supervisor's tree, the protected digest (`src/runtime/protected.ts`), the
+commit procedure (`src/runtime/commit.ts`, with `--no-verify` where it
+applies), and the review worktree.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
