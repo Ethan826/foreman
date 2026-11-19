@@ -1,7 +1,8 @@
 // The project installs no Node type package; this declares the parts of
 // Bun's Node-compatible `node:child_process` and `node:fs` that the
 // Runtime layer uses (Bun 1.3.6): `execFile` with a callback, as Node
-// documents it, `statSync` and `realpathSync`. `execFile` takes the
+// documents it, `statSync`, `realpathSync`, and `lstatSync` and
+// `readFileSync` for the attribute check (plan B11c). `execFile` takes the
 // child's whole environment, required, so no call inherits the parent's.
 declare module "node:child_process" {
   /**
@@ -46,4 +47,18 @@ declare module "node:fs" {
   }
   /** The absolute path with every symbolic link resolved; throws when it cannot be resolved. */
   export function realpathSync(path: string): string
+  /**
+   * A file's status without following a final symbolic link. Throws as
+   * {@link statSync} does.
+   */
+  export function lstatSync(path: string): {
+    /** Whether the entry itself is a symbolic link. */
+    isSymbolicLink(): boolean
+    /** Whether the entry is a directory. */
+    isDirectory(): boolean
+    /** Whether the entry is a regular file. */
+    isFile(): boolean
+  }
+  /** Reads the whole file at `path` as UTF-8 text; throws when it cannot be read. */
+  export function readFileSync(path: string, encoding: "utf8"): string
 }

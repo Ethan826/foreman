@@ -5,17 +5,20 @@
 // invocation on to the real one, so creation and the startup check run
 // against a real repository while every invocation is kept. The second
 // observes the production `worktreeProgram` itself: a smudge filter that
-// the repository's own `.git/info/attributes` declares (which the clean
-// environment does not switch off) is `/usr/bin/env`, so the checked-out
-// file holds the environment git ran with. It must match the factory over
-// the real `startGit`, so production passes `startGit` and nothing else.
+// `$HOME/.config/git/attributes` declares is `/usr/bin/env`, so the
+// checked-out file holds the environment git ran with. It must match the
+// factory over the real `startGit`, so production passes `startGit` and
+// nothing else. B11c refuses `info/attributes` and a repository
+// `core.attributesFile`, so the probe uses git's default attributes file
+// under the injected HOME, which the clean environment leaves in force
+// and the attribute check does not read.
 // No git command of the startup check runs a program git could report
 // its environment through, so the third test pins the production
 // definition on the syntax tree: `worktreeProgram` is exactly
 // `worktreeProgramWith(startGit)`, with `startGit` from `runtime/git.ts`.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option } from "effect"
-import { readFileSync, writeFileSync } from "node:fs"
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { worktreeProgram, worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type GitInvocation, type StartGit } from "../../src/runtime/git.ts"
 import ts from "typescript"
@@ -43,13 +46,24 @@ const startsWithOverrides = (invocation: GitInvocation) =>
 
 const createdAndIdentified = (dir: string, owner: string) =>
   Effect.gen(function* () {
+    writeFileSync(`${owner}/.gitattributes`, "# comments only\n")
+    yield* git(owner, "add", ".gitattributes")
+    yield* git(owner, "commit", "--quiet", "-m", "attributes")
+    const blob = yield* git(owner, "rev-parse", "HEAD:.gitattributes")
     const calls: Array<GitInvocation> = []
     const program = worktreeProgramWith(recordingStart(calls))(emptyHome)
     const path = `${dir}/worktree`
     const created = yield* program.createWorktree({ ownerCheckout: owner, path, name: "t", start: Option.none() })
     yield* program.identifyWorktree(created)
+    const attributeReads = [
+      ["ls-tree", "--full-tree", "-r", "-t", "-z", created.base],
+      ["cat-file", "blob", blob],
+      ["config", "--get", "core.attributesFile"],
+    ]
     expect(calls.map(command)).toEqual([
       ["rev-parse", "HEAD"],
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      ...attributeReads,
       ["rev-parse", "--verify", "--quiet", "refs/heads/foreman/t"],
       ["worktree", "add", "--lock", "--reason", "foreman", "-b", "foreman/t", "--", path, created.base],
       ["rev-parse", "--show-toplevel"],
@@ -59,6 +73,7 @@ const createdAndIdentified = (dir: string, owner: string) =>
       ["worktree", "list", "--porcelain", "-z"],
       ["rev-parse", "--absolute-git-dir"],
       ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      ...attributeReads,
     ])
     expect(calls.filter((each) => !startsWithOverrides(each))).toEqual([])
     expect(calls.map((each) => each.env)).toEqual(
@@ -72,14 +87,23 @@ const createdAndIdentified = (dir: string, owner: string) =>
     )
   })
 
-/** Commits `a.txt` and makes `/usr/bin/env` its smudge filter through `.git/info/attributes`. */
-const plantEnvironmentProbe = (owner: string) =>
+/**
+ * Commits `a.txt`, makes `/usr/bin/env` its smudge filter through
+ * `<home>/.config/git/attributes`, and returns `home`, a new directory
+ * under `dir`.
+ */
+const plantEnvironmentProbe = (dir: string, owner: string) =>
   Effect.gen(function* () {
     writeFileSync(`${owner}/a.txt`, "text\n")
     yield* git(owner, "add", "a.txt")
     yield* git(owner, "commit", "--quiet", "-m", "file")
-    writeFileSync(`${owner}/.git/info/attributes`, "a.txt filter=probe\n")
+    const home = `${dir}/probe-home`
+    mkdirSync(home)
+    mkdirSync(`${home}/.config`)
+    mkdirSync(`${home}/.config/git`)
+    writeFileSync(`${home}/.config/git/attributes`, "a.txt filter=probe\n")
     yield* git(owner, "config", "filter.probe.smudge", "/usr/bin/env")
+    return home
   })
 
 /**
@@ -94,15 +118,15 @@ const filterEnvironment = (worktree: string) =>
 
 const productionMatchesFactory = (dir: string, owner: string) =>
   Effect.gen(function* () {
-    yield* plantEnvironmentProbe(owner)
+    const home = yield* plantEnvironmentProbe(dir, owner)
     const request = (name: string) => ({ ownerCheckout: owner, path: `${dir}/${name}`, name, start: Option.none() })
-    const production = yield* worktreeProgram(emptyHome).createWorktree(request("production"))
-    const reference = yield* worktreeProgramWith(startGit)(emptyHome).createWorktree(request("reference"))
-    yield* worktreeProgram(emptyHome).identifyWorktree(production)
+    const production = yield* worktreeProgram(home).createWorktree(request("production"))
+    const reference = yield* worktreeProgramWith(startGit)(home).createWorktree(request("reference"))
+    yield* worktreeProgram(home).identifyWorktree(production)
     expect(filterEnvironment(production.path)).toEqual(filterEnvironment(reference.path))
     expect(filterEnvironment(production.path)).toEqual(
       expect.arrayContaining([
-        `HOME=${emptyHome}`,
+        `HOME=${home}`,
         "GIT_CONFIG_NOSYSTEM=1",
         "GIT_CONFIG_GLOBAL=/dev/null",
         "GIT_ATTR_SOURCE=4b825dc642cb6eb9a060e54bf8d69288fbe24904",

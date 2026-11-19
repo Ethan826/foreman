@@ -88,6 +88,14 @@ export const readOwnerHeadWith = (run: RunGit) => (ownerCheckout: string) =>
   succeeded(run, ownerCheckout, revParseArgs.ownerHead)
 
 /**
+ * The raw stdout of `git rev-parse --path-format=absolute --git-common-dir`
+ * in the owner's checkout, where the attribute check reads
+ * `info/attributes` before the worktree exists (plan B11c).
+ */
+export const readOwnerCommonDirWith = (run: RunGit) => (ownerCheckout: string) =>
+  succeeded(run, ownerCheckout, revParseArgs.commonDir)
+
+/**
  * Runs the branch probe ({@link branchProbeArgs}) in the owner's checkout
  * and reports its output and exit code, whatever the exit code.
  */

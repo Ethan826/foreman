@@ -9,9 +9,11 @@
 import { expect } from "@effect/vitest"
 import { Effect, Exit, Option } from "effect"
 import { chmodSync, existsSync, writeFileSync } from "node:fs"
-import { createWorktreeWith, worktreeProgram } from "../../src/program/worktree.ts"
+import { Revision } from "../../src/domain/ids.ts"
+import { worktreeProgram } from "../../src/program/worktree.ts"
 import { startGit, type RunGit } from "../../src/runtime/git.ts"
-import { emptyHome, git, withRepo } from "../runtime/git-repo.ts"
+import { addWorktreeWith } from "../../src/runtime/worktree.ts"
+import { emptyHome, git, gitWith, withRepo } from "../runtime/git-repo.ts"
 
 /** The production entry points over the test file's empty home. */
 export const { createWorktree, identifyWorktree } = worktreeProgram(emptyHome)
@@ -27,8 +29,22 @@ export const request = (owner: string, dir: string) => ({
   start: Option.none(),
 })
 
-/** The control: `git worktree add` and its reads through the inherited runner. */
-export const createInherited = (dir: string, owner: string) => createWorktreeWith(inheritedGit)(request(owner, dir))
+/**
+ * `git worktree add` of the owner's HEAD at `<dir>/worktree` on
+ * `foreman/t` through `run`, with no prechecks and no attribute check.
+ */
+export const addWith = (run: RunGit) => (dir: string, owner: string) =>
+  Effect.gen(function* () {
+    const base = Revision.make(yield* gitWith(run)(owner, "rev-parse", "HEAD"))
+    yield* addWorktreeWith(run)(owner, { branch: "foreman/t", path: `${dir}/worktree`, base })
+  })
+
+/**
+ * The control: `git worktree add` through the inherited runner. It skips
+ * creation's attribute check (plan B11c), which would refuse some planted
+ * hazards before the add and so hide whether the environment stops them.
+ */
+export const createInherited = addWith(inheritedGit)
 
 /** The production entry points over the clean runner: create, then the startup check. */
 export const createAndIdentifyClean = (dir: string, owner: string) =>

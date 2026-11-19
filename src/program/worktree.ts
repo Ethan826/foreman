@@ -24,11 +24,13 @@ import {
   listWorktreesWith,
   probeBranchWith,
   readAddedWith,
+  readOwnerCommonDirWith,
   readOwnerHeadWith,
   revParseArgs,
   worktreeListArgs,
 } from "../runtime/worktree.ts"
 import { readDirectoryWith, type DirectoryReading } from "../runtime/worktree-directory.ts"
+import { checkAttributeSourcesWith } from "./attribute-sources.ts"
 
 /** What creating the supervisor worktree needs (design "Creation"). */
 export interface WorktreeRequest {
@@ -51,8 +53,10 @@ export interface WorktreeProgram {
    * Creates the supervisor worktree (design "Creation") and returns the
    * fields of `WorktreeCreated`. Fails with `WorktreePathNotAbsolute`
    * before any git command when the path is not absolute; with
-   * `WorktreeBranchExists` or `WorktreePathExists` before running
-   * `worktree add`; with `PathUnreadable` when `stat` cannot inspect the
+   * `AttributeSourcesRefused` when the base revision or the repository has
+   * an attribute source that option A refuses (plan B11c), checked before
+   * the branch and path prechecks; with `WorktreeBranchExists` or
+   * `WorktreePathExists` before running `worktree add`; with `PathUnreadable` when `stat` cannot inspect the
    * path; with `WorktreeNotAsCreated` when the new worktree is not at the
    * requested path on its branch; and with `GitCommandFailed` (args, exit
    * code and stderr) when a git command fails. The path is refused only if
@@ -67,7 +71,10 @@ export interface WorktreeProgram {
    * `git worktree list --porcelain -z` lists its path on
    * `refs/heads/<branch>`, locked, and the directory there is present with
    * the recorded git identity; otherwise fails with `WorktreeCheckFailed`
-   * naming each failed condition, and `run` stops and reports. Fails with
+   * naming each failed condition, and `run` stops and reports. When those
+   * hold, the attribute check runs from the common directory against the
+   * recorded `base` (plan B11c) and fails with `AttributeSourcesRefused`;
+   * no working tree's `.gitattributes` is read. Fails with
    * `PathUnreadable` when the recorded path cannot be inspected, and with
    * `WorktreeRecordInvalid` when a recorded field is empty. It never
    * prunes, unlocks or removes anything.
@@ -81,7 +88,8 @@ type OutputDecoder<Value> = (text: string) => Result.Result<Value, { readonly me
 /**
  * {@link WorktreeProgram.createWorktree} over an injected git runner. Requires an absolute
  * path before anything runs (Features), resolves the base (Runtime reads,
- * Format decodes), runs the branch and path prechecks (Runtime reads,
+ * Format decodes), runs the attribute check on the base and the owner's
+ * repository (plan B11c), runs the branch and path prechecks (Runtime reads,
  * Features decides), adds the worktree (Runtime), decodes each read after
  * it (Format), and checks that the top level is the requested path with
  * symlinks resolved and that HEAD is `refs/heads/foreman/<name>`
@@ -93,6 +101,8 @@ export const createWorktreeWith = (run: RunGit) =>
     const path = yield* Effect.fromResult(requireAbsolute(request.path))
     const branch = supervisorBranch(request.name)
     const base = yield* baseOf(run, request)
+    const commonDir = yield* ownerCommonDir(run, request.ownerCheckout)
+    yield* checkAttributeSourcesWith(run)({ cwd: request.ownerCheckout, commonDir }, base)
     const probe = yield* probeBranchWith(run)(request.ownerCheckout, branch)
     yield* Effect.fromResult(refuseExistingBranch(branch, probe))
     yield* Effect.fromResult(refuseExistingPath(path, yield* statOf(path)))
@@ -111,6 +121,8 @@ export const createWorktreeWith = (run: RunGit) =>
  * {@link WorktreeProgram.identifyWorktree} over an injected git runner. Lists the worktrees
  * from the recorded common directory, so the check runs even when the
  * worktree's own path is gone, and reads the recorded path's directory.
+ * The attribute check runs after the worktree conditions pass, from the
+ * common directory against the recorded base.
  */
 export const identifyWorktreeWith = (run: RunGit) =>
   Effect.fn("identifyWorktree")(function* (worktree: WorktreeCreated) {
@@ -120,7 +132,10 @@ export const identifyWorktreeWith = (run: RunGit) =>
     )
     const reading = yield* readDirectoryWith(run)(worktree.path)
     const directory = yield* directoryOf(reading)
-    return yield* Effect.fromResult(checkWorktree(worktree, entries, directory))
+    const entry = yield* Effect.fromResult(checkWorktree(worktree, entries, directory))
+    const site = { cwd: worktree.commonDir, commonDir: worktree.commonDir }
+    yield* checkAttributeSourcesWith(run)(site, worktree.base)
+    return entry
   })
 
 /**
@@ -153,6 +168,12 @@ const baseOf = (run: RunGit, request: WorktreeRequest) =>
 const ownerHead = (run: RunGit, ownerCheckout: string) =>
   Effect.flatMap(readOwnerHeadWith(run)(ownerCheckout), (text) =>
     decoded(decodeRevParseRevision, text, revParseArgs.ownerHead),
+  )
+
+/** The owner's common git directory (Runtime), decoded as an absolute path (Format). */
+const ownerCommonDir = (run: RunGit, ownerCheckout: string) =>
+  Effect.flatMap(readOwnerCommonDirWith(run)(ownerCheckout), (text) =>
+    decoded(decodeRevParsePath, text, revParseArgs.commonDir),
   )
 
 /** One raw read decoded, or the typed failure naming its command. */

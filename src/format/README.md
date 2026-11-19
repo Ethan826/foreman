@@ -65,4 +65,6 @@ classDiagram
 
 [`worktree-list.ts`](worktree-list.ts) decodes `git worktree list --porcelain -z` into Domain's `WorktreeEntry` values with `decodeWorktreeList`. Attributes end in NUL and a record ends at an empty field, so a path holding a newline stays whole. Without `-z`, git prints paths raw and a newline splits the record. A `locked` attribute with no reason decodes as a lock without one. Attributes it does not use, such as `prunable`, are ignored.
 
+[`tree-listing.ts`](tree-listing.ts) decodes one `git ls-tree -z` run with `decodeTreeRun` (plan B11c). Exit 0 decodes each NUL-terminated `<mode> <type> <object>\t<path>` record into Domain's `TreeEntry`, with the path verbatim. Any other exit is `TreeNotListed`. Output that is not NUL-terminated, or any record of another shape, is `TreeUndecodable`, which the attribute check refuses, so a bad listing never passes as an empty one.
+
 [`rev-parse.ts`](rev-parse.ts) decodes single-value `git rev-parse` output with `decodeRevParseLine`, `decodeRevParsePath` and `decodeRevParseRevision` (the owner's `rev-parse HEAD`). Each removes exactly one trailing newline, so a newline inside a path survives; the path decoder also requires an absolute path.
