@@ -1579,7 +1579,12 @@ Choice for the owner (conditional includes):
   It also needs a cleanup path for a registered worktree that is then
   refused. It is larger, with no estimate yet.
 
-Correction deliverable (under option R):
+Owner ruling (2026-11-19): option R. Any conditional include is refused
+for this version, at creation before `worktree add` and at startup. The
+correction is authorized with one fresh worker, a short brief, and a
+stop for review.
+
+Correction deliverable (option R):
 
 - Startup runs `git config --get core.attributesFile` and the
   `includeIf` listing from inside the supervisor worktree, so
