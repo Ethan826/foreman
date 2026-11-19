@@ -1597,6 +1597,27 @@ Correction deliverable (option R):
   `path-listed` and `is-locked`, which closes R7. Permitted edits:
   `eslint.rules.js` (the list only), `lint-fixtures/` and
   `test/lint/fixtures.test.ts`.
+
+  Scope conflict (2026-11-19): the correction worker stopped before any
+  code. Its first unit was measured at 121,821 tokens, all reading. Two
+  problems:
+  - `src/domain/attributes.ts` is not in `canonicalModules`, so adding
+    its names fails its own definitions, and the rule's message names
+    only the older constants.
+  - "blob", "tree", "commit" (`TreeEntryTypes`) and "directory"
+    (`FileKinds`) are also git words, used as plain strings 21 times
+    outside that module. One is the `cat-file blob` argument in
+    `src/runtime/attribute-sources.ts:35`; others are SQLite's commit
+    and test fixtures.
+
+  Owner rulings (2026-11-19):
+  1. The permitted edits in `eslint.rules.js` also cover adding
+     `src/domain/attributes.ts` to `canonicalModules` and rewording the
+     rule's message to name the constants and modules it now covers.
+  2. The four colliding Domain values are renamed to distinctive names.
+     git's own tokens stay as constants at the top of the tree-listing
+     decoder, as AGENTS.md allows for a tag only one decoder knows. All
+     14 names then join `closedNames`, with no exceptions.
 - Contract text: the empty, private `HOME` that the eventual Runtime
   caller owns (B11b ruling 2) is also what keeps
   `$HOME/.config/git/attributes` out of force. The worker probed that
