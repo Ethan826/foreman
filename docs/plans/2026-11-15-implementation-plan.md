@@ -1518,6 +1518,96 @@ supervisor's tree, the protected digest (`src/runtime/protected.ts`), the
 commit procedure (`src/runtime/commit.ts`, with `--no-verify` where it
 applies), and the review worktree.
 
+Result (2026-11-19): complete, on `b11c-attributes`, as e7e43e3. It is
+not landed, pushed or recorded beyond this entry. Coordinator's check:
+`bun run docs` PASS, `bun run check` PASS (0 blocking, 29 notes) and
+`bun run test` PASS (57 files, 664 tests). Moving the creation check
+after `worktree add` failed 14 tests in `test/program`, and the reviewer
+reproduced that figure. Measured by the harness: 222,877 tokens (76 tool
+calls, about 17 minutes), against an estimate of about 100k.
+
+Codex review of e7e43e3 (2026-11-19, in
+[the B11c review note](2026-11-18-b11c-scope-review.md)): corrections are
+needed before landing.
+
+1. Important: startup misses `config.worktree`.
+   `src/program/worktree.ts:136` runs `git config` from the common
+   directory. With `extensions.worktreeConfig`, a `core.attributesFile`
+   set only in the supervisor worktree's `config.worktree` reads as unset
+   there. A checkout in that worktree still runs its filter (probed by
+   the worker, the coordinator and the reviewer).
+2. Important: creation misses conditional config.
+   `src/program/worktree.ts:105` checks the owner's context. With
+   `includeIf.onbranch:foreman/**` selecting a file that sets
+   `core.attributesFile`, the owner's query reads unset. Creation passes,
+   and the filter runs during `worktree add`, because the condition
+   matches only the new worktree's branch (reviewer's probe).
+3. Minor: the new vocabularies' names are not in `closedNames`
+   (`eslint.rules.js`). AGENTS.md requires them there. This activates
+   R7: each name is tested on its own, including `path-listed` and
+   `is-locked`.
+
+Accepted by the review: `--full-tree` and `-t` on `ls-tree`; the separate
+startup refusal; and the surviving extra-read mutant (an extra
+`cat-file` on an entry that is refused anyway). The `$HOME/.config/git/attributes`
+dependency is documented, not checked (below).
+
+Conditional config (probes 2026-11-19, git 2.50.1). `git config
+--get-regexp '^includeif\.'` lists every conditional include key in the
+files git reads, whatever its condition. That covers a key in the
+repository's `config` and a key inside a file reached through an
+unconditional `include.path`. Section names print in lower case, so
+`includeIf` in any spelling matches. In the owner's context, the
+reviewer's `onbranch:foreman/**` key is listed (exit 0), while `--get
+core.attributesFile` reads unset (exit 1). A key inside a conditional
+include that does not match is not listed, but the outer `includeIf`
+that reaches it is.
+
+Choice for the owner (conditional includes):
+
+- Option R, recommended: refuse any conditional include for this
+  version. The check runs `git config --get-regexp '^includeif\.'` and
+  refuses when it prints anything (exit 0). Exit 1 passes, and any other
+  exit is a read failure. This restricts compatibility: a repository
+  whose config uses `includeIf` for any purpose is refused, even if the
+  included file is harmless.
+- Option E: evaluate the conditions in the real context. Create the
+  worktree with `worktree add --no-checkout`, check from inside it,
+  where git itself evaluates `onbranch`, `gitdir` and `hasconfig`, and
+  populate it only after a pass. That keeps `includeIf` working, but it
+  changes B11a's creation procedure and its recorded command sequence.
+  It also needs a cleanup path for a registered worktree that is then
+  refused. It is larger, with no estimate yet.
+
+Correction deliverable (under option R):
+
+- Startup runs `git config --get core.attributesFile` and the
+  `includeIf` listing from inside the supervisor worktree, so
+  `config.worktree` and the worktree's own context apply.
+- Creation runs the same two reads in the owner's checkout before
+  `worktree add`. Option R makes the creation result independent of the
+  conditions that the new worktree would satisfy.
+- `closedNames` gains the new vocabularies' names. Each name in the list
+  gets its own fixture line and its own assertion, including
+  `path-listed` and `is-locked`, which closes R7. Permitted edits:
+  `eslint.rules.js` (the list only), `lint-fixtures/` and
+  `test/lint/fixtures.test.ts`.
+- Contract text: the empty, private `HOME` that the eventual Runtime
+  caller owns (B11b ruling 2) is also what keeps
+  `$HOME/.config/git/attributes` out of force. The worker probed that
+  this file is otherwise in force under the clean environment. It is a
+  stated dependency, not a check.
+- Regression tests, each with a marker filter and a control:
+  `config.worktree` at startup, `includeIf.onbranch:foreman/**` at
+  creation (refused before `worktree add`, and no marker), a conditional
+  include nested in an unconditional `include.path`, and a repository
+  without `includeIf` that still passes.
+
+Sizing and control: one fresh correction worker with a short brief,
+about 100k. The first B11c unit measured 222,877 tokens against a 100k
+estimate, so this figure is uncertain. A focused review follows. Same
+control as before.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
