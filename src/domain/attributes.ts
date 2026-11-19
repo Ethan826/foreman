@@ -12,8 +12,12 @@ import { Record, Schema } from "effect"
 import { Revision } from "./ids.ts"
 import { GitText } from "./worktree.ts"
 
-/** The object types `git ls-tree` prints for a tree entry (git-ls-tree(1)). */
-export const TreeEntryTypes = { Blob: "blob", Tree: "tree", Commit: "commit" } as const
+/**
+ * The object types of a tree entry (git-ls-tree(1)). The values are
+ * foreman's own, distinct from the words git prints, which only the
+ * tree-listing decoder knows and maps to these.
+ */
+export const TreeEntryTypes = { Blob: "blob-entry", Tree: "tree-entry", Commit: "commit-entry" } as const
 /** One tree entry type; see {@link TreeEntryTypes}. */
 export const TreeEntryType = Schema.Literals(Record.values(TreeEntryTypes))
 /** One tree entry type. */
@@ -93,7 +97,7 @@ export type TreeReading = typeof TreeReading.Type
 /** What `lstat` found at a path that exists, without following a symlink. */
 export const FileKinds = {
   File: "regular-file",
-  Directory: "directory",
+  Directory: "directory-kind",
   SymbolicLink: "symbolic-link",
   Other: "other-kind",
 } as const

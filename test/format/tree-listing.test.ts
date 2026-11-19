@@ -4,7 +4,7 @@
 // shape makes the run undecodable, which the attribute check refuses
 // (plan B11c, R5's lesson).
 import { describe, expect, it } from "@effect/vitest"
-import { TreeEntries, TreeNotListed, TreeUndecodable } from "../../src/domain/attributes.ts"
+import { TreeEntries, TreeEntryTypes, TreeNotListed, TreeUndecodable } from "../../src/domain/attributes.ts"
 import { Revision } from "../../src/domain/ids.ts"
 import { decodeTreeRun } from "../../src/format/tree-listing.ts"
 
@@ -19,9 +19,9 @@ describe("decodeTreeRun", () => {
     expect(decodeTreeRun(exited0(stdout))).toEqual(
       new TreeEntries({
         entries: [
-          { mode: "100644", type: "blob", object: Revision.make(blob), path: "a b\tc\nd" },
-          { mode: "040000", type: "tree", object: Revision.make(tree), path: "sub" },
-          { mode: "160000", type: "commit", object: Revision.make(blob), path: "mod" },
+          { mode: "100644", type: TreeEntryTypes.Blob, object: Revision.make(blob), path: "a b\tc\nd" },
+          { mode: "040000", type: TreeEntryTypes.Tree, object: Revision.make(tree), path: "sub" },
+          { mode: "160000", type: TreeEntryTypes.Commit, object: Revision.make(blob), path: "mod" },
         ],
       }),
     )
@@ -41,6 +41,7 @@ describe("decodeTreeRun", () => {
     "a missing final NUL": `100644 blob ${blob}\ta`,
     "an empty record": `100644 blob ${blob}\ta\x00\x00`,
     "an unknown type": `100644 blobby ${blob}\ta\x00`,
+    "foreman's own name for a type, which git never prints": `100644 ${TreeEntryTypes.Blob} ${blob}\ta\x00`,
     "a short mode": `10644 blob ${blob}\ta\x00`,
     "a non-octal mode": `100648 blob ${blob}\ta\x00`,
     "a short object id": `100644 blob ${blob.slice(1)}\ta\x00`,

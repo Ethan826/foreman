@@ -5,10 +5,15 @@
 import { expect, layer } from "@effect/vitest"
 import { Context, Effect, Layer } from "effect"
 import { ESLint } from "eslint"
+import { AttributeRefusalReasons, AttributeSources, FileKinds, TreeEntryTypes } from "../../src/domain/attributes.ts"
+import { Clients } from "../../src/domain/clients.ts"
+import { Roles } from "../../src/domain/roles.ts"
+import { WorktreeConditions } from "../../src/domain/worktree.ts"
 
 interface Expected {
   readonly ruleId: string
   readonly message?: string
+  readonly line?: number // where one file holds several cases
 }
 
 // Each native method must be reported by name, so dropping one from the
@@ -22,6 +27,18 @@ const restricted = (
     message: `'${method}' is restricted`,
   }))
 
+// R7: each closed name, from Domain apart from eslint.rules.js, has its own
+// fixture line and report there, so dropping one from `closedNames` fails.
+const closedNames = [Clients, Roles, WorktreeConditions, TreeEntryTypes, FileKinds, AttributeSources, AttributeRefusalReasons]
+  .flatMap((vocabulary): ReadonlyArray<string> => Object.values(vocabulary))
+const bareNamesText = Object.values(
+  import.meta.glob<string>("../../lint-fixtures/src/features/bare-names.ts", { query: "?raw", import: "default", eager: true }),
+).join("")
+/** The 1-based line of the bare-names fixture holding `fragment`, or 0 when none does. */
+const fixtureLine = (fragment: string) => bareNamesText.split("\n").findIndex((line) => line.includes(fragment)) + 1
+/** The line that spells `name` as a value: `export const nameNN = "<name>"`. */
+const nameLine = (name: string) => fixtureLine(`= "${name}"`)
+const bareName = (line: number): Expected => ({ ruleId: "no-restricted-syntax", message: "closed vocabulary", line })
 const mustFail: Record<string, ReadonlyArray<Expected>> = {
   "src/domain/native-array-iterate.ts": restricted([
     "map", "filter", "some", "every", "find", "findIndex", "findLast",
@@ -97,7 +114,8 @@ const mustFail: Record<string, ReadonlyArray<Expected>> = {
     { ruleId: "no-restricted-syntax", message: "Schema.Literal takes" },
   ],
   "src/features/bare-names.ts": [
-    { ruleId: "no-restricted-syntax", message: "closed vocabulary" },
+    ...closedNames.map((name) => bareName(nameLine(name))),
+    bareName(fixtureLine("export type Reviewer")),
   ],
   "test/bare-names.ts": [
     { ruleId: "no-restricted-syntax", message: "closed vocabulary" },
@@ -114,6 +132,7 @@ const clean: ReadonlyArray<string> = [
   "src/domain/control.ts",
   "src/domain/literals-named.ts",
   "src/domain/clients.ts",
+  "src/domain/attributes.ts",
   "src/domain/roles.ts",
   "src/features/names-ok.ts",
   "src/domain/effect-modules.ts",
@@ -159,13 +178,14 @@ const isReported = (result: ESLint.LintResult | undefined, want: Expected): bool
   (result?.messages ?? []).some(
     (found) =>
       found.ruleId === want.ruleId &&
-      (want.message === undefined || found.message.includes(want.message)),
+      (want.message === undefined || found.message.includes(want.message)) &&
+      (want.line === undefined || found.line === want.line),
   )
 
 const missingIn = (linted: Linted): ReadonlyArray<string> =>
   Object.entries(mustFail).flatMap(([file, expected]) =>
     expected.flatMap((want) =>
-      isReported(linted[file], want) ? [] : [`${file}: ${want.ruleId} ${want.message ?? ""}`],
+      isReported(linted[file], want) ? [] : [`${file}:${String(want.line ?? "")} ${want.ruleId} ${want.message ?? ""}`],
     ),
   )
 
@@ -192,6 +212,10 @@ const dirtyIn = (linted: Linted): ReadonlyArray<string> =>
   })
 
 layer(lintedFixtures, { timeout: 120_000 })("lint fixtures", (it) => {
+  it("each closed vocabulary name has its own line in the bare-names fixture", () => {
+    const lines = closedNames.map(nameLine)
+    expect({ unlisted: lines.filter((line) => line === 0), distinct: new Set(lines).size }).toEqual({ unlisted: [], distinct: 25 })
+  })
   it.effect("every fixture is a listed must-fail or a listed clean control", () =>
     Effect.gen(function* () {
       const found = Object.keys(yield* LintedFixtures).sort()

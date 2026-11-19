@@ -11,6 +11,7 @@ import {
   FileUnreadable,
   TreeListed,
   TreeNotListed,
+  TreeEntryTypes,
   TreeUndecodable,
 } from "../../src/domain/attributes.ts"
 import { Revision } from "../../src/domain/ids.ts"
@@ -20,7 +21,7 @@ const revision = Revision.make("a".repeat(40))
 const object = Revision.make("b".repeat(40))
 const infoPath = "/repo/.git/info/attributes"
 
-const entry = (path: string, mode = "100644", type: TreeEntry["type"] = "blob"): TreeEntry => ({ mode, type, object, path })
+const entry = (path: string, mode = "100644", type: TreeEntry["type"] = TreeEntryTypes.Blob): TreeEntry => ({ mode, type, object, path })
 
 const exited = (exitCode: number, stdout = "", stderr = ""): GitResult => ({ exitCode, stdout, stderr })
 
@@ -71,8 +72,8 @@ describe("isRegularBlob", () => {
     expect(isRegularBlob(entry("a"))).toBe(true)
     expect(isRegularBlob(entry("a", "100755"))).toBe(true)
     expect(isRegularBlob(entry("a", "120000"))).toBe(false)
-    expect(isRegularBlob(entry("a", "040000", "tree"))).toBe(false)
-    expect(isRegularBlob(entry("a", "160000", "commit"))).toBe(false)
+    expect(isRegularBlob(entry("a", "040000", TreeEntryTypes.Tree))).toBe(false)
+    expect(isRegularBlob(entry("a", "160000", TreeEntryTypes.Commit))).toBe(false)
   })
 })
 
@@ -120,16 +121,16 @@ describe("checkAttributeSources", () => {
   it("refuses a .gitattributes entry that is not a regular blob, unread", () => {
     const files = [
       { entry: entry(".gitattributes", "120000"), blob: Option.none() },
-      { entry: entry("a/.gitattributes", "040000", "tree"), blob: Option.none() },
-      { entry: entry("b/.gitattributes", "160000", "commit"), blob: Option.none() },
+      { entry: entry("a/.gitattributes", "040000", TreeEntryTypes.Tree), blob: Option.none() },
+      { entry: entry("b/.gitattributes", "160000", TreeEntryTypes.Commit), blob: Option.none() },
     ]
     const notRegular = (path: string, detail: string) =>
       refusal(AttributeSources.Tree, AttributeRefusalReasons.NotRegular, Option.some(path), Option.none(), detail)
     expect(checkAttributeSources(reading({ tree: new TreeListed({ files }) }))).toEqual(
       refused(
-        notRegular(".gitattributes", "120000 blob"),
-        notRegular("a/.gitattributes", "040000 tree"),
-        notRegular("b/.gitattributes", "160000 commit"),
+        notRegular(".gitattributes", `120000 ${TreeEntryTypes.Blob}`),
+        notRegular("a/.gitattributes", `040000 ${TreeEntryTypes.Tree}`),
+        notRegular("b/.gitattributes", `160000 ${TreeEntryTypes.Commit}`),
       ),
     )
   })

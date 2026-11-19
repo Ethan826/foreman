@@ -180,12 +180,18 @@ const literalSchemas = [
 const closedNames = [
   "claude", "codex", "implementer", "reviewer", "corrector",
   "path-listed", "directory-present", "git-identity", "on-branch", "is-locked",
+  "blob-entry", "tree-entry", "commit-entry",
+  "regular-file", "directory-kind", "symbolic-link", "other-kind",
+  "revision-gitattributes", "info-attributes", "core-attributes-file", "conditional-include",
+  "has-content", "not-regular", "is-configured", "read-failed",
 ]
-const canonicalModules = ["src/domain/clients.ts", "src/domain/roles.ts", "src/domain/worktree.ts"]
+const canonicalModules = [
+  "src/domain/clients.ts", "src/domain/roles.ts", "src/domain/worktree.ts", "src/domain/attributes.ts",
+]
 const bareNames = [
   message(
     `Literal[value=/^(${closedNames.join("|")})$/]`,
-    "Bare closed vocabulary string: refer to the named constant (Clients, Roles, WorktreeConditions) from src/domain/clients.ts, roles.ts or worktree.ts.",
+    "Bare closed vocabulary string: refer to the named constant (Clients, Roles, WorktreeConditions, TreeEntryTypes, FileKinds, AttributeSources, AttributeRefusalReasons) from src/domain/clients.ts, roles.ts, worktree.ts or attributes.ts.",
   ),
 ]
 
