@@ -624,3 +624,53 @@ and `process.exit`.
 Running: `a2-commands` (review, correct, reject, `--attest`, close
 --finished, with no git staging before the prerequisites pass) and the
 entry module on `a2-handoff`.
+
+Integrated to finish: `a2-commands` (dddee82 and its three parents),
+346,683 tokens; the CLI entry (2c4ecd3, squashed from two `a2-handoff`
+commits because the first was red alone), 132,664 for the pass that
+stopped at the declaration conflict and 101,909 for the finish.
+
+Owner ruling (2026-11-20, early): the process gate does not count the
+name of an ambient `declare const` or `declare var` declaration as a
+reference; every use of the name still counts, and so do `declare let`
+and declarations ambient only inside `declare global`.
+
+State at the end of the night: `assisted` holds B11d, W1, A1 and A2 and a
+runnable `bun src/facade/main.ts --config <path> <command>`. docs, check
+(0 blocking, 35 notes) and the full suite (96 files, 1,237 tests) pass.
+Measured worker use for the night: 2,979,906 tokens over fourteen
+passes, against an estimate of 1.2M to 2M; the four stops at lint and
+gate rules (each needing an owner ruling) account for about 870k of it.
+Nothing is pushed or landed on `main`, and no live client call ran.
+
+For the batch review (Codex): B11d, W1, A1 and A2 on `assisted`, with
+these open items from the workers:
+- W1 refuses an unterminated last line ending in a bare CR.
+- Finding severity is free text; extra JSON keys in a finding are
+  dropped silently.
+- `ps` output: one-second start times; a command with a newline makes
+  the listing undecodable. stdout and stderr interleave in the raw file.
+- The gate's git rule sees only a literal "git"; a client argv starting
+  with git is not caught.
+- SHA-1 is injected from Runtime; a gitlink is refused after staging;
+  paths that are not UTF-8 are refused as unreadable; FIFOs and sockets
+  are not covered.
+- `git diff-tree` runs without `-M`, so renames appear as delete plus
+  add. Task and handoff text sit verbatim under brief headings.
+- Status prints JSON (Options as `{_id,_tag}`); its ledger read takes a
+  write lock; opening the stores can create missing database files.
+- `implement` does not expire another provider's armed waiver (the design
+  says an attempt should); every Codex review writes a new quota hold
+  and waiver.
+- In production, readings never release a quota hold until O11, so every
+  launch needs `--waive`.
+- The corrector's prior handoff is the last implementer or corrector
+  handoff; `correct` before any review also reports `SnapshotRefused`.
+- Claude's `result` field and every client flag are confirmed only by
+  the L3 subset, which has not run. The L3 package's findings (`Edit`
+  rules govern writes; project-level sandbox `false` is ignored, so the
+  profile goes through `--settings`; the owner's user settings and hooks
+  load into every run) need owner decisions before it runs.
+- `test/program/admission.test.ts` (261 lines) and `eslint.rules.js`
+  stay over the limit as recorded cleanups; `eslint.rules.js` grew with
+  tonight's entry exception.
