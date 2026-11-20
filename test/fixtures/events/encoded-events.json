@@ -1,0 +1,148 @@
+[
+  {
+    "_tag": "Intended",
+    "opId": "op-2",
+    "tranche": "t-1",
+    "step": {
+      "role": "reviewer",
+      "round": 0
+    },
+    "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "grantId": "g-2",
+    "client": "codex",
+    "waiverId": "w-1"
+  },
+  {
+    "_tag": "Launched",
+    "opId": "op-1",
+    "pgid": 4242
+  },
+  {
+    "_tag": "Finished",
+    "opId": "op-1",
+    "outcome": {
+      "_tag": "Success"
+    },
+    "endedAt": 9000
+  },
+  {
+    "_tag": "CommitRecorded",
+    "opId": "op-1",
+    "outcome": {
+      "_tag": "NothingToCommit"
+    }
+  },
+  {
+    "_tag": "Approved",
+    "tranche": "t-2",
+    "revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "permits": [
+      ".github/"
+    ],
+    "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "_tag": "PreApproved",
+    "tranche": "t-3",
+    "permits": [],
+    "stopBefore": true
+  },
+  {
+    "_tag": "Waived",
+    "provider": "claude",
+    "waiverId": "w-1"
+  },
+  {
+    "_tag": "Released",
+    "opId": "op-1"
+  },
+  {
+    "_tag": "Adopted",
+    "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "_tag": "Reconciled",
+    "opId": "op-1",
+    "resolution": "discard"
+  },
+  {
+    "_tag": "ReviewQueued",
+    "tranche": "t-1",
+    "trancheBase": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "revision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "_tag": "Unwound",
+    "tranches": [
+      "t-2"
+    ],
+    "atHead": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "target": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+    "_tag": "TrancheEnded",
+    "tranche": "t-1",
+    "end": {
+      "_tag": "Passed"
+    }
+  },
+  {
+    "_tag": "LedgerBound",
+    "path": "/ledger/ledger.sqlite"
+  },
+  {
+    "_tag": "WorktreeIntended",
+    "path": "/w",
+    "branch": "foreman/alpha",
+    "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+    "_tag": "WorktreeCreated",
+    "path": "/w",
+    "branch": "foreman/alpha",
+    "gitDir": "/g",
+    "commonDir": "/c",
+    "base": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+    "_tag": "Rebased",
+    "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "_tag": "BaseRequested",
+    "base": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "atHead": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+  },
+  {
+    "_tag": "UnwindRequested",
+    "target": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "atHead": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "_tag": "RestoreRequested",
+    "worktree": "review"
+  },
+  {
+    "_tag": "RequestCompleted",
+    "position": 7
+  },
+  {
+    "_tag": "HoldCreated",
+    "hold": {
+      "_tag": "Quota",
+      "provider": "claude",
+      "windows": [
+        "weekly"
+      ],
+      "ledgerSeq": 3
+    }
+  },
+  {
+    "_tag": "ProtectedReleased",
+    "accept": true
+  },
+  {
+    "_tag": "WaiverExpired",
+    "waiverId": "w-1"
+  }
+]
