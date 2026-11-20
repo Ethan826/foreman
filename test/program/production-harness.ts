@@ -129,6 +129,7 @@ export const configOf = (layout: Layout, overrides: Record<string, unknown> = {}
   stateDir: layout.state,
   ownerCheckout: layout.owner,
   supervisor: { path: layout.supervisor, name: "t" },
+  ledgerDir: layout.ledgerDir,
   attributeAllowance: { rootLines: [] },
   pins,
   ...overrides,
@@ -195,7 +196,7 @@ export const recorded = (layout: Layout, name: string): string | undefined =>
   existsSync(`${layout.record}/${name}`) ? readFileSync(`${layout.record}/${name}`, "utf8") : undefined
 
 /** The ledger file production opens for `layout`. */
-export const ledgerPath = (layout: Layout) => `${layout.state}/ledger.sqlite`
+export const ledgerPath = (layout: Layout) => `${layout.ledgerDir}/ledger.sqlite`
 
 /** The rows of a ledger snapshot, in seq order. */
 const rowsOf = (snapshot: LedgerSnapshot) => snapshot.entries.map((entry) => entry.row)

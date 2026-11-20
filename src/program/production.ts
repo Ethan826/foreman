@@ -1,10 +1,12 @@
 // The production wiring of the assisted-session commands (plan "Injected
 // capabilities"; decision P3): reads and decodes the configuration file,
-// opens the project log and the ledger in the state directory, and
-// builds every capability from Runtime. Nothing here decides; the
+// opens the project log and lock in the state directory and the shared
+// ledger, and builds every capability from Runtime. Nothing here decides; the
 // facade calls one command with the context this returns.
 //
-// State directory layout: `log.sqlite`, `ledger.sqlite`, `lock.sqlite`,
+// The ledger is `<ledgerDir>/ledger.sqlite`, one per owner, shared by
+// every project (design "Where the ledger lives"; batch review B09).
+// State directory layout: `log.sqlite`, `lock.sqlite`,
 // the session's published files, and `git-home`, the empty HOME every git
 // command runs with (plan B11b). Foreman creates `git-home` itself, private
 // and empty, before any git command, and refuses one that is not (batch
@@ -19,7 +21,7 @@ import { allocationsInFallback } from "../features/admission.ts"
 import { ownerOnly } from "../features/counting.ts"
 import { defaultPolicy } from "../domain/policy.ts"
 import { type Role, Roles } from "../domain/roles.ts"
-import { decodeForemanConfig, type ForemanConfig } from "../format/foreman-config.ts"
+import { decodeForemanConfig, type ForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
 import { startTimeOf } from "../format/ps.ts"
 import { decodeRevParseRevision } from "../format/rev-parse.ts"
 import { readClientVersionWith } from "../runtime/client-version.ts"
@@ -80,11 +82,12 @@ export const production = (
     const text = yield* utf8Text(yield* stateFiles.read(configPath))
     const config = yield* Effect.fromResult(decodeForemanConfig(text))
     const { stateDir } = config
+    const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
     yield* checkedLayout({
       stateDir,
       ownerCheckout: config.ownerCheckout,
       supervisor: config.supervisor.path,
-      ledgerDir: stateDir,
+      ledgerDir,
     })
     const home = yield* preparedGitHome(gitHomePath(stateDir))
     const worktree = worktreeProgramWith(startGit, config.attributeAllowance)(home)
@@ -92,7 +95,7 @@ export const production = (
     const context: SessionContext = {
       capabilities: {
         log: yield* openProjectLog(`${stateDir}/log.sqlite`, busyTimeoutMillis),
-        ledger: yield* openLedger(`${stateDir}/ledger.sqlite`, busyTimeoutMillis),
+        ledger: yield* openLedger(`${ledgerDir}/${ledgerFileName}`, busyTimeoutMillis),
         lock: tryLock(`${stateDir}/lock.sqlite`),
         startClient: startClientWith(readProcesses, startTimeOf),
         readProcesses,

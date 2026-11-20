@@ -3,8 +3,9 @@
 // nothing. It reads and decodes the configuration file, checks the
 // layout as production does (batch review B05; the check only resolves
 // paths, so it creates nothing), then opens the
-// project log and the ledger in the state directory read-only, and only
-// if they are there; it takes no project lock. A state directory without
+// project log in the state directory and the owner's shared ledger,
+// `<ledgerDir>/ledger.sqlite` (batch review B09), read-only, and only if
+// they are there; it takes no project lock. A state directory without
 // a log is reported as `StateMissing`, and nothing is created in it. The
 // ledger is read in one deferred transaction, so status answers while
 // another process holds the ledger's write lock. The worktree check runs
@@ -17,7 +18,7 @@ import { defaultPolicy } from "../domain/policy.ts"
 import { allocationsInFallback } from "../features/admission.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { ownerOnly } from "../features/counting.ts"
-import { decodeForemanConfig } from "../format/foreman-config.ts"
+import { decodeForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
 import { decodeRevParseRevision } from "../format/rev-parse.ts"
 import { readClientVersionWith } from "../runtime/client-version.ts"
 import { pinnedGitWith, startGit } from "../runtime/git.ts"
@@ -60,16 +61,17 @@ export const productionStatus = (
   Effect.gen(function* () {
     const config = yield* Effect.fromResult(decodeForemanConfig(yield* utf8Text(yield* stateFiles.read(configPath))))
     const { stateDir } = config
+    const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
     yield* checkedLayout({
       stateDir,
       ownerCheckout: config.ownerCheckout,
       supervisor: config.supervisor.path,
-      ledgerDir: stateDir,
+      ledgerDir,
     })
     const logPath = `${stateDir}/log.sqlite`
     const log = yield* openLogReader(logPath, busyTimeoutMillis)
     if (Option.isNone(log)) return new StateMissing({ stateDir, logPath })
-    const ledger = yield* openLedgerReader(`${stateDir}/ledger.sqlite`, busyTimeoutMillis)
+    const ledger = yield* openLedgerReader(`${ledgerDir}/${ledgerFileName}`, busyTimeoutMillis)
     const home = `${stateDir}/git-home`
     const worktree = worktreeProgramWith(startGit, config.attributeAllowance)(home)
     const parentEnvironment = Record.getSomes(Record.map(environment, Option.fromNullishOr))

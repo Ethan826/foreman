@@ -42,6 +42,7 @@ const configIn = (dir: string, stateDir: string) => {
     stateDir,
     ownerCheckout: `${dir}/owner`,
     supervisor: { path: `${dir}/supervisor`, name: "alpha" },
+    ledgerDir: `${dir}/ledger`,
     attributeAllowance: { rootLines: [] },
     pins: { [Clients.Claude]: "2.1.328 (Claude Code)", [Clients.Codex]: "codex-cli 0.170.0" },
   }
@@ -63,15 +64,20 @@ const filesOf = (dir: string) =>
     return { name, mtime: status.mtimeMs, bytes: Array.from(readFileSync(path)) }
   })
 
-/** A state directory with a log holding a failure hold and a ledger holding two readings. */
-const existingState = (stateDir: string) =>
+/**
+ * A state directory with a log holding a failure hold, and the shared
+ * ledger directory `configIn` names (batch review B09) with a ledger
+ * holding two readings.
+ */
+const existingState = (dir: string) =>
   Effect.scoped(
     Effect.gen(function* () {
-      mkdirSync(stateDir)
-      const log = yield* openProjectLog(`${stateDir}/log.sqlite`, busyMillis)
+      mkdirSync(`${dir}/state`)
+      mkdirSync(`${dir}/ledger`)
+      const log = yield* openProjectLog(`${dir}/state/log.sqlite`, busyMillis)
       const hold = new Failure({ opId: OpId.make("op-0"), outcome: new Unclassified() })
       yield* log.append(LogPosition.make(0), [new HoldCreated({ hold })])
-      const ledger = yield* openLedger(`${stateDir}/ledger.sqlite`, busyMillis)
+      const ledger = yield* openLedger(`${dir}/ledger/ledger.sqlite`, busyMillis)
       yield* ledger.transact((tx) => tx.append([reading(Windows.FiveHour), reading(Windows.Weekly)]))
     }),
   )
@@ -103,19 +109,19 @@ const missingStateCreatesNothing = (dir: string) =>
 const existingStateUnchanged = (dir: string) =>
   Effect.gen(function* () {
     const stateDir = `${dir}/state`
-    yield* existingState(stateDir)
+    yield* existingState(dir)
     const config = configIn(dir, stateDir)
-    const before = filesOf(stateDir)
+    const before = [filesOf(stateDir), filesOf(`${dir}/ledger`)]
     expect(yield* main(["--config", config, "status"], noClients)).toBe(0)
-    expect(filesOf(stateDir)).toEqual(before)
+    expect([filesOf(stateDir), filesOf(`${dir}/ledger`)]).toEqual(before)
   })
 
 const answersUnderWriteLock = (dir: string) =>
   Effect.gen(function* () {
     const stateDir = `${dir}/state`
-    yield* existingState(stateDir)
+    yield* existingState(dir)
     const config = configIn(dir, stateDir)
-    const child = yield* startChild("hold-ledger-write.ts", `${stateDir}/ledger.sqlite`, `${dir}/ready`, [
+    const child = yield* startChild("hold-ledger-write.ts", `${dir}/ledger/ledger.sqlite`, `${dir}/ready`, [
       String(holdMillis),
     ])
     const started = yield* Clock.currentTimeMillis
