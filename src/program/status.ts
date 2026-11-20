@@ -1,8 +1,9 @@
 // `status` (plan "Commands and their prerequisites", "Process evidence"):
 // shows the session state, every incomplete attempt with its grant, the
 // holds in place, the armed waivers, the pin check of each client, the
-// worktree check, the integrity of each recorded report file and the
-// advisory process evidence. It never takes the lock and never appends
+// worktree check, the integrity of each recorded report and brief, the
+// snapshot coverage statement, and the advisory process evidence for
+// every attempt of the open session, finished ones included. It never takes the lock and never appends
 // to the log or the ledger, so it works while another command runs and
 // whatever else is broken.
 import { Array as Arr, Effect, Match, Option, Result, Schema } from "effect"
@@ -16,6 +17,7 @@ import { ArmedWaivers, type SessionAttempt, SessionState } from "../domain/sessi
 import { processEvidence } from "../features/process-evidence.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
+import { snapshotCoverage } from "../format/brief.ts"
 import { decodePs } from "../format/ps.ts"
 import { holdsNow, pinReading, readLog, worktreeReading } from "./command-start.ts"
 import { attemptBriefIntact } from "./brief-files.ts"
@@ -26,25 +28,39 @@ import type { SessionContext } from "./session-context.ts"
 export const evidenceCaveat =
   "Advisory evidence, not proof: a listed group may be an unrelated one reusing the id, " +
   "a descendant that left the group is not listed, and nothing listed does not establish " +
-  "that the client's processes stopped. Foreman never signals."
+  "that the client's processes stopped. An attempt with no recorded launch may still have " +
+  "started, since the client is spawned before its launch is recorded. Foreman never signals."
 
 /** The process listing could not be read or decoded; `reason` says why. */
 export class EvidenceUnavailable extends Schema.TaggedClass<EvidenceUnavailable>()("EvidenceUnavailable", {
   reason: Schema.String,
 }) {}
 
-/** The attempt has no `Launched`, so no process was recorded for it. */
-export class NotLaunched extends Schema.TaggedClass<NotLaunched>()("NotLaunched", {}) {}
+/**
+ * The attempt has no `Launched` (review item B12). The client is spawned
+ * before batch L is appended, so it may have started and may still run:
+ * whether it did is unknown, and no process group was recorded to list.
+ */
+export class LaunchUnknown extends Schema.TaggedClass<LaunchUnknown>()("LaunchUnknown", {}) {}
 
-/** One incomplete attempt: its operation, its grant, its launch and the advisory evidence. */
-export const IncompleteAttempt = Schema.Struct({
-  opId: OpId,
-  grantId: GrantId,
-  launched: Schema.Option(Launched),
-  evidence: Schema.Union([ProcessEvidence, EvidenceUnavailable, NotLaunched]),
-})
+/** One incomplete attempt: its operation and its grant, which `step-ended` names. */
+export const IncompleteAttempt = Schema.Struct({ opId: OpId, grantId: GrantId })
 /** One incomplete attempt in a status report; see {@link IncompleteAttempt}. */
 export type IncompleteAttempt = typeof IncompleteAttempt.Type
+
+/**
+ * The advisory evidence for one attempt of the open session, finished or
+ * not (review item B12): a leader's normal exit does not show that its
+ * descendants stopped, so a finished attempt's group is listed too.
+ */
+export const LaunchEvidence = Schema.Struct({
+  opId: OpId,
+  finished: Schema.Boolean,
+  launched: Schema.Option(Launched),
+  evidence: Schema.Union([ProcessEvidence, EvidenceUnavailable, LaunchUnknown]),
+})
+/** One attempt's evidence in a status report; see {@link LaunchEvidence}. */
+export type LaunchEvidence = typeof LaunchEvidence.Type
 
 /** Whether one recorded report's files are present with their recorded hashes. */
 export const ReportIntegrity = Schema.Struct({
@@ -71,6 +87,7 @@ export const WorktreeStatus = Schema.Struct({ passed: Schema.Boolean, detail: Sc
 export const StatusReport = Schema.Struct({
   state: SessionState,
   incomplete: Schema.Array(IncompleteAttempt),
+  launches: Schema.Array(LaunchEvidence),
   holds: Schema.Array(Hold),
   armedWaivers: ArmedWaivers,
   pinsMatch: Schema.Record(Client, Schema.Boolean),
@@ -78,6 +95,8 @@ export const StatusReport = Schema.Struct({
   reports: Schema.Array(ReportIntegrity),
   briefs: Schema.Array(BriefIntegrity),
   evidenceCaveat: Schema.String,
+  /** What a snapshot covers, the statement every review brief carries (review item M01). */
+  coverage: Schema.String,
 })
 /** A status report; see {@link StatusReport}. */
 export type StatusReport = typeof StatusReport.Type
@@ -91,7 +110,8 @@ export const status = (context: SessionContext) =>
     const listing = yield* Effect.result(context.capabilities.readProcesses())
     return {
       state: fold.state,
-      incomplete: Arr.map(incompleteOf(fold.state), (attempt) => incompleteAttempt(attempt, listing)),
+      incomplete: Arr.map(incompleteOf(fold.state), incompleteAttempt),
+      launches: Arr.map(attemptsOf(fold.state), (attempt) => launchEvidence(attempt, listing)),
       holds: yield* holdsNow(context, read),
       armedWaivers: fold.armedWaivers,
       pinsMatch: {
@@ -105,6 +125,7 @@ export const status = (context: SessionContext) =>
       reports: yield* Effect.forEach(reportsOf(fold.state), (report) => integrityOf(context, report)),
       briefs: yield* Effect.forEach(attemptsOf(fold.state), (attempt) => briefIntegrityOf(context, attempt)),
       evidenceCaveat,
+      coverage: snapshotCoverage,
     } satisfies StatusReport
   })
 
@@ -119,16 +140,22 @@ const incompleteOf = (state: SessionState): ReadonlyArray<SessionAttempt> =>
 const reportsOf = (state: SessionState): ReadonlyArray<ReportRecorded> =>
   Option.match(openSessionOf(state), { onNone: () => [], onSome: (session) => session.reports })
 
-/** One incomplete attempt with the evidence the listing gives about its launch. */
-const incompleteAttempt = (
-  attempt: SessionAttempt,
-  listing: Result.Result<string, { readonly reason: string }>,
-): IncompleteAttempt => ({
+/** One incomplete attempt's operation and grant. */
+const incompleteAttempt = (attempt: SessionAttempt): IncompleteAttempt => ({
   opId: attempt.intent.opId,
   grantId: attempt.intent.grantId,
+})
+
+/** One attempt with the evidence the listing gives about its launch, if one is recorded. */
+const launchEvidence = (
+  attempt: SessionAttempt,
+  listing: Result.Result<string, { readonly reason: string }>,
+): LaunchEvidence => ({
+  opId: attempt.intent.opId,
+  finished: Option.isSome(attempt.finished),
   launched: attempt.launched,
   evidence: Option.match(attempt.launched, {
-    onNone: () => new NotLaunched(),
+    onNone: () => new LaunchUnknown(),
     onSome: (launch) => evidenceFor(launch, listing),
   }),
 })

@@ -2,7 +2,8 @@
 // evidence", "Slice A1", session-commands): it takes no lock and writes
 // nothing, and it shows the state, incomplete attempts with their grants,
 // holds, armed waivers, pins, the worktree check, report integrity and
-// the advisory process evidence, labeled as evidence.
+// the advisory process evidence, labeled as evidence (status-evidence
+// covers finished attempts and unrecorded launches).
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
 import { writeFileSync } from "node:fs"
@@ -40,9 +41,8 @@ const statusReadsOnly = (harness: Harness) =>
     expect(yield* rowsOf(harness)).toEqual(rows)
     const intent = yield* firstIntent(harness)
     expect(report.state).toMatchObject({ _tag: "AttemptIncomplete" })
-    expect(report.incomplete).toMatchObject([
-      { opId: intent.opId, grantId: intent.grantId, evidence: { _tag: "NothingListed" } },
-    ])
+    expect(report.incomplete).toEqual([{ opId: intent.opId, grantId: intent.grantId }])
+    expect(report.launches).toMatchObject([{ opId: intent.opId, finished: false, evidence: { _tag: "NothingListed" } }])
     expect(report.evidenceCaveat).toBe(evidenceCaveat)
     expect(report.worktree).toEqual({ passed: true, detail: head })
     expect(report.pinsMatch).toEqual({ [Clients.Claude]: true, [Clients.Codex]: true })
@@ -54,7 +54,7 @@ const statusNotLaunched = (harness: Harness) =>
     yield* open(harness)
     yield* Effect.exit(implement(harness.context, { waive: false }))
     const report = yield* status(harness.context)
-    expect(report.incomplete).toMatchObject([{ evidence: { _tag: "NotLaunched" } }])
+    expect(report.launches).toMatchObject([{ evidence: { _tag: "LaunchUnknown" } }])
   })
 
 const statusShowsEvidenceAndHolds = (harness: Harness) =>
@@ -66,7 +66,7 @@ const statusShowsEvidenceAndHolds = (harness: Harness) =>
       ...harness.context,
       capabilities: { ...harness.context.capabilities, readProcesses: () => Effect.succeed(listing) },
     })
-    expect(report.incomplete).toMatchObject([{ evidence: { _tag: "ProcessesListed", leader: { _tag: "LeaderListed" } } }])
+    expect(report.launches).toMatchObject([{ evidence: { _tag: "ProcessesListed", leader: { _tag: "LeaderListed" } } }])
     expect(report.holds).toMatchObject([{ _tag: "Failure" }])
     expect(report.armedWaivers).toEqual({ [Clients.Claude]: Option.none(), [Clients.Codex]: Option.some("w-c") })
   })
@@ -98,7 +98,7 @@ const statusShowsPinAndWorktreeFailures = (harness: Harness) =>
 
 describe("status", () => {
   it.effect("reads without the lock and writes nothing", () => withHarness({}, statusReadsOnly))
-  it.effect("shows an attempt that never launched as not launched", () => withHarness({}, statusNotLaunched))
+  it.effect("shows an attempt with no recorded launch as unknown", () => withHarness({}, statusNotLaunched))
   it.effect("shows advisory evidence, holds and armed waivers", () => withHarness({}, statusShowsEvidenceAndHolds))
   it.effect("shows report integrity and a crashed outcome", () =>
     withHarness({ script: claudeCrash }, statusReportIntegrity),
