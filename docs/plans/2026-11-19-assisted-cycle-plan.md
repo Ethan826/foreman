@@ -546,3 +546,27 @@ authorization, after B11d's review and landing (P10).
 Control for each slice: one fresh worker with a short brief naming this
 document, the slice's files and the ruled decisions; no delegation; no
 automatic follow-up; a stop for review.
+
+## Execution record
+
+Owner direction (2026-11-19, evening): work A1, A2 and their supporting
+pieces tonight with parallel workers, and review in larger batches. The
+coordinator integrates each worker branch onto `assisted` (B11d rebased
+onto main, then the slices), verifying docs, check and the full test
+suite after each merge. No live client call, landing or push without a
+separate OK. The deferred cleanups stay deferred.
+
+Wave 1, in parallel, each in its own worktree:
+- `a1-events`: P1's `events.ts` split, then the findings decoder
+  (`src/domain/findings.ts`, `src/format/findings.ts`).
+- `a1-runtime`: `src/domain/process.ts`, `src/format/ps.ts`,
+  `src/runtime/spawn.ts`, `processes.ts`, `client-version.ts`,
+  `state-files.ts`, and the pure `src/features/client-environment.ts`
+  (P2).
+- `a2-snapshot`: the snapshot vertical below the handoff: blob ids,
+  worktree entries, `snapshotGitWith`, `judgeSnapshot`, the temporary
+  index procedure.
+- `w1-waxwing`: the exact-line attribute exception as an injected
+  allowance, empty by default.
+- `l3-prep`: the L3 subset's runbook and disposable-repository scripts;
+  no live calls.
