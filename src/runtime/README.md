@@ -59,3 +59,7 @@ These reads have a limit (review L02). `lstat`, `readlink` and `O_NOFOLLOW` guar
 ## Git's private HOME
 
 [`git-home.ts`](git-home.ts) reads what is at git's `HOME` path without following a link (`readHome`) and creates the directory (`createHome`, batch review B02). Creation makes one directory with mode 0700 and sets that mode again, so the umask cannot change it. Nothing here removes, empties or changes an existing entry.
+
+## Canonical paths
+
+[`canonical-path.ts`](canonical-path.ts) holds `canonicalPathOf` (batch review B05). It resolves a path's nearest existing ancestor with `realpath` and appends the components below it as given, so a path not made yet still resolves through any link above it. An entry that exists but cannot be resolved, such as a dangling link, fails with `PathUnreadable` and is never read as absent.

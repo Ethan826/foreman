@@ -33,6 +33,7 @@ import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
 import { publishClaudeProfileWith } from "./claude-profile.ts"
 import { gitHomePath, preparedGitHome } from "./git-home.ts"
+import { checkedLayout } from "./layout.ts"
 import { utf8Text } from "./client-output.ts"
 import { handoffGitWith } from "./handoff-git.ts"
 import { type SessionContext, WorktreeUnready } from "./session-context.ts"
@@ -79,6 +80,12 @@ export const production = (
     const text = yield* utf8Text(yield* stateFiles.read(configPath))
     const config = yield* Effect.fromResult(decodeForemanConfig(text))
     const { stateDir } = config
+    yield* checkedLayout({
+      stateDir,
+      ownerCheckout: config.ownerCheckout,
+      supervisor: config.supervisor.path,
+      ledgerDir: stateDir,
+    })
     const home = yield* preparedGitHome(gitHomePath(stateDir))
     const worktree = worktreeProgramWith(startGit, config.attributeAllowance)(home)
     const parentEnvironment = Record.getSomes(Record.map(environment, Option.fromNullishOr))

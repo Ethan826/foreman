@@ -19,8 +19,13 @@ export class ConfigUndecodable extends Schema.TaggedError<ConfigUndecodable>()(
   { reason: Schema.String },
 ) {}
 
-/** An absolute path: non-empty text starting with `/`. */
-const AbsolutePath = Schema.String.check(Schema.isPattern(/^\//))
+/**
+ * An absolute, normalized path: `/` and then one or more components
+ * separated by single slashes, none of them `.` or `..`, with no trailing
+ * slash. The layout check (batch review B05) compares these after
+ * resolving links, so a component it could not interpret is refused here.
+ */
+const AbsolutePath = Schema.String.check(Schema.isPattern(/^(?:\/(?!\.\.?(?:\/|$))[^/\0]+)+$/))
 
 /**
  * The supervisor branch's `<name>` in `foreman/<name>`: letters, digits,

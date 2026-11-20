@@ -1,6 +1,7 @@
 // The Node calls Runtime uses to create and inspect git's private HOME
-// (batch review B02), beside node-child-process.d.ts, which declares the
-// rest. The project has no Node type package.
+// (batch review B02) and to resolve a configured path (B05), beside
+// node-child-process.d.ts, which declares the rest. The project has no
+// Node type package.
 declare module "node:fs" {
   /**
    * Creates one directory at `path` with permission bits `mode`, less the
@@ -17,4 +18,9 @@ declare module "node:fs" {
 declare module "node:os" {
   /** The user the process runs as; `uid` is its numeric user id. */
   export function userInfo(): { readonly uid: number }
+}
+
+declare module "node:path" {
+  /** The last segment of `path`: everything after its last `/`. */
+  export function basename(path: string): string
 }

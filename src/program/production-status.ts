@@ -1,6 +1,8 @@
 // The production wiring of `status` (plan "Commands and their
 // prerequisites"; review item B11): it creates nothing and writes
-// nothing. It reads and decodes the configuration file, then opens the
+// nothing. It reads and decodes the configuration file, checks the
+// layout as production does (batch review B05; the check only resolves
+// paths, so it creates nothing), then opens the
 // project log and the ledger in the state directory read-only, and only
 // if they are there; it takes no project lock. A state directory without
 // a log is reported as `StateMissing`, and nothing is created in it. The
@@ -24,6 +26,7 @@ import { openLedgerReader, openLogReader } from "../runtime/state-read.ts"
 import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
 import { utf8Text } from "./client-output.ts"
+import { checkedLayout } from "./layout.ts"
 import { initialEstimates } from "./production.ts"
 import { WorktreeUnready } from "./session-context.ts"
 import { status, StatusReport } from "./status.ts"
@@ -57,6 +60,12 @@ export const productionStatus = (
   Effect.gen(function* () {
     const config = yield* Effect.fromResult(decodeForemanConfig(yield* utf8Text(yield* stateFiles.read(configPath))))
     const { stateDir } = config
+    yield* checkedLayout({
+      stateDir,
+      ownerCheckout: config.ownerCheckout,
+      supervisor: config.supervisor.path,
+      ledgerDir: stateDir,
+    })
     const logPath = `${stateDir}/log.sqlite`
     const log = yield* openLogReader(logPath, busyTimeoutMillis)
     if (Option.isNone(log)) return new StateMissing({ stateDir, logPath })
