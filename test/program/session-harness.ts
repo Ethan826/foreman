@@ -28,6 +28,7 @@ import { Roles } from "../../src/domain/roles.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { allocationsInFallback } from "../../src/features/admission.ts"
 import { ownerOnly } from "../../src/features/counting.ts"
+import { publishClaudeProfileWith } from "../../src/program/claude-profile.ts"
 import { handoffGitWith } from "../../src/program/handoff-git.ts"
 import { type SessionContext, WorktreeUnready } from "../../src/program/session-context.ts"
 import type { StatusContext } from "../../src/program/status-context.ts"
@@ -36,6 +37,7 @@ import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
 import { tryLock } from "../../src/runtime/project-lock.ts"
 import { openLedgerReader } from "../../src/runtime/state-read.ts"
+import { stateFiles } from "../../src/runtime/state-files.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { type ClientScript, type FakeClient, fakeClient } from "../fixtures/clients/fake-client.ts"
 import { emptyHome } from "../runtime/git-repo.ts"
@@ -141,6 +143,7 @@ const build = (dir: string, options: HarnessOptions) =>
             stderr: "",
           }),
         stateFiles: tracedFiles(trace, inject),
+        publishClaudeProfile: publishClaudeProfileWith(stateFiles, dir),
         checkWorktree: () =>
           options.worktreePasses ? Effect.succeed(base) : Effect.fail(new WorktreeUnready({ reason: "not locked" })),
         handoffGit: handoffGitWith(tracedGit(gitCalls, inject), noAttributeAllowance)(emptyHome, dir),
@@ -156,7 +159,6 @@ const build = (dir: string, options: HarnessOptions) =>
         project,
         stateDir: dir,
         pins,
-        claudeSettings: `${dir}/claude-settings.json`,
         estimates: { [Roles.Implementer]: 15, [Roles.Reviewer]: 15, [Roles.Corrector]: 15 },
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
       },

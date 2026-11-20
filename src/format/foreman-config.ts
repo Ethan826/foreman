@@ -1,9 +1,9 @@
 // The configuration file (plan "Slice A1", decisions P3 to P5): one JSON
 // object naming the project, the state directory, the owner's checkout,
 // the supervisor worktree's path and branch name, the root
-// `.gitattributes` allowance (decision M09), the client version pins, the
-// Claude settings file the editing profile loads, and each role's grant
-// estimate. Decoding is strict: an unknown key, a relative path, a missing
+// `.gitattributes` allowance (decision M09), the client version pins and
+// each role's grant estimate. It names no Claude settings file: foreman
+// writes the editing profile itself (batch review B03). Decoding is strict: an unknown key, a relative path, a missing
 // pin or a malformed value refuses the whole file, because a key the
 // decoder ignored could be a setting the owner believes is in force.
 import { Option, Result, Schema, String } from "effect"
@@ -54,7 +54,6 @@ const ConfigFile = Schema.Struct({
   supervisor: Supervisor,
   attributeAllowance: AttributeAllowance,
   pins: Schema.Record(Client, Pin),
-  claudeSettings: AbsolutePath,
   estimates: Schema.optionalKey(Estimates),
 })
 
@@ -73,8 +72,6 @@ export interface ForemanConfig {
   readonly attributeAllowance: AttributeAllowance
   /** Each client's pinned `--version` output, trimmed (decision P4). */
   readonly pins: Readonly<Record<Client, string>>
-  /** The Claude settings file the editing profile passes with `--settings`. */
-  readonly claudeSettings: string
   /** Each role's grant estimate in points (decision P5). */
   readonly estimates: Readonly<Record<Role, number>>
 }

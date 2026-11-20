@@ -18,7 +18,6 @@ const file = (overrides: Record<string, unknown> = {}) => ({
   supervisor: { path: "/state/worktree", name: "assisted" },
   attributeAllowance: { rootLines: ["* text=auto"] },
   pins,
-  claudeSettings: "/state/claude-settings.json",
   ...overrides,
 })
 
@@ -45,7 +44,6 @@ describe("decodeForemanConfig", () => {
       supervisor: { path: "/state/worktree", name: "assisted" },
       attributeAllowance: { rootLines: ["* text=auto"] },
       pins,
-      claudeSettings: "/state/claude-settings.json",
       estimates: {
         [Roles.Implementer]: defaultPolicy.initialEstimate,
         [Roles.Reviewer]: defaultPolicy.initialEstimate,
@@ -73,8 +71,11 @@ describe("decodeForemanConfig", () => {
 
   it("refuses a relative path", () => {
     refused(file({ stateDir: "state" }))
-    refused(file({ claudeSettings: "./settings.json" }))
     refused(file({ supervisor: { path: "worktree", name: "assisted" } }))
+  })
+
+  it("refuses a Claude settings file: foreman writes the editing profile itself (B03)", () => {
+    refused(file({ claudeSettings: "/state/claude-settings.json" }))
   })
 
   it("refuses a missing pin", () => {

@@ -3,7 +3,8 @@
 // plan: no handoff facts, no snapshot and no consent events, the brief is
 // Format's implementer brief of the session's recorded task file (checked
 // against its hash), the profile is
-// Claude's editing profile, and classification reads Claude's
+// Claude's editing profile, published for the session's worktree before
+// admission (batch review B03), and classification reads Claude's
 // stream-json. The handoff is the final message of Claude's last
 // `result` event, empty when it gave none (plan "Events",
 // `ReportRecorded`).
@@ -13,7 +14,10 @@ import { defaultRoleClients, Roles } from "../domain/roles.ts"
 import { Implement } from "../domain/session.ts"
 import type { OpenSession } from "../domain/session-state.ts"
 import { implementBrief } from "../format/brief.ts"
+import type { ProfilePathUnsafe } from "../format/claude-settings.ts"
+import type { StateFileFailed } from "../runtime/state-files.ts"
 import { type LaunchPlan, noHandoffFacts, runAttempt } from "./attempt.ts"
+import { claudeSettingsPath } from "./claude-profile.ts"
 import { claudeDecoded, claudeHandoff } from "./client-output.ts"
 import { recordedText } from "./recorded-files.ts"
 import type { SessionContext } from "./session-context.ts"
@@ -30,7 +34,10 @@ export const implement = (context: SessionContext, options: ImplementOptions) =>
   runAttempt(context, implementPlan(context, options))
 
 /** The implementer's launch plan. */
-const implementPlan = (context: SessionContext, options: ImplementOptions): LaunchPlan<TaskFileChanged> => ({
+const implementPlan = (
+  context: SessionContext,
+  options: ImplementOptions,
+): LaunchPlan<TaskFileChanged | ProfilePathUnsafe | StateFileFailed> => ({
   command: new Implement(),
   role: Roles.Implementer,
   provider: defaultRoleClients[Roles.Implementer],
@@ -38,8 +45,12 @@ const implementPlan = (context: SessionContext, options: ImplementOptions): Laun
   observe: () => Effect.succeed(noHandoffFacts),
   snapshot: () => Effect.succeed(Option.none()),
   prepare: ({ session }) =>
-    Effect.map(recordedTask(context, session), (task) => ({ brief: implementBrief({ task }), round: 0, consent: [] })),
-  argv: (brief) => claudeEditingArgv({ brief, settingsFile: context.settings.claudeSettings }),
+    Effect.gen(function* () {
+      const task = yield* recordedTask(context, session)
+      yield* context.capabilities.publishClaudeProfile(session.opened.worktree.path)
+      return { brief: implementBrief({ task }), round: 0, consent: [] }
+    }),
+  argv: (brief) => claudeEditingArgv({ brief, settingsFile: claudeSettingsPath(context.settings.stateDir) }),
   handoff: (_files, lines) => claudeHandoff(lines),
   decode: (lines) => ({ client: claudeDecoded(lines), findings: Option.none() }),
   afterHandoff: () => Effect.void,

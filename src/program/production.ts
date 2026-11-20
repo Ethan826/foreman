@@ -28,6 +28,7 @@ import { tryLock } from "../runtime/project-lock.ts"
 import { startClientWith } from "../runtime/spawn.ts"
 import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
+import { publishClaudeProfileWith } from "./claude-profile.ts"
 import { utf8Text } from "./client-output.ts"
 import { handoffGitWith } from "./handoff-git.ts"
 import { type SessionContext, WorktreeUnready } from "./session-context.ts"
@@ -76,6 +77,7 @@ export const production = (
         readProcesses,
         readClientVersion: readClientVersionWith({ cwd: stateDir, env: clientEnvironment(parentEnvironment) }),
         stateFiles,
+        publishClaudeProfile: publishClaudeProfileWith(stateFiles, stateDir),
         checkWorktree: (recorded) => checkedHead(worktree, home, recorded),
         handoffGit: handoffGitWith(startGit, config.attributeAllowance)(home, stateDir),
         newId,
@@ -87,7 +89,6 @@ export const production = (
         project: config.projectId,
         stateDir,
         pins: config.pins,
-        claudeSettings: config.claudeSettings,
         estimates: config.estimates,
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
       },

@@ -26,6 +26,7 @@ import type { GitOutput } from "../runtime/git.ts"
 import type { ReadProcesses } from "../runtime/processes.ts"
 import type { StartClient } from "../runtime/spawn.ts"
 import type { StateFiles } from "../runtime/state-files.ts"
+import type { PublishClaudeProfile } from "./claude-profile.ts"
 
 /**
  * The startup worktree check (plans B11a to B11d) did not pass for the
@@ -84,6 +85,8 @@ export interface SessionCapabilities {
   readonly readProcesses: ReadProcesses
   readonly readClientVersion: ReadClientVersion
   readonly stateFiles: StateFiles
+  /** Publishes Claude's editing profile for a worktree, before admission (batch review B03). */
+  readonly publishClaudeProfile: PublishClaudeProfile
   readonly checkWorktree: CheckWorktree
   /** The handoff's git work for a session's recorded worktree. */
   readonly handoffGit: (identity: RecordedGitIdentity) => HandoffGit
@@ -104,8 +107,6 @@ export interface SessionSettings {
   readonly stateDir: string
   /** Each client's pinned `--version` output, trimmed (decision P4). */
   readonly pins: Readonly<Record<Client, string>>
-  /** The settings file of Claude's editing profile. */
-  readonly claudeSettings: string
   /** Each role's grant estimate in points (decision P5). */
   readonly estimates: Readonly<Record<Role, number>>
   readonly admission: AdmissionContext

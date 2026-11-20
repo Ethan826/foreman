@@ -10,7 +10,8 @@
 // the corrector: it is published in the state directory and its SHA-256
 // is recorded in `HandoffApproved`. The prior handoff in the brief is the
 // last implementer's or corrector's, not the reviewer's, whose final
-// message holds the reviewer's own findings.
+// message holds the reviewer's own findings. Claude's editing profile is
+// published for the session's worktree before admission (batch review B03).
 import { type Cause, Effect, Option } from "effect"
 import { HandoffApproved, ReviewChecked } from "../domain/events.ts"
 import { claudeEditingArgv } from "../domain/profiles.ts"
@@ -23,7 +24,9 @@ import { claudeDecoded, claudeHandoff, utf8Text } from "./client-output.ts"
 import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedOnReviewedTree, handoffTextOf, lastEdit, takeSnapshot } from "./handoff-facts.ts"
 import { recordedTask } from "./implement.ts"
+import type { ProfilePathUnsafe } from "../format/claude-settings.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
+import { claudeSettingsPath } from "./claude-profile.ts"
 import type { HandoffGitFailure, SessionContext } from "./session-context.ts"
 import { FindingsFileUnreadable, type RecordedFileChanged, type TaskFileChanged } from "./session-errors.ts"
 
@@ -44,6 +47,7 @@ export type CorrectFailure =
   | RecordedFileChanged
   | FindingsFileUnreadable
   | StateFileFailed
+  | ProfilePathUnsafe
   | Cause.NoSuchElementError
 
 /** Runs `correct` (see attempt.ts for the protocol and its failures). */
@@ -62,7 +66,7 @@ const correctPlan = (context: SessionContext, options: CorrectOptions): LaunchPl
     ),
   snapshot: (session) => Effect.map(takeSnapshot(context, session), Option.some),
   prepare: (input) => prepared(context, options, input),
-  argv: (brief) => claudeEditingArgv({ brief, settingsFile: context.settings.claudeSettings }),
+  argv: (brief) => claudeEditingArgv({ brief, settingsFile: claudeSettingsPath(context.settings.stateDir) }),
   handoff: (_files, lines) => claudeHandoff(lines),
   decode: (lines) => ({ client: claudeDecoded(lines), findings: Option.none() }),
   afterHandoff: () => Effect.void,
@@ -77,6 +81,7 @@ const prepared = (context: SessionContext, options: CorrectOptions, input: Prepa
     const reviewedTree = yield* Effect.fromOption(session.reviewedTree)
     const findings = yield* ownerFindings(context, session, review.opId, options.findingsFile)
     const edit = yield* Effect.fromOption(lastEdit(session))
+    yield* context.capabilities.publishClaudeProfile(session.opened.worktree.path)
     const brief = correctBrief({
       task: yield* recordedTask(context, session),
       findingsFile: findings.text,

@@ -44,7 +44,6 @@ const configIn = (dir: string, stateDir: string) => {
     supervisor: { path: `${dir}/supervisor`, name: "alpha" },
     attributeAllowance: { rootLines: [] },
     pins: { [Clients.Claude]: "2.1.328 (Claude Code)", [Clients.Codex]: "codex-cli 0.170.0" },
-    claudeSettings: `${dir}/claude-settings.json`,
   }
   writeFileSync(path, JSON.stringify(config))
   return path
