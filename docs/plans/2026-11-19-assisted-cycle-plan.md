@@ -609,3 +609,18 @@ fixtures.
 Coordinator's correction: the `a1-program` brief left out
 `--permission-prompts none`, which the plan and the L3 runbook include;
 the A2 worker adds it.
+
+More integrated: `a2-handoff` part 1 (`--permission-prompts none`;
+Claude's result text as the handoff), 230,883 tokens for a pass that
+stopped at a lint conflict; `assisted-docs` (5132bda), 198,854.
+
+Owner ruling (2026-11-19, evening), on the entry point's lint conflict:
+a named lint exception built like `lockChildEntrypoint` lets exactly
+`src/facade/main.ts` run one Effect, and nothing else is relaxed; a
+must-fail fixture shows the same code fails in any other `src/` file.
+`src/facade/process.d.ts` declares only `process.argv`, `process.env`
+and `process.exit`.
+
+Running: `a2-commands` (review, correct, reject, `--attest`, close
+--finished, with no git staging before the prerequisites pass) and the
+entry module on `a2-handoff`.
