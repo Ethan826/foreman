@@ -10,8 +10,8 @@ commands, the expected results and the PASS and FAIL rules.
 
 No client has been run with a prompt. Preparation ran only `--version`
 and `--help` of both clients, with network access denied by
-`sandbox-exec`, and ran `setup.sh` and `teardown.sh` against a scratch
-directory.
+`sandbox-exec`, and ran `setup.sh`, `snapshot.sh` and `teardown.sh`
+against scratch roots through `test-scripts.sh`.
 
 ## Authorization needed
 
@@ -27,9 +27,10 @@ directory.
 
 ## Order
 
-1. Choose a scratch directory outside every repository and every
-   temporary directory, for example `$HOME/foreman-l3-scratch`, and
-   create it empty.
+1. Choose a scratch root outside every repository and every temporary
+   directory, for example `$HOME/foreman-l3-scratch`. It must not exist
+   yet: `setup.sh` creates it and refuses any path that is already
+   there.
 2. From a plain terminal in this directory, define the shell helpers in
    `plan.md` ("Shell definitions for the run") and run `./setup.sh`.
 3. Preflight (step 0): the listener, the user-settings record, the
@@ -40,7 +41,9 @@ directory.
 7. X1, then X2.
 8. V again, after. Stop the listener.
 9. Normalize `out/` into whitelisted copies, inspect them, and write
-   `results.md` here. Then `./teardown.sh <scratch>` and delete `out/`.
+   `results.md` here. Then run `./teardown.sh <scratch>`, which removes
+   only the paths `setup.sh` recorded and keeps `out/`; delete `out/`
+   and the root yourself.
 
 ## Files
 
@@ -49,4 +52,13 @@ directory.
 - `claude-settings.json`: the editing-profile settings template.
 - `setup.sh`, `teardown.sh`, `snapshot.sh`: the disposable repository,
   its removal, and the before-and-after manifests. None starts a client.
+- `ownership.sh`: the scratch root's ownership record, which the three
+  scripts share.
+- `test-scripts.sh <base-dir>`: offline tests of the three scripts. Each
+  run works in a new directory under `<base-dir>`, which must be outside
+  every repository, and removes it at the end. The tests pass
+  `--temp-ok`, so a directory under `/private/tmp` works. They cover an existing root, a preexisting `state/`
+  with a sentinel, a partial setup, a second teardown, forged and missing
+  records, and a root whose name holds a space, quotes, a newline and
+  `$(...)`. Run it after any change to the scripts.
 - `prompts/`: the task text of each run.

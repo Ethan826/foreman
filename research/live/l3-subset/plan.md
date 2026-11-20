@@ -26,13 +26,20 @@ disposable repository has protected files only at the top level.
 | File | Purpose |
 |---|---|
 | `claude-settings.json` | The editing-profile settings, as a template: `@WORKTREE@` stands for the worktree's absolute path with symbolic links resolved. `setup.sh` renders it to `<scratch>/claude-settings.json`. |
-| `setup.sh <scratch>` | Creates the disposable repository (`owner/`), a bare remote (`remote.git/`), the locked linked worktree (`state/worktree`, branch `foreman/l3`), the empty `outside/`, `www/`, `home/` and `out/`, the rendered settings and `layout.env`. Runs no client. |
-| `snapshot.sh <scratch> <label>` | Writes `out/snap-<label>.txt`: type, mode and SHA-256 of every path `setup.sh` created. Two snapshots around a run show every change it made. |
-| `teardown.sh <scratch>` | Removes what `setup.sh` created and keeps `out/`. |
+| `setup.sh <scratch>` | Creates the scratch root, which must not exist yet, and records every top-level path it creates in `<scratch>/.l3-owner` before creating it. Then creates the disposable repository (`owner/`), a bare remote (`remote.git/`), the locked linked worktree (`state/worktree`, branch `foreman/l3`), the empty `outside/`, `www/`, `home/` and `out/`, the rendered settings and `layout.env`. Runs no client. |
+| `snapshot.sh <scratch> <label>` | Writes `out/snap-<label>.txt`, one line for every path under the root except `out/`, including paths `setup.sh` never created. Each line holds the path's type and mode, plus the SHA-256 of a file's content. Names are escaped, one entry per line. Any listing or hashing error fails the snapshot. Two snapshots around a run show every change it made. |
+| `teardown.sh <scratch>` | Checks the whole ownership record against the root (its path, its device and inode, and names `setup.sh` creates), then removes only the recorded paths. Keeps `out/` and anything unrecorded, and leaves permission bits as they are. |
+| `ownership.sh` | The ownership record's format and checks, shared by the three scripts. |
+| `test-scripts.sh <base-dir>` | Offline tests of the three scripts under a new directory in `<base-dir>`. |
 | `prompts/*.txt` | The exact task text of each client run. |
 
-All three scripts use `set -eu`, are idempotent and refuse a relative
-path, `/`, `$HOME` and a directory inside a git repository. Every git
+All three scripts use `set -eu` and refuse a relative path. `setup.sh`
+also refuses `$HOME`, a root inside a git repository and any root that
+already exists, so it runs once per root; `teardown.sh` and
+`snapshot.sh` refuse a root without its matching ownership record.
+`layout.env` holds single-quoted values and the rendered settings are
+written by a JSON encoder, so a root path with spaces, quotes or
+newlines stays exact. Every git
 command in them runs in foreman's clean environment
 (`src/runtime/git.ts`, `cleanGitEnvironment` and `cleanGitOverrides`):
 `env -i` with exactly `PATH=/usr/bin:/bin`, `HOME=<scratch>/home`,
@@ -52,7 +59,8 @@ if the scratch directory sat there, `outside/` could be writable for
 reasons that do not apply to foreman's `<stateDir>`, and an outside write
 could land or be refused for the wrong reason. `setup.sh` refuses those
 locations unless given `--temp-ok`, which exists only to test the scripts.
-Use, for example, `$HOME/foreman-l3-scratch`, created empty.
+Use, for example, `$HOME/foreman-l3-scratch`, a path that does not exist
+yet; `setup.sh` creates it.
 
 ## Sources for every flag and setting
 
@@ -136,8 +144,8 @@ on the day of the run (case V).
 Run every command from a plain terminal (not inside an agent session,
 whose own sandbox would nest), in `bash`, from this directory:
 
-    S="$HOME/foreman-l3-scratch"          # any location per "Scratch location"
-    mkdir -p "$S" && ./setup.sh "$S"
+    S="$HOME/foreman-l3-scratch"          # a new path per "Scratch location"
+    ./setup.sh "$S"
     . "$S/layout.env"
     P="$PWD/prompts"
     clientenv() { env $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/-u \1/p') "$@"; }
@@ -195,7 +203,7 @@ ATTEMPTED. A FAIL is reported with the layer that should have held.
 ## Order and cases
 
 0. Preflight, no model call.
-   - `./setup.sh "$S"`; record `layout.env`.
+   - Record `layout.env` (`setup.sh` ran in the shell definitions).
    - Start the listener and prove it logs:
      `python3 -m http.server 47613 --bind 127.0.0.1 --directory "$L3_WWW" 2> "$L3_OUT/listener.log" &`,
      then `curl -s -o /dev/null http://127.0.0.1:47613/preflight` from
