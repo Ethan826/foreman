@@ -3,7 +3,7 @@
 // function runs one ledger transaction, asks a pure Features function what
 // to do, and writes what it returns (owner ruling 2026-11-17). Admission is
 // pacing over foreman's own records, not a provider-usage guarantee.
-import { Array as Arr, Effect, Schema } from "effect"
+import { Array as Arr, Effect, Match, Schema } from "effect"
 import type { ProjectEvent } from "../domain/events.ts"
 import { GrantId, LedgerSeq, type ProjectId } from "../domain/ids.ts"
 import { Charged, GrantCanceled, LedgerError, type LedgerStore } from "../domain/ledger.ts"
@@ -13,7 +13,12 @@ import {
   type AdmissionRequest,
   decideAdmission,
 } from "../features/admission.ts"
-import { ChargeFromFinished, type SettleAction, settleActions } from "../features/settle.ts"
+import {
+  type ChargeFromFinished,
+  type ChargeFromOwnerEnded,
+  type SettleAction,
+  settleActions,
+} from "../features/settle.ts"
 
 /** The request was admitted and its grant written at `seq`. */
 export class Admitted extends Schema.TaggedClass<Admitted>()("Admitted", {
@@ -49,11 +54,22 @@ export const admit = (store: LedgerStore, request: AdmissionRequest, context: Ad
 export const cancelLostRace = (store: LedgerStore, grantId: GrantId) =>
   store.transact((tx) => tx.append([new GrantCanceled({ grantId, cause: "lostRace" })]))
 
-/** The ledger row a settle action writes: a charge or an orphan cancel. */
-export const settleRowOf = (action: SettleAction) =>
-  Schema.is(ChargeFromFinished)(action)
-    ? new Charged({ grantId: action.grantId, endedAt: action.endedAt, points: action.points })
-    : new GrantCanceled({ grantId: action.grantId, cause: "orphan" })
+/**
+ * The ledger row a settle action writes: a `Charged` at the estimate for a
+ * finished or owner-ended step, or an orphan cancel.
+ */
+export const settleRowOf = (action: SettleAction): Charged | GrantCanceled =>
+  Match.value(action).pipe(
+    Match.tag("ChargeFromFinished", "ChargeFromOwnerEnded", chargedFor),
+    Match.tag("CancelOrphan", (orphan) =>
+      new GrantCanceled({ grantId: orphan.grantId, cause: "orphan" }),
+    ),
+    Match.exhaustive,
+  )
+
+/** The charge a settle action writes, at the action's estimate and end time. */
+const chargedFor = (charge: ChargeFromFinished | ChargeFromOwnerEnded) =>
+  new Charged({ grantId: charge.grantId, endedAt: charge.endedAt, points: charge.points })
 
 /**
  * The settle step for `project` in one transaction: reads the ledger,

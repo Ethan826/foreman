@@ -7,13 +7,23 @@
 //   or the Intended's append failed). It is canceled `orphan`.
 // - A grant whose step `Finished` but has no `Charged` is charged at its
 //   estimate, with the Finished event's `endedAt`.
-// - A grant whose step was `Intended` and not `Finished` stays open and
-//   keeps counting; startup handles it (plan Task B14).
+// - A grant whose step was `Intended`, not `Finished`, and whose end the
+//   owner attested (`StepEndedByOwner` naming the step and this grant) is
+//   charged at its estimate, at the attestation's time (assisted-cycle
+//   plan, "Settlement for owner-ended steps"), launched or not.
+// - Any other grant whose step was `Intended` and not `Finished` stays
+//   open and keeps counting; startup handles it (plan Task B14).
 //
 // Charges are always the estimate: no run report gives an authoritative
 // measurement in the quota's units.
 import { Array as Arr, Option, Schema } from "effect"
-import { Finished, Intended, Launched, type ProjectEvent } from "../domain/events.ts"
+import {
+  Finished,
+  Intended,
+  Launched,
+  type ProjectEvent,
+  StepEndedByOwner,
+} from "../domain/events.ts"
 import { GrantId, type OpId, type ProjectId } from "../domain/ids.ts"
 import { type LedgerSnapshot, WindowPoints } from "../domain/ledger.ts"
 import { grantViews, type GrantView } from "./counting.ts"
@@ -33,8 +43,22 @@ export class ChargeFromFinished extends Schema.TaggedClass<ChargeFromFinished>()
   },
 ) {}
 
+/**
+ * Charge a grant whose step the owner attested as ended, at its estimate,
+ * with the attestation's `endedAt`. No `Finished` or outcome is
+ * written for the step.
+ */
+export class ChargeFromOwnerEnded extends Schema.TaggedClass<ChargeFromOwnerEnded>()(
+  "ChargeFromOwnerEnded",
+  {
+    grantId: GrantId,
+    endedAt: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    points: Schema.Array(WindowPoints),
+  },
+) {}
+
 /** One thing the settle step writes to the ledger. */
-export type SettleAction = CancelOrphan | ChargeFromFinished
+export type SettleAction = CancelOrphan | ChargeFromFinished | ChargeFromOwnerEnded
 
 /** The `Intended` event that names `view`'s grant, if any. */
 const intendedFor = (log: ReadonlyArray<ProjectEvent>, view: GrantView) =>
@@ -50,6 +74,23 @@ const finishedOf = (log: ReadonlyArray<ProjectEvent>, opId: OpId) =>
     (finish) => finish.opId === opId,
   )
 
+/** The first attestation that step `opId`, reserved by `grantId`, ended. */
+const ownerEndedOf = (log: ReadonlyArray<ProjectEvent>, opId: OpId, grantId: GrantId) =>
+  Arr.findFirst(
+    Arr.flatMap(log, (event) => (Schema.is(StepEndedByOwner)(event) ? [event] : [])),
+    (ended) => ended.opId === opId && ended.grantId === grantId,
+  )
+
+/** The charge for a step with no `Finished`: only once the owner attested its end. */
+const ownerEndedCharge = (log: ReadonlyArray<ProjectEvent>, view: GrantView, opId: OpId) =>
+  Arr.map(Option.toArray(ownerEndedOf(log, opId, view.grant.grantId)), (ended) =>
+    new ChargeFromOwnerEnded({
+      grantId: view.grant.grantId,
+      endedAt: ended.endedAt,
+      points: view.grant.points,
+    }),
+  )
+
 /** The action for one open grant of the project, if it can be settled now. */
 const actionFor =
   (log: ReadonlyArray<ProjectEvent>) =>
@@ -58,7 +99,7 @@ const actionFor =
       onNone: () => [new CancelOrphan({ grantId: view.grant.grantId })],
       onSome: (intent) =>
         Option.match(finishedOf(log, intent.opId), {
-          onNone: () => [],
+          onNone: () => ownerEndedCharge(log, view, intent.opId),
           onSome: (finish) => [
             new ChargeFromFinished({
               grantId: view.grant.grantId,
@@ -75,7 +116,8 @@ const isOpenOf = (project: ProjectId) => (view: GrantView) =>
 
 /**
  * What the settle step writes for `project`, given its log and the ledger:
- * cancel each orphan grant and charge each grant whose step finished.
+ * cancel each orphan grant and charge each grant whose step finished or
+ * whose end the owner attested.
  * Grants of other projects, settled grants and grants whose step is still
  * in flight are left alone. Applying the result and settling again yields
  * nothing.
@@ -88,9 +130,10 @@ export const settleActions = (
   Arr.flatMap(Arr.filter(grantViews(snapshot), isOpenOf(project)), actionFor(log))
 
 /**
- * A step that was `Intended` and has not `Finished`: its grant stays open
- * and keeps counting. `pgid` is the process group recorded by `Launched`,
- * if one was. The owner decides what to do; nothing is signaled.
+ * A step that was `Intended`, has not `Finished` and has no owner
+ * attestation that it ended: its grant stays open and keeps counting.
+ * `pgid` is the process group recorded by `Launched`, if one was. The
+ * owner decides what to do; nothing is signaled.
  */
 export interface InFlight {
   readonly opId: OpId
@@ -121,7 +164,8 @@ const inFlightOf =
     Option.match(intendedFor(log, view), {
       onNone: () => [],
       onSome: (intent) =>
-        Option.isSome(finishedOf(log, intent.opId))
+        Option.isSome(finishedOf(log, intent.opId)) ||
+        Option.isSome(ownerEndedOf(log, intent.opId, view.grant.grantId))
           ? []
           : [{ opId: intent.opId, grantId: view.grant.grantId, pgid: pgidOf(log, intent.opId) }],
     })
