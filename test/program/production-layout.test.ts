@@ -6,9 +6,10 @@
 // with every symbolic link resolved, the nearest existing ancestor
 // standing in for a path not made yet. A refused layout opens no store,
 // makes no git HOME, runs no git command and leaves the owner's files as
-// they were.
+// they were. `status` reports a refused layout as a finding instead of
+// refusing (re-review R03) and still creates nothing.
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { existsSync, mkdirSync, readdirSync, symlinkSync } from "node:fs"
 import { git } from "../runtime/git-repo.ts"
 import {
@@ -82,8 +83,11 @@ const stateUnderSupervisorAddedLater = () =>
       yield* succeeded(layout, ["worktree", "create"])
       symlinkSync(layout.supervisor, `${layout.root}/into-worktree`)
       writeConfig(layout, configOf(layout, { stateDir: `${layout.root}/into-worktree` }))
-      const run = yield* cli(layout, ["status"])
-      expect([run.status, failureTag(run)]).toEqual([1, "LayoutRefused"])
+      const shown = yield* succeeded(layout, ["status"])
+      const printed = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(shown.out.join("\n"))
+      expect(printed).toMatchObject({ _tag: "StateMissing", findings: [{ _tag: "ConfiguredLayoutRefused" }] })
+      const open = yield* cli(layout, ["session", "open", "--tranche", "t-1", "--task", layout.taskFile])
+      expect([open.status, failureTag(open)]).toEqual([1, "LayoutRefused"])
       expect(readdirSync(layout.supervisor).sort()).toEqual([".git"])
     }),
   )
@@ -107,6 +111,6 @@ describe("the layout in production", () => {
   it.effect("a state directory linked into the owner's checkout is refused", refusedLayout(linkedStateInOwner), endToEndMillis)
   it.effect("a supervisor path under a link to the owner's checkout is refused", refusedLayout(supervisorUnderLinkedOwner), endToEndMillis)
   it.effect("a path through a dangling link is refused", refusedLayout(stateThroughDanglingLink), endToEndMillis)
-  it.effect("a state directory linked into the existing worktree is refused, even for status", stateUnderSupervisorAddedLater, endToEndMillis)
+  it.effect("a state directory linked into the existing worktree is refused, and status reports it", stateUnderSupervisorAddedLater, endToEndMillis)
   it.effect("a path with `.`, `..`, a doubled or a trailing slash is refused at decoding", unnormalizedRefused, endToEndMillis)
 })

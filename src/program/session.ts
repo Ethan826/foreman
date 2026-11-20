@@ -15,7 +15,7 @@ import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
 import { applySettle } from "./admission.ts"
 import { holdsNow, ownerChecks, readLog, recordedWorktree, requireAllowed, worktreeReading } from "./command-start.ts"
-import { type SessionContext, WorktreeUnready } from "./session-context.ts"
+import { type SessionCapabilities, type SessionContext, type SessionSettings, WorktreeUnready } from "./session-context.ts"
 
 /** The owner's options for `session open`. */
 export interface OpenOptions {
@@ -29,6 +29,18 @@ export interface CloseOptions {
   /** `abandoned` or `interrupted`; `finished` is `closeFinished` in handoff.ts. */
   readonly how: CloseKind
   readonly note: string
+}
+
+/**
+ * What the owner's exits, `step-ended` and `session close --abandoned |
+ * --interrupted`, run over: the log, the ledger, the lock and the
+ * project, and nothing that runs git (re-review R02; plan "Commands and
+ * their prerequisites"). A `SessionContext` is one, so a test may pass
+ * either.
+ */
+export interface ExitContext {
+  readonly capabilities: Pick<SessionCapabilities, "log" | "ledger" | "lock">
+  readonly settings: Pick<SessionSettings, "project">
 }
 
 /** The owner's attestation for `step-ended`. */
@@ -75,9 +87,11 @@ export const openSession = (context: SessionContext, options: OpenOptions) =>
  * `step-ended <opId> --grant <grantId>`: the owner attests that the
  * incomplete attempt `opId`, reserved by `grantId`, has ended. Appends
  * `StepEndedByOwner` at the wall clock now; refused for a finished or
- * unknown attempt, another grant, or a second attestation.
+ * unknown attempt, another grant, or a second attestation. Only the
+ * operation and the grant are taken from `options`, so the facade's
+ * tagged command can be passed as it is.
  */
-export const stepEnded = (context: SessionContext, options: StepEndedOptions) =>
+export const stepEnded = (context: ExitContext, options: StepEndedOptions) =>
   Effect.scoped(
     Effect.gen(function* () {
       const { capabilities } = context
@@ -85,7 +99,8 @@ export const stepEnded = (context: SessionContext, options: StepEndedOptions) =>
       const read = yield* readLog(capabilities.log)
       const command = new StepEnded({ opId: options.opId, grantId: options.grantId })
       yield* requireAllowed(command, foldSession(read.events).state, ownerChecks(false, []))
-      const ended = new StepEndedByOwner({ ...options, endedAt: yield* Clock.currentTimeMillis })
+      const endedAt = yield* Clock.currentTimeMillis
+      const ended = new StepEndedByOwner({ opId: options.opId, grantId: options.grantId, endedAt })
       yield* capabilities.log.append(read.position, [ended])
       return ended
     }),
@@ -97,7 +112,7 @@ export const stepEnded = (context: SessionContext, options: StepEndedOptions) =>
  * `WaiverExpired` for every armed waiver in one batch. It releases no
  * hold, deletes no file and changes no grant except through settlement.
  */
-export const closeSession = (context: SessionContext, options: CloseOptions) =>
+export const closeSession = (context: ExitContext, options: CloseOptions) =>
   Effect.scoped(
     Effect.gen(function* () {
       const { capabilities, settings } = context

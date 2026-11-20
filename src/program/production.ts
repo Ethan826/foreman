@@ -39,11 +39,11 @@ import { gitHomePath, preparedGitHome } from "./git-home.ts"
 import { handoffGitWith } from "./handoff-git.ts"
 import { settledTarget } from "./production-target.ts"
 import { type SessionContext, WorktreeUnready } from "./session-context.ts"
-import { recordedOrConfigured, requireBound, type TargetPolicy } from "./target-binding.ts"
+import { requireBound } from "./target-binding.ts"
 import { worktreeProgramWith, type WorktreeProgram } from "./worktree.ts"
 
 /** How long a log or ledger write waits for another writer, in milliseconds. */
-const busyTimeoutMillis = 5_000
+export const busyTimeoutMillis = 5_000
 
 /** The radix of the id parts: digits and lower-case letters. */
 const idRadix = 36
@@ -64,7 +64,7 @@ export const initialEstimates: Readonly<Record<Role, number>> = {
 /** Everything a command runs with in production. */
 export interface Production {
   readonly config: ForemanConfig
-  /** The target in force: the configured one, or for a reachable command the recorded one. */
+  /** The target in force: the configured one, which the binding records. */
   readonly target: TargetBinding
   readonly context: SessionContext
   /** The supervisor worktree's creation and check, with the target's allowance. */
@@ -83,32 +83,16 @@ export type ProductionFactory = (
  * `session close --finished`. It records the target binding at first use
  * and fails with `TargetMismatch` when the configuration names another
  * target (batch review B04). `environment` is foreman's own, from which a
- * client gets everything but `GIT_*` (decision P2).
+ * client gets everything but `GIT_*` (decision P2). It settles the target
+ * (production-target.ts), then prepares git's HOME, opens the stores and
+ * wires every capability; nothing is opened, made or run before the
+ * target is settled. `status` and the owner's exits have their own
+ * constructions, which never prepare git's HOME (production-status.ts,
+ * production-exits.ts; re-review R02).
  */
 export const production: ProductionFactory = (configPath, environment) =>
-  productionUnder(requireBound, configPath, environment)
-
-/**
- * The production capabilities of a command that stays reachable under a
- * mismatched configuration: `status`, `step-ended` and `session close
- * --abandoned | --interrupted`. It runs on the recorded target when there
- * is one and records none (batch review B04).
- */
-export const reachableProduction: ProductionFactory = (configPath, environment) =>
-  productionUnder(recordedOrConfigured, configPath, environment)
-
-/**
- * Settles the target under `policy` (production-target.ts), then
- * prepares git's HOME, opens the stores and wires every capability.
- * Nothing is opened, made or run before the target is settled.
- */
-const productionUnder = (
-  policy: TargetPolicy,
-  configPath: string,
-  environment: Readonly<Record<string, string | undefined>>,
-) =>
   Effect.gen(function* () {
-    const { config, target } = yield* settledTarget(policy, configPath, environment)
+    const { config, target } = yield* settledTarget(requireBound, configPath, environment)
     const { stateDir } = config
     const home = yield* preparedGitHome(gitHomePath(stateDir))
     const worktree = worktreeProgramWith(startGit, target.attributeAllowance)(home)

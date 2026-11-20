@@ -15,11 +15,20 @@ import { correct } from "../program/correct.ts"
 import { closeFinished, reject } from "../program/handoff.ts"
 import { implement } from "../program/implement.ts"
 import { review } from "../program/review.ts"
-import { production, type Production, type ProductionFactory, reachableProduction } from "../program/production.ts"
+import { production, type Production } from "../program/production.ts"
+import { type ExitProduction, exitProduction } from "../program/production-exits.ts"
 import { closeSession, openSession, stepEnded } from "../program/session.ts"
 import { productionStatus, StatusOutcome } from "../program/production-status.ts"
 import { createRecordedWorktree } from "../program/worktree-command.ts"
-import { type CliCommand, type Invocation, parseArguments, type ShowStatus, usage } from "./cli-arguments.ts"
+import {
+  type CliCommand,
+  type CloseSession,
+  type EndStep,
+  type Invocation,
+  parseArguments,
+  type ShowStatus,
+  usage,
+} from "./cli-arguments.ts"
 
 /** The exit status of a command that failed. */
 const failedStatus = 1
@@ -49,30 +58,32 @@ export const main = (
 /**
  * The command run and printed. `status` has its own construction, which
  * opens nothing for writing, takes no lock and stays reachable under a
- * configuration naming another target (review items B11 and B04); every
- * other command runs over the production context its factory builds.
+ * configuration naming another target (review items B11 and B04). The
+ * owner's exits, `step-ended` and `session close --abandoned |
+ * --interrupted`, run over `exitProduction`, which runs on the recorded
+ * target and never prepares git's HOME (batch review B04, re-review R02).
+ * Every other command runs over `production`, which refuses a
+ * configuration naming another target.
  */
 const executed = (invocation: Invocation, environment: Readonly<Record<string, string | undefined>>) =>
   Match.value(invocation.command).pipe(
     Match.tag("ShowStatus", () => printed(StatusOutcome, productionStatus(invocation.configPath, environment))),
-    Match.orElse((command) => Effect.flatMap(factoryFor(command)(invocation.configPath, environment), run(command))),
+    Match.tag("EndStep", "CloseSession", (exit) =>
+      Effect.flatMap(exitProduction(invocation.configPath, environment), runExit(exit)),
+    ),
+    Match.orElse((command) => Effect.flatMap(production(invocation.configPath, environment), run(command))),
   )
 
-/**
- * The production factory a command other than `status` runs under (batch
- * review B04): `step-ended` and `session close --abandoned |
- * --interrupted` stay reachable under a mismatched configuration and run
- * on the recorded target; every other command needs the configuration to
- * name the recorded target.
- */
-const factoryFor = (command: Exclude<CliCommand, ShowStatus>): ProductionFactory =>
+/** The Program call for one of the owner's exits, its result printed as JSON. */
+const runExit = (command: EndStep | CloseSession) => (env: ExitProduction) =>
   Match.value(command).pipe(
-    Match.tags({ EndStep: () => reachableProduction, CloseSession: () => reachableProduction }),
-    Match.orElse(() => production),
+    Match.tag("EndStep", (ended) => printed(StepEndedByOwner, stepEnded(env.context, ended))),
+    Match.tag("CloseSession", (close) => printed(SessionClosed, closeSession(env.context, close))),
+    Match.exhaustive,
   )
 
-/** The Program call for one command other than `status`, its result printed as JSON. */
-const run = (command: Exclude<CliCommand, ShowStatus>) => (env: Production) =>
+/** The Program call for one command that runs over `production`, its result printed as JSON. */
+const run = (command: Exclude<CliCommand, ShowStatus | EndStep | CloseSession>) => (env: Production) =>
   Match.value(command).pipe(
     Match.tag("CreateWorktree", () =>
       printed(WorktreeCreated, createRecordedWorktree(
@@ -85,8 +96,6 @@ const run = (command: Exclude<CliCommand, ShowStatus>) => (env: Production) =>
     Match.tag("RunReview", (options) => printed(AttemptRecorded, review(env.context, options))),
     Match.tag("RunCorrect", (options) => printed(AttemptRecorded, correct(env.context, options))),
     Match.tag("RejectHandoff", (options) => printed(HandoffRejected, reject(env.context, options))),
-    Match.tag("EndStep", (ended) => printed(StepEndedByOwner, stepEnded(env.context, ended))),
-    Match.tag("CloseSession", (close) => printed(SessionClosed, closeSession(env.context, close))),
     Match.tag("FinishSession", (finish) => printed(SessionClosed, closeFinished(env.context, finish))),
     Match.exhaustive,
   )

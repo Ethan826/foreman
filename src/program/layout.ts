@@ -15,18 +15,27 @@ import { canonicalPathOf } from "../runtime/canonical-path.ts"
  */
 export const checkedLayout = (configured: CanonicalLayout) =>
   Effect.gen(function* () {
-    const canonical: CanonicalLayout = yield* Effect.mapError(
-      Effect.all({
-        stateDir: canonicalPathOf(configured.stateDir),
-        ownerCheckout: canonicalPathOf(configured.ownerCheckout),
-        supervisor: canonicalPathOf(configured.supervisor),
-        ledgerDir: canonicalPathOf(configured.ledgerDir),
-      }),
-      unresolved,
-    )
+    const canonical = yield* resolvedLayout(configured)
     yield* Effect.fromResult(checkLayout(canonical))
     return canonical
   })
+
+/**
+ * The configured layout resolved, its rules not yet checked: its
+ * canonical paths, or `LayoutRefused` when a path cannot be resolved.
+ * Reads only. `status` compares a configuration it refuses with the
+ * recorded target through this (re-review R03).
+ */
+export const resolvedLayout = (configured: CanonicalLayout): Effect.Effect<CanonicalLayout, LayoutRefused> =>
+  Effect.mapError(
+    Effect.all({
+      stateDir: canonicalPathOf(configured.stateDir),
+      ownerCheckout: canonicalPathOf(configured.ownerCheckout),
+      supervisor: canonicalPathOf(configured.supervisor),
+      ledgerDir: canonicalPathOf(configured.ledgerDir),
+    }),
+    unresolved,
+  )
 
 /** A path that could not be resolved, as a refusal. */
 const unresolved = (failed: PathUnreadable) =>

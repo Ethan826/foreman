@@ -6,8 +6,8 @@
 // HOME: when the HOME is missing or fails B02's checks, status says so and
 // skips the git-based worktree check instead of running git with it.
 import { describe, expect, it } from "@effect/vitest"
-import { Array as Arr, Effect, Schema } from "effect"
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { Effect, Schema } from "effect"
+import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import {
   configOf,
   endToEndMillis,
@@ -17,25 +17,11 @@ import {
   withLayout,
   writeConfig,
 } from "./production-harness.ts"
+import { treeOf } from "./state-tree.ts"
 
 const homeOf = (layout: Layout) => `${layout.state}/git-home`
 
-/**
- * Every entry below `dir`, depth first, with its modification time and
- * each file's bytes. SQLite's shared-memory index (`-shm`) is listed by
- * name only: every WAL reader records its read mark there
- * (sqlite.org/wal.html).
- */
-const treeOf = (dir: string): ReadonlyArray<unknown> =>
-  Arr.flatMap(readdirSync(dir).sort(), (name) => {
-    const path = `${dir}/${name}`
-    if (name.endsWith("-shm")) return [{ path }]
-    const entry = statSync(path, { bigint: false })
-    if (entry.isDirectory()) return [{ path, mtime: entry.mtimeMs }, ...treeOf(path)]
-    return [{ path, mtime: entry.mtimeMs, bytes: Array.from(readFileSync(path)) }]
-  })
-
-/** The state and ledger directories as they are now. */
+/** The state and ledger directories as they are now, but `-shm` (owner ruling on B11; state-tree.ts). */
 const stateTree = (layout: Layout) => [treeOf(layout.state), treeOf(layout.ledgerDir)]
 
 /**

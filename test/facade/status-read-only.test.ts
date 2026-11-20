@@ -53,7 +53,8 @@ const configIn = (dir: string, stateDir: string) => {
 /**
  * Every entry of `dir` with its modification time, and each file's bytes.
  * SQLite's shared-memory index (`-shm`) is listed by name only: every
- * WAL reader records its read mark there (sqlite.org/wal.html).
+ * WAL reader records its read mark there (sqlite.org/wal.html), and the
+ * owner's ruling on B11 (2026-11-20) allows that one file to change.
  */
 const filesOf = (dir: string) =>
   Arr.map(readdirSync(dir).sort(), (name) => {
@@ -100,7 +101,7 @@ const missingStateCreatesNothing = (dir: string) =>
     const before = filesOf(dir)
     expect(yield* main(["--config", config, "status"], noClients)).toBe(0)
     expect(yield* Effect.scoped(productionStatus(config, noClients))).toEqual(
-      new StateMissing({ stateDir, logPath: `${stateDir}/log.sqlite` }),
+      new StateMissing({ stateDir, logPath: `${stateDir}/log.sqlite`, findings: [] }),
     )
     expect(readdirSync(stateDir)).toEqual([])
     expect(filesOf(dir)).toEqual(before)

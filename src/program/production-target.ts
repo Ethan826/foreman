@@ -7,6 +7,7 @@
 // one. All of this runs before any store is opened, any directory made or
 // any git command run.
 import { Effect, Option, String } from "effect"
+import type { CanonicalLayout } from "../domain/layout.ts"
 import type { TargetBinding } from "../domain/target.ts"
 import { decodeForemanConfig, type ForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
 import { stateFiles } from "../runtime/state-files.ts"
@@ -32,23 +33,40 @@ const ledgerSuffix = `/${ledgerFileName}`
  */
 export const configuredTarget = (configPath: string, environment: Readonly<Record<string, string | undefined>>) =>
   Effect.gen(function* () {
+    const { config, layout } = yield* decodedConfiguration(configPath, environment)
+    return { config, configured: targetOf(config, yield* checkedLayout(layout)) }
+  })
+
+/**
+ * Reads the configuration at `configPath` and settles the ledger's
+ * directory (`environment` supplies `HOME` for the default). Returns the
+ * configuration and its layout as written, unresolved and unchecked.
+ * Reads only. Fails with `ConfigUndecodable`, among others.
+ */
+export const decodedConfiguration = (
+  configPath: string,
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
+  Effect.gen(function* () {
     const config = yield* Effect.fromResult(decodeForemanConfig(yield* utf8Text(yield* stateFiles.read(configPath))))
     const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
-    const canonical = yield* checkedLayout({
+    const layout: CanonicalLayout = {
       stateDir: config.stateDir,
       ownerCheckout: config.ownerCheckout,
       supervisor: config.supervisor.path,
       ledgerDir,
-    })
-    const configured: TargetBinding = {
-      projectId: config.projectId,
-      ownerCheckout: canonical.ownerCheckout,
-      supervisor: { path: canonical.supervisor, name: config.supervisor.name },
-      ledger: `${canonical.ledgerDir}${ledgerSuffix}`,
-      attributeAllowance: config.attributeAllowance,
     }
-    return { config, configured }
+    return { config, layout }
   })
+
+/** The target `config` names, with the canonical paths of its resolved layout `canonical`. */
+export const targetOf = (config: ForemanConfig, canonical: CanonicalLayout): TargetBinding => ({
+  projectId: config.projectId,
+  ownerCheckout: canonical.ownerCheckout,
+  supervisor: { path: canonical.supervisor, name: config.supervisor.name },
+  ledger: `${canonical.ledgerDir}${ledgerSuffix}`,
+  attributeAllowance: config.attributeAllowance,
+})
 
 /**
  * The layout of `target`, the target in force, checked with the state
