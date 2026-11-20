@@ -256,3 +256,5 @@ Read next: [Format](../format/README.md) and [Features](../features/README.md), 
 [`git-home.ts`](git-home.ts) holds what Runtime reads at git's private `HOME` (batch review B02). The path is empty (`HomeAbsent`), holds an entry (`HomeFound`), or could not be read (`HomeUnreadable`). A found entry records whether it is a link or a directory, its permission bits, its owner and how many names it holds. The refusal, `GitHomeRefused`, lists each reason the home cannot be used.
 
 [`layout.ts`](layout.ts) holds `CanonicalLayout`, the four paths the layout rules compare once every link is resolved, and `LayoutRefused`, which lists each broken rule (batch review B05).
+
+[`target.ts`](target.ts) holds `TargetBinding`, the target a state directory is bound to: the project id, the owner's checkout, the supervisor worktree's path and branch name, the ledger file and the attribute allowance (batch review B04). `TargetMismatch` lists each field a configuration changes, and `TargetBindingUnreadable` reports a binding file that cannot be read.

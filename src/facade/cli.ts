@@ -15,7 +15,7 @@ import { correct } from "../program/correct.ts"
 import { closeFinished, reject } from "../program/handoff.ts"
 import { implement } from "../program/implement.ts"
 import { review } from "../program/review.ts"
-import { production, type Production } from "../program/production.ts"
+import { production, type Production, type ProductionFactory, reachableProduction } from "../program/production.ts"
 import { closeSession, openSession, stepEnded } from "../program/session.ts"
 import { productionStatus, StatusOutcome } from "../program/production-status.ts"
 import { createRecordedWorktree } from "../program/worktree-command.ts"
@@ -48,13 +48,27 @@ export const main = (
 
 /**
  * The command run and printed. `status` has its own construction, which
- * opens nothing for writing and takes no lock (review item B11); every
- * other command runs over the production context.
+ * opens nothing for writing, takes no lock and stays reachable under a
+ * configuration naming another target (review items B11 and B04); every
+ * other command runs over the production context its factory builds.
  */
 const executed = (invocation: Invocation, environment: Readonly<Record<string, string | undefined>>) =>
   Match.value(invocation.command).pipe(
     Match.tag("ShowStatus", () => printed(StatusOutcome, productionStatus(invocation.configPath, environment))),
-    Match.orElse((command) => Effect.flatMap(production(invocation.configPath, environment), run(command))),
+    Match.orElse((command) => Effect.flatMap(factoryFor(command)(invocation.configPath, environment), run(command))),
+  )
+
+/**
+ * The production factory a command other than `status` runs under (batch
+ * review B04): `step-ended` and `session close --abandoned |
+ * --interrupted` stay reachable under a mismatched configuration and run
+ * on the recorded target; every other command needs the configuration to
+ * name the recorded target.
+ */
+const factoryFor = (command: Exclude<CliCommand, ShowStatus>): ProductionFactory =>
+  Match.value(command).pipe(
+    Match.tags({ EndStep: () => reachableProduction, CloseSession: () => reachableProduction }),
+    Match.orElse(() => production),
   )
 
 /** The Program call for one command other than `status`, its result printed as JSON. */
@@ -63,7 +77,7 @@ const run = (command: Exclude<CliCommand, ShowStatus>) => (env: Production) =>
     Match.tag("CreateWorktree", () =>
       printed(WorktreeCreated, createRecordedWorktree(
         { log: env.context.capabilities.log, lock: env.context.capabilities.lock, create: env.worktree.createWorktree },
-        { ownerCheckout: env.config.ownerCheckout, ...env.config.supervisor, start: Option.none() },
+        { ownerCheckout: env.target.ownerCheckout, ...env.target.supervisor, start: Option.none() },
       )),
     ),
     Match.tag("OpenSession", (open) => printed(SessionOpened, openSession(env.context, open))),

@@ -24,3 +24,10 @@ declare module "node:path" {
   /** The last segment of `path`: everything after its last `/`. */
   export function basename(path: string): string
 }
+
+declare module "node:fs" {
+  /** Makes `newPath` a second name for the file at `existingPath` (link(2)); throws EEXIST when `newPath` exists. */
+  export function linkSync(existingPath: string, newPath: string): void
+  /** Removes the name `path` (unlink(2)). Throws on failure. */
+  export function unlinkSync(path: string): void
+}

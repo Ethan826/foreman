@@ -159,3 +159,5 @@ So `status`, `step-ended` and `close` stay reachable when the worktree, a client
 [`git-home.ts`](git-home.ts) holds `judgeGitHome` (batch review B02). Git's `HOME` passes only when it is a directory and not a symbolic link, foreman's user owns it, its mode is exactly 0700 and it is empty. Anything else is refused with every reason. An absent path is refused too, because Program judges only after creating it.
 
 [`layout.ts`](layout.ts) holds `checkLayout` (batch review B05). The state directory and the supervisor worktree must lie outside the owner's checkout. The owner's checkout, the state directory and the ledger directory must lie outside the supervisor worktree, which is the one place a client may write. `isWithin` compares whole path components, so `/a/bc` is not inside `/a/b`. The state directory may hold the supervisor worktree, as the design lays it out.
+
+[`target-binding.ts`](target-binding.ts) holds `compareTarget` (batch review B04). It compares every bound field of the configured target with the recorded binding and lists each difference, recorded value first.

@@ -63,3 +63,7 @@ These reads have a limit (review L02). `lstat`, `readlink` and `O_NOFOLLOW` guar
 ## Canonical paths
 
 [`canonical-path.ts`](canonical-path.ts) holds `canonicalPathOf` (batch review B05). It resolves a path's nearest existing ancestor with `realpath` and appends the components below it as given, so a path not made yet still resolves through any link above it. An entry that exists but cannot be resolved, such as a dangling link, fails with `PathUnreadable` and is never read as absent.
+
+## Target binding file
+
+[`binding-file.ts`](binding-file.ts) reads the target binding when it is present and creates it at most once (batch review B04). Creation writes the bytes to a temporary file of its own, flushes them and links that file to the final name with link(2), which fails when the name exists. The final name therefore holds a complete file or nothing, two first uses cannot both win, and an existing binding is never replaced.

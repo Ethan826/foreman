@@ -1,11 +1,12 @@
 // The production wiring of `status` (plan "Commands and their
 // prerequisites"; review item B11): it creates nothing and writes
-// nothing. It reads and decodes the configuration file, checks the
-// layout as production does (batch review B05; the check only resolves
-// paths, so it creates nothing), then opens the
-// project log in the state directory and the owner's shared ledger,
-// `<ledgerDir>/ledger.sqlite` (batch review B09), read-only, and only if
-// they are there; it takes no project lock. A state directory without
+// nothing. It settles the target as the reachable commands do
+// (production-target.ts; batch review B04, B05 and B09): the
+// configuration decoded, the layout checked, and the state directory's
+// recorded target in force when there is one; it records no binding,
+// and the layout check only resolves paths. It then opens the project
+// log in the state directory and the target's shared ledger read-only,
+// and only if they are there; it takes no project lock. A state directory without
 // a log is reported as `StateMissing`, and nothing is created in it. The
 // ledger is read in one deferred transaction, so status answers while
 // another process holds the ledger's write lock. The worktree check runs
@@ -18,7 +19,6 @@ import { defaultPolicy } from "../domain/policy.ts"
 import { allocationsInFallback } from "../features/admission.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { ownerOnly } from "../features/counting.ts"
-import { decodeForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
 import { decodeRevParseRevision } from "../format/rev-parse.ts"
 import { readClientVersionWith } from "../runtime/client-version.ts"
 import { pinnedGitWith, startGit } from "../runtime/git.ts"
@@ -26,12 +26,12 @@ import { readProcesses } from "../runtime/processes.ts"
 import { openLedgerReader, openLogReader } from "../runtime/state-read.ts"
 import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
-import { utf8Text } from "./client-output.ts"
-import { checkedLayout } from "./layout.ts"
 import { initialEstimates } from "./production.ts"
+import { settledTarget } from "./production-target.ts"
 import { WorktreeUnready } from "./session-context.ts"
 import { status, StatusReport } from "./status.ts"
 import type { StatusContext } from "./status-context.ts"
+import { recordedOrConfigured } from "./target-binding.ts"
 import { worktreeProgramWith, type WorktreeProgram } from "./worktree.ts"
 
 /** How long a status read waits for a lock SQLite holds briefly, in milliseconds. */
@@ -59,21 +59,14 @@ export const productionStatus = (
   environment: Readonly<Record<string, string | undefined>>,
 ): Effect.Effect<StatusOutcome, unknown, Scope.Scope> =>
   Effect.gen(function* () {
-    const config = yield* Effect.fromResult(decodeForemanConfig(yield* utf8Text(yield* stateFiles.read(configPath))))
+    const { config, target } = yield* settledTarget(recordedOrConfigured, configPath, environment)
     const { stateDir } = config
-    const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
-    yield* checkedLayout({
-      stateDir,
-      ownerCheckout: config.ownerCheckout,
-      supervisor: config.supervisor.path,
-      ledgerDir,
-    })
     const logPath = `${stateDir}/log.sqlite`
     const log = yield* openLogReader(logPath, busyTimeoutMillis)
     if (Option.isNone(log)) return new StateMissing({ stateDir, logPath })
-    const ledger = yield* openLedgerReader(`${ledgerDir}/${ledgerFileName}`, busyTimeoutMillis)
+    const ledger = yield* openLedgerReader(target.ledger, busyTimeoutMillis)
     const home = `${stateDir}/git-home`
-    const worktree = worktreeProgramWith(startGit, config.attributeAllowance)(home)
+    const worktree = worktreeProgramWith(startGit, target.attributeAllowance)(home)
     const parentEnvironment = Record.getSomes(Record.map(environment, Option.fromNullishOr))
     const context: StatusContext = {
       capabilities: {

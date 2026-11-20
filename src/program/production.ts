@@ -1,27 +1,27 @@
 // The production wiring of the assisted-session commands (plan "Injected
-// capabilities"; decision P3): reads and decodes the configuration file,
-// opens the project log and lock in the state directory and the shared
-// ledger, and builds every capability from Runtime. Nothing here decides; the
-// facade calls one command with the context this returns.
+// capabilities"; decision P3). It settles the target first
+// (production-target.ts): the configuration decoded, the layout checked
+// (batch review B05) and the target bound to the state directory (B04).
+// Then it prepares git's private HOME (B02), opens the project log and
+// lock in the state directory and the owner's shared ledger (B09), and
+// builds every capability from Runtime. Nothing here decides; the facade
+// calls one command with the context this returns.
 //
-// The ledger is `<ledgerDir>/ledger.sqlite`, one per owner, shared by
-// every project (design "Where the ledger lives"; batch review B09).
-// State directory layout: `log.sqlite`, `lock.sqlite`,
-// the session's published files, and `git-home`, the empty HOME every git
-// command runs with (plan B11b). Foreman creates `git-home` itself, private
-// and empty, before any git command, and refuses one that is not (batch
-// review B02). A
+// The state directory holds `log.sqlite`, `lock.sqlite`, the target
+// binding, Claude's editing profile, the session's published files and
+// `git-home`, the empty HOME every git command runs with (plan B11b). A
 // handoff's git work runs through the runner pinned to the session's
-// recorded worktree, with the configured attribute allowance.
+// recorded worktree, with the target's attribute allowance.
 import { Clock, Console, Effect, Formatter, Option, Random, Record } from "effect"
 import type { Scope } from "effect"
 import type { WorktreeCreated } from "../domain/events.ts"
+import type { TargetBinding } from "../domain/target.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { allocationsInFallback } from "../features/admission.ts"
 import { ownerOnly } from "../features/counting.ts"
 import { defaultPolicy } from "../domain/policy.ts"
 import { type Role, Roles } from "../domain/roles.ts"
-import { decodeForemanConfig, type ForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
+import type { ForemanConfig } from "../format/foreman-config.ts"
 import { startTimeOf } from "../format/ps.ts"
 import { decodeRevParseRevision } from "../format/rev-parse.ts"
 import { readClientVersionWith } from "../runtime/client-version.ts"
@@ -35,10 +35,10 @@ import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
 import { publishClaudeProfileWith } from "./claude-profile.ts"
 import { gitHomePath, preparedGitHome } from "./git-home.ts"
-import { checkedLayout } from "./layout.ts"
-import { utf8Text } from "./client-output.ts"
 import { handoffGitWith } from "./handoff-git.ts"
+import { settledTarget } from "./production-target.ts"
 import { type SessionContext, WorktreeUnready } from "./session-context.ts"
+import { recordedOrConfigured, requireBound, type TargetPolicy } from "./target-binding.ts"
 import { worktreeProgramWith, type WorktreeProgram } from "./worktree.ts"
 
 /** How long a log or ledger write waits for another writer, in milliseconds. */
@@ -63,39 +63,59 @@ export const initialEstimates: Readonly<Record<Role, number>> = {
 /** Everything a command runs with in production. */
 export interface Production {
   readonly config: ForemanConfig
+  /** The target in force: the configured one, or for a reachable command the recorded one. */
+  readonly target: TargetBinding
   readonly context: SessionContext
-  /** The supervisor worktree's creation and check, with the configured allowance. */
+  /** The supervisor worktree's creation and check, with the target's allowance. */
   readonly worktree: WorktreeProgram
 }
 
-/**
- * Reads the configuration at `configPath` and builds the production
- * capabilities for the scope; `environment` is foreman's own, from which
- * a client gets everything but `GIT_*` (decision P2). Fails with
- * `ConfigUndecodable` or the state files' and stores' failures.
- */
-export const production = (
+/** The production factory's signature: the configuration file and foreman's own environment. */
+export type ProductionFactory = (
   configPath: string,
   environment: Readonly<Record<string, string | undefined>>,
-): Effect.Effect<Production, unknown, Scope.Scope> =>
+) => Effect.Effect<Production, unknown, Scope.Scope>
+
+/**
+ * The production capabilities of a command that acts on the target:
+ * every launch and handoff, `worktree create`, `session open` and
+ * `session close --finished`. It records the target binding at first use
+ * and fails with `TargetMismatch` when the configuration names another
+ * target (batch review B04). `environment` is foreman's own, from which a
+ * client gets everything but `GIT_*` (decision P2).
+ */
+export const production: ProductionFactory = (configPath, environment) =>
+  productionUnder(requireBound, configPath, environment)
+
+/**
+ * The production capabilities of a command that stays reachable under a
+ * mismatched configuration: `status`, `step-ended` and `session close
+ * --abandoned | --interrupted`. It runs on the recorded target when there
+ * is one and records none (batch review B04).
+ */
+export const reachableProduction: ProductionFactory = (configPath, environment) =>
+  productionUnder(recordedOrConfigured, configPath, environment)
+
+/**
+ * Settles the target under `policy` (production-target.ts), then
+ * prepares git's HOME, opens the stores and wires every capability.
+ * Nothing is opened, made or run before the target is settled.
+ */
+const productionUnder = (
+  policy: TargetPolicy,
+  configPath: string,
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
   Effect.gen(function* () {
-    const text = yield* utf8Text(yield* stateFiles.read(configPath))
-    const config = yield* Effect.fromResult(decodeForemanConfig(text))
+    const { config, target } = yield* settledTarget(policy, configPath, environment)
     const { stateDir } = config
-    const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
-    yield* checkedLayout({
-      stateDir,
-      ownerCheckout: config.ownerCheckout,
-      supervisor: config.supervisor.path,
-      ledgerDir,
-    })
     const home = yield* preparedGitHome(gitHomePath(stateDir))
-    const worktree = worktreeProgramWith(startGit, config.attributeAllowance)(home)
+    const worktree = worktreeProgramWith(startGit, target.attributeAllowance)(home)
     const parentEnvironment = Record.getSomes(Record.map(environment, Option.fromNullishOr))
     const context: SessionContext = {
       capabilities: {
         log: yield* openProjectLog(`${stateDir}/log.sqlite`, busyTimeoutMillis),
-        ledger: yield* openLedger(`${ledgerDir}/${ledgerFileName}`, busyTimeoutMillis),
+        ledger: yield* openLedger(target.ledger, busyTimeoutMillis),
         lock: tryLock(`${stateDir}/lock.sqlite`),
         startClient: startClientWith(readProcesses, startTimeOf),
         readProcesses,
@@ -103,21 +123,21 @@ export const production = (
         stateFiles,
         publishClaudeProfile: publishClaudeProfileWith(stateFiles, stateDir),
         checkWorktree: (recorded) => checkedHead(worktree, home, recorded),
-        handoffGit: handoffGitWith(startGit, config.attributeAllowance)(home, stateDir),
+        handoffGit: handoffGitWith(startGit, target.attributeAllowance)(home, stateDir),
         newId,
         nowMono: Effect.succeed(Option.none()),
         show: Console.log,
         parentEnvironment,
       },
       settings: {
-        project: config.projectId,
+        project: target.projectId,
         stateDir,
         pins: config.pins,
         estimates: initialEstimates,
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
       },
     }
-    return { config, context, worktree }
+    return { config, target, context, worktree } satisfies Production
   })
 
 /**
