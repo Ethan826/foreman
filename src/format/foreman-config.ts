@@ -9,7 +9,7 @@
 // or a malformed value refuses the whole file, because a key the decoder
 // ignored could be a setting the owner believes is in force.
 import { Option, Result, Schema, String } from "effect"
-import { AttributeAllowance } from "../domain/attributes.ts"
+import { ApprovedAttributeAllowance } from "../domain/attributes.ts"
 import { Client } from "../domain/clients.ts"
 import { ProjectId } from "../domain/ids.ts"
 
@@ -53,7 +53,7 @@ const ConfigFile = Schema.Struct({
   ownerCheckout: AbsolutePath,
   supervisor: Supervisor,
   ledgerDir: Schema.optionalKey(AbsolutePath),
-  attributeAllowance: AttributeAllowance,
+  attributeAllowance: ApprovedAttributeAllowance,
   pins: Schema.Record(Client, Pin),
 })
 
@@ -72,7 +72,8 @@ export interface ForemanConfig {
    * `<HOME>/.foreman` (see {@link ledgerDirOf}).
    */
   readonly ledgerDir: Option.Option<string>
-  readonly attributeAllowance: AttributeAllowance
+  /** No root line, or Waxwing's one line (decision M09, batch review B06). */
+  readonly attributeAllowance: ApprovedAttributeAllowance
   /** Each client's pinned `--version` output, trimmed (decision P4). */
   readonly pins: Readonly<Record<Client, string>>
 }

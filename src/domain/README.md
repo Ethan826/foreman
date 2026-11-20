@@ -247,7 +247,7 @@ stateDiagram-v2
 
 [`findings.ts`](findings.ts) holds a reviewer's `Findings`: each has an id, a severity in the reviewer's own words, an optional file and a summary. An empty list asks for no changes. `NoFindingsBlock` and `MalformedFindings` are the decoder's failures; a review run that ends cleanly with either is `Unclassified`.
 
-[`attributes.ts`](attributes.ts) holds the attribute check's readings and refusals, and `AttributeAllowance`: exact lines a target may keep in its root `.gitattributes` (owner decision M09, option a). `noAttributeAllowance` permits no line.
+[`attributes.ts`](attributes.ts) holds the attribute check's readings and refusals, and `AttributeAllowance`: exact lines a target may keep in its root `.gitattributes` (owner decision M09, option a). `noAttributeAllowance` permits no line. A configuration may name only `ApprovedAttributeAllowance`: no line, or Waxwing's `*.wxw linguist-language=Rust` (`waxwingRootLine`) once (batch review B06). Any other line, or that line twice, fails to decode, so configuration cannot enable a conversion, a filter, a diff or merge driver or a macro. The general `AttributeAllowance` stays for the check's own tests and factories.
 
 Read next: [Format](../format/README.md) and [Features](../features/README.md), which import these types.
 

@@ -5,7 +5,7 @@
 // is recorded at first use; a later configuration naming the same state
 // directory must name the same target.
 import { Schema } from "effect"
-import { AttributeAllowance } from "./attributes.ts"
+import { ApprovedAttributeAllowance } from "./attributes.ts"
 import { ProjectId } from "./ids.ts"
 
 /** The bound target; see the module comment. */
@@ -15,7 +15,7 @@ export const TargetBinding = Schema.Struct({
   supervisor: Schema.Struct({ path: Schema.String, name: Schema.String }),
   /** The ledger file, `<ledgerDir>/ledger.sqlite`, canonical. */
   ledger: Schema.String,
-  attributeAllowance: AttributeAllowance,
+  attributeAllowance: ApprovedAttributeAllowance,
 })
 /** The bound target; see {@link TargetBinding}. */
 export type TargetBinding = typeof TargetBinding.Type

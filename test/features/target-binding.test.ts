@@ -3,6 +3,7 @@
 // test/program/production-binding.test.ts.
 import { describe, expect, it } from "@effect/vitest"
 import { Result } from "effect"
+import { waxwingRootLine } from "../../src/domain/attributes.ts"
 import { ProjectId } from "../../src/domain/ids.ts"
 import { type TargetBinding, TargetMismatch } from "../../src/domain/target.ts"
 import { compareTarget } from "../../src/features/target-binding.ts"
@@ -24,12 +25,16 @@ describe("compareTarget", () => {
   })
 
   it("lists every field that differs, recorded value first", () => {
-    const configured = { ...recorded, projectId: ProjectId.make("beta"), attributeAllowance: { rootLines: [""] } }
+    const configured: TargetBinding = {
+      ...recorded,
+      projectId: ProjectId.make("beta"),
+      attributeAllowance: { rootLines: [waxwingRootLine] },
+    }
     expect(compareTarget(binding, recorded, configured)).toEqual(
       Result.fail(
         new TargetMismatch({
           binding,
-          differences: ['projectId: recorded "alpha", configured "beta"', 'attributeAllowance: recorded {"rootLines":[]}, configured {"rootLines":[""]}'],
+          differences: ['projectId: recorded "alpha", configured "beta"', 'attributeAllowance: recorded {"rootLines":[]}, configured {"rootLines":["*.wxw linguist-language=Rust"]}'],
         }),
       ),
     )

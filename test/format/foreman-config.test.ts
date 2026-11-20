@@ -4,6 +4,7 @@
 // per-role grant estimate (decision P5, batch review B10).
 import { describe, expect, it } from "@effect/vitest"
 import { Option, Result } from "effect"
+import { waxwingRootLine } from "../../src/domain/attributes.ts"
 import { Clients } from "../../src/domain/clients.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { ConfigUndecodable, decodeForemanConfig, type ForemanConfig, ledgerDirOf } from "../../src/format/foreman-config.ts"
@@ -15,7 +16,7 @@ const file = (overrides: Record<string, unknown> = {}) => ({
   stateDir: "/state",
   ownerCheckout: "/owner",
   supervisor: { path: "/state/worktree", name: "assisted" },
-  attributeAllowance: { rootLines: ["* text=auto"] },
+  attributeAllowance: { rootLines: [waxwingRootLine] },
   pins,
   ...overrides,
 })
@@ -42,7 +43,7 @@ describe("decodeForemanConfig", () => {
       ownerCheckout: "/owner",
       supervisor: { path: "/state/worktree", name: "assisted" },
       ledgerDir: Option.none(),
-      attributeAllowance: { rootLines: ["* text=auto"] },
+      attributeAllowance: { rootLines: [waxwingRootLine] },
       pins,
     })
   })
@@ -98,8 +99,19 @@ describe("decodeForemanConfig", () => {
     refused(file({ pins: { ...pins, [Clients.Codex]: "" } }))
   })
 
-  it("refuses an allowance line holding a newline", () => {
+  it("refuses any allowance line but Waxwing's, and Waxwing's twice (B06)", () => {
     refused(file({ attributeAllowance: { rootLines: ["a\nb"] } }))
+    refused(file({ attributeAllowance: { rootLines: ["* text=auto"] } }))
+    refused(file({ attributeAllowance: { rootLines: ["*.txt filter=evil"] } }))
+    refused(file({ attributeAllowance: { rootLines: ["[attr]binary -diff"] } }))
+    refused(file({ attributeAllowance: { rootLines: [waxwingRootLine, waxwingRootLine] } }))
+    refused(file({ attributeAllowance: { rootLines: [`${waxwingRootLine} `] } }))
+  })
+
+  it("keeps no allowance line", () => {
+    expect(Result.map(decoded(file({ attributeAllowance: { rootLines: [] } })), (config) => config.attributeAllowance)).toEqual(
+      Result.succeed({ rootLines: [] }),
+    )
   })
 
   it("refuses a missing required key", () => {

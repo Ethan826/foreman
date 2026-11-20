@@ -166,8 +166,23 @@ export const AttributeAllowance = Schema.Struct({ rootLines: Schema.Array(Allowe
 /** Exact lines allowed in the root `.gitattributes`; see {@link AttributeAllowance}. */
 export type AttributeAllowance = typeof AttributeAllowance.Type
 
-/** The allowance that permits no line: option A unchanged. Production uses it until configuration supplies one. */
+/** The allowance that permits no line: option A unchanged. */
 export const noAttributeAllowance: AttributeAllowance = { rootLines: [] }
+
+/** Waxwing's one root line, the only line the owner approved (decision M09). */
+export const waxwingRootLine = "*.wxw linguist-language=Rust"
+
+/**
+ * The allowance a configuration may name (batch review B06): no line, or
+ * Waxwing's line once. Any other line, or the line twice, fails to
+ * decode; a generic allowance would need a separate owner ruling. The
+ * target binding keeps it to the state directory it was bound with.
+ */
+export const ApprovedAttributeAllowance = Schema.Struct({
+  rootLines: Schema.Union([Schema.Tuple([]), Schema.Tuple([Schema.Literal(waxwingRootLine)])]),
+})
+/** An allowance a configuration may name; see {@link ApprovedAttributeAllowance}. */
+export type ApprovedAttributeAllowance = typeof ApprovedAttributeAllowance.Type
 
 /**
  * The attribute sources the check reads (plan B11c, contract). A
