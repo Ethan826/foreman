@@ -1,4 +1,4 @@
-// The CLI (plan "Slice A1", facade; decision P3). `main` parses the
+// The CLI (plans "Slice A1" and "Slice A2", facade; decision P3). `main` parses the
 // arguments (cli-arguments.ts), builds the production context in
 // Program, calls the one Program function the command names, prints the
 // result as JSON on stdout or the failure on stderr, and returns the exit
@@ -11,9 +11,12 @@
 // .test.ts, owner ruling on A1) allows a reference to `process` only in
 // four Runtime modules. Where the entry may live waits on the owner.
 import { Cause, Console, Effect, Formatter, Match, Option, Result, Schema } from "effect"
-import { SessionClosed, SessionOpened, StepEndedByOwner, WorktreeCreated } from "../domain/events.ts"
+import { HandoffRejected, SessionClosed, SessionOpened, StepEndedByOwner, WorktreeCreated } from "../domain/events.ts"
 import { AttemptRecorded } from "../program/attempt.ts"
+import { correct } from "../program/correct.ts"
+import { closeFinished, reject } from "../program/handoff.ts"
 import { implement } from "../program/implement.ts"
+import { review } from "../program/review.ts"
 import { production, type Production } from "../program/production.ts"
 import { closeSession, openSession, stepEnded } from "../program/session.ts"
 import { status, StatusReport } from "../program/status.ts"
@@ -56,9 +59,13 @@ const run = (command: CliCommand) => (env: Production) =>
     ),
     Match.tag("OpenSession", (open) => printed(SessionOpened, openSession(env.context, open))),
     Match.tag("RunImplement", (options) => printed(AttemptRecorded, implement(env.context, options))),
+    Match.tag("RunReview", (options) => printed(AttemptRecorded, review(env.context, options))),
+    Match.tag("RunCorrect", (options) => printed(AttemptRecorded, correct(env.context, options))),
+    Match.tag("RejectHandoff", (options) => printed(HandoffRejected, reject(env.context, options))),
     Match.tag("ShowStatus", () => printed(StatusReport, status(env.context))),
     Match.tag("EndStep", (ended) => printed(StepEndedByOwner, stepEnded(env.context, ended))),
     Match.tag("CloseSession", (close) => printed(SessionClosed, closeSession(env.context, close))),
+    Match.tag("FinishSession", (finish) => printed(SessionClosed, closeFinished(env.context, finish))),
     Match.exhaustive,
   )
 

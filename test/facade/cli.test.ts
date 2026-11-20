@@ -1,5 +1,7 @@
-// The CLI's argument parsing (plan "Slice A1", facade): A1's commands
-// only, each mapped to one Program call. Parsing only; nothing runs.
+// The CLI's argument parsing (plan "Slice A1" and "Slice A2", facade):
+// the commands of both slices, each mapped to one Program call. Parsing
+// only; nothing runs, and the facade decides nothing: `--attest` is read
+// as given and Program refuses a handoff without it.
 import { describe, expect, it } from "@effect/vitest"
 import { Result } from "effect"
 import { GrantId, OpId, TrancheId } from "../../src/domain/ids.ts"
@@ -8,9 +10,13 @@ import {
   CloseSession,
   CreateWorktree,
   EndStep,
+  FinishSession,
   OpenSession,
   parseArguments,
+  RejectHandoff,
+  RunCorrect,
   RunImplement,
+  RunReview,
   ShowStatus,
   UsageError,
 } from "../../src/facade/cli-arguments.ts"
@@ -64,13 +70,57 @@ describe("parseArguments", () => {
     refused("status", "--config", "/etc/foreman.json")
   })
 
-  it("refuses A2's commands and anything unknown", () => {
-    refused(...config, "review", "--attest")
-    refused(...config, "correct")
-    refused(...config, "reject")
-    refused(...config, "session", "close", "--finished", "--attest")
+  it("parses review with or without --waive and --attest", () => {
+    expect(parsed("review", "--attest")?.command).toEqual(new RunReview({ waive: false, attest: true }))
+    expect(parsed("review", "--waive", "--attest")?.command).toEqual(new RunReview({ waive: true, attest: true }))
+    expect(parsed("review")?.command).toEqual(new RunReview({ waive: false, attest: false }))
+  })
+
+  it("parses correct with its findings file, --waive and --attest", () => {
+    expect(parsed("correct", "--findings", "/f.md", "--attest")?.command).toEqual(
+      new RunCorrect({ findingsFile: "/f.md", waive: false, attest: true }),
+    )
+    expect(parsed("correct", "--waive", "--attest", "--findings", "/f.md")?.command).toEqual(
+      new RunCorrect({ findingsFile: "/f.md", waive: true, attest: true }),
+    )
+    expect(parsed("correct", "--findings", "/f.md")?.command).toEqual(
+      new RunCorrect({ findingsFile: "/f.md", waive: false, attest: false }),
+    )
+  })
+
+  it("parses reject with or without a note", () => {
+    expect(parsed("reject")?.command).toEqual(new RejectHandoff({ note: "" }))
+    expect(parsed("reject", "--note", "wrong file")?.command).toEqual(new RejectHandoff({ note: "wrong file" }))
+  })
+
+  it("parses session close --finished with --attest and a note", () => {
+    expect(parsed("session", "close", "--finished", "--attest")?.command).toEqual(
+      new FinishSession({ note: "", attest: true }),
+    )
+    expect(parsed("session", "close", "--attest", "--finished", "--note", "done")?.command).toEqual(
+      new FinishSession({ note: "done", attest: true }),
+    )
+    expect(parsed("session", "close", "--finished")?.command).toEqual(new FinishSession({ note: "", attest: false }))
+  })
+
+  it("refuses anything unknown", () => {
     refused(...config, "launch")
     refused(...config)
+  })
+
+  it("refuses correct without its findings file and reject or review with another's flags", () => {
+    refused(...config, "correct", "--attest")
+    refused(...config, "correct", "--findings")
+    refused(...config, "reject", "--attest")
+    refused(...config, "review", "--findings", "/f.md")
+    refused(...config, "review", "--attest", "--attest")
+  })
+
+  it("refuses --attest on an abandoned or interrupted close, and more than one kind", () => {
+    refused(...config, "session", "close", "--abandoned", "--attest")
+    refused(...config, "session", "close", "--interrupted", "--attest")
+    refused(...config, "session", "close", "--finished", "--abandoned")
+    refused(...config, "session", "close", "--attest")
   })
 
   it("refuses a missing, repeated, unknown or valueless flag", () => {

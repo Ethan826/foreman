@@ -1,47 +1,60 @@
-// The CLI's arguments (plan "Slice A1", facade): `--config <path>` first,
-// then one of A1's commands. Parsing converts words into a command and
-// decides nothing else; each command maps to one Program call in cli.ts.
+// The CLI's arguments (plans "Slice A1" and "Slice A2", facade):
+// `--config <path>` first, then one command. Parsing converts words into
+// a command (cli-commands.ts) and decides nothing else; each command
+// maps to one Program call in cli.ts.
 //
 //   worktree create
 //   session open --tranche <id> --task <path>
 //   implement [--waive]
+//   review [--waive] --attest
+//   correct --findings <file> [--waive] --attest
+//   reject [--note <text>]
 //   status
 //   step-ended <opId> --grant <grantId>
 //   session close --abandoned|--interrupted [--note <text>]
+//   session close --finished --attest [--note <text>]
 import { Array as Arr, Option, Record, Result, Schema, String } from "effect"
 import { GrantId, OpId, TrancheId } from "../domain/ids.ts"
-import { CloseKind, CloseKinds } from "../domain/session.ts"
+import { CloseKinds } from "../domain/session.ts"
+import {
+  type CliCommand,
+  CloseSession,
+  CreateWorktree,
+  EndStep,
+  FinishSession,
+  OpenSession,
+  RejectHandoff,
+  RunCorrect,
+  RunImplement,
+  RunReview,
+  ShowStatus,
+} from "./cli-commands.ts"
 
-/** The words could not be read as an A1 command; `message` says why. */
+export {
+  type CliCommand,
+  CloseSession,
+  CreateWorktree,
+  EndStep,
+  FinishSession,
+  OpenSession,
+  RejectHandoff,
+  RunCorrect,
+  RunImplement,
+  RunReview,
+  ShowStatus,
+} from "./cli-commands.ts"
+
+/** The words could not be read as a command; `message` says why. */
 export class UsageError extends Schema.TaggedError<UsageError>()("UsageError", { message: Schema.String }) {}
-
-/** `worktree create`: create and record the supervisor worktree. */
-export class CreateWorktree extends Schema.TaggedClass<CreateWorktree>()("CreateWorktree", {}) {}
-/** `session open --tranche <id> --task <path>`. */
-export class OpenSession extends Schema.TaggedClass<OpenSession>()("OpenSession", {
-  tranche: TrancheId,
-  taskFile: Schema.String,
-}) {}
-/** `implement [--waive]`. */
-export class RunImplement extends Schema.TaggedClass<RunImplement>()("RunImplement", { waive: Schema.Boolean }) {}
-/** `status`. */
-export class ShowStatus extends Schema.TaggedClass<ShowStatus>()("ShowStatus", {}) {}
-/** `step-ended <opId> --grant <grantId>`. */
-export class EndStep extends Schema.TaggedClass<EndStep>()("EndStep", { opId: OpId, grantId: GrantId }) {}
-/** `session close --abandoned|--interrupted [--note <text>]`. */
-export class CloseSession extends Schema.TaggedClass<CloseSession>()("CloseSession", {
-  how: CloseKind,
-  note: Schema.String,
-}) {}
-
-/** Any A1 command. */
-export type CliCommand = CreateWorktree | OpenSession | RunImplement | ShowStatus | EndStep | CloseSession
 
 /** A parsed invocation: the configuration file and the command. */
 export interface Invocation {
   readonly configPath: string
   readonly command: CliCommand
 }
+
+/** The switches `session close` reads: one kind, and `--attest` for `--finished`. */
+const closeSwitches = ["--abandoned", "--interrupted", "--finished", "--attest"]
 
 /** The flags one command takes: those with a value and those without. */
 interface FlagSpec {
@@ -66,8 +79,9 @@ const configWords = 2
 /** The usage line printed with every usage error. */
 export const usage =
   "usage: foreman --config <path> (worktree create | session open --tranche <id> --task <path> | " +
-  "implement [--waive] | status | step-ended <opId> --grant <grantId> | " +
-  "session close --abandoned|--interrupted [--note <text>])"
+  "implement [--waive] | review [--waive] --attest | correct --findings <file> [--waive] --attest | " +
+  "reject [--note <text>] | status | step-ended <opId> --grant <grantId> | " +
+  "session close --abandoned|--interrupted [--note <text>] | session close --finished --attest [--note <text>])"
 
 /** Reads `argv` (the words after the program) as an invocation, or says why not. */
 export const parseArguments = (argv: ReadonlyArray<string>): Result.Result<Invocation, UsageError> =>
@@ -83,12 +97,15 @@ type CommandParser = readonly [
   (rest: ReadonlyArray<string>) => Result.Result<CliCommand, UsageError>,
 ]
 
-/** The parsers of the A1 commands, by their leading words. */
+/** The parsers of the commands, by their leading words. */
 const commands: ReadonlyArray<CommandParser> = [
   [["worktree", "create"], (rest) => withNoArguments(rest, new CreateWorktree())],
   [["session", "open"], (rest) => Result.flatMap(flagsOf(rest, { valued: ["--tranche", "--task"], switches: [] }), openOf)],
-  [["session", "close"], (rest) => Result.flatMap(flagsOf(rest, { valued: ["--note"], switches: ["--abandoned", "--interrupted"] }), closeOf)],
+  [["session", "close"], (rest) => Result.flatMap(flagsOf(rest, { valued: ["--note"], switches: closeSwitches }), closeOf)],
   [["implement"], (rest) => Result.map(flagsOf(rest, { valued: [], switches: ["--waive"] }), implementOf)],
+  [["review"], (rest) => Result.map(flagsOf(rest, { valued: [], switches: ["--waive", "--attest"] }), reviewOf)],
+  [["correct"], (rest) => Result.flatMap(flagsOf(rest, { valued: ["--findings"], switches: ["--waive", "--attest"] }), correctOf)],
+  [["reject"], (rest) => Result.map(flagsOf(rest, { valued: ["--note"], switches: [] }), rejectOf)],
   [["status"], (rest) => withNoArguments(rest, new ShowStatus())],
   [["step-ended"], (rest) => stepEndedOf(rest)],
 ]
@@ -144,20 +161,44 @@ const openOf = (flags: Flags) =>
     ),
   )
 
-/** `session close`: exactly one of `--abandoned` and `--interrupted`. */
+/** `session close`: exactly one kind; `--attest` only with `--finished`. */
 const closeOf = (flags: Flags) =>
-  Arr.match(flags.switches, {
-    onEmpty: () => failed("session close needs --abandoned or --interrupted"),
+  Arr.match(Arr.filter(flags.switches, (word) => word !== "--attest"), {
+    onEmpty: () => failed("session close needs --abandoned, --interrupted or --finished"),
     onNonEmpty: (kinds) =>
       Arr.length(kinds) > 1
-        ? failed("session close takes one of --abandoned and --interrupted")
-        : Result.succeed(
-            new CloseSession({
-              how: Arr.contains(kinds, "--abandoned") ? CloseKinds.Abandoned : CloseKinds.Interrupted,
-              note: Option.getOrElse(Record.get(flags.values, "--note"), () => ""),
-            }),
-          ),
+        ? failed("session close takes one of --abandoned, --interrupted and --finished")
+        : closeKindOf(Arr.headNonEmpty(kinds), noteOf(flags), Arr.contains(flags.switches, "--attest")),
   })
+
+/** The close command for one kind flag, with the note and whether `--attest` was given. */
+const closeKindOf = (kind: string, note: string, attest: boolean): Result.Result<CliCommand, UsageError> => {
+  if (kind === "--finished") return Result.succeed(new FinishSession({ note, attest }))
+  if (attest) return failed("--attest goes only with session close --finished")
+  return Result.succeed(new CloseSession({ how: kind === "--abandoned" ? CloseKinds.Abandoned : CloseKinds.Interrupted, note }))
+}
+
+/** The `--note` given, or an empty note. */
+const noteOf = (flags: Flags) => Option.getOrElse(Record.get(flags.values, "--note"), () => "")
+
+/** `review`: `--waive` and `--attest`, each optional. */
+const reviewOf = (flags: Flags) =>
+  new RunReview({ waive: Arr.contains(flags.switches, "--waive"), attest: Arr.contains(flags.switches, "--attest") })
+
+/** `correct`: `--findings` is required; `--waive` and `--attest` are optional. */
+const correctOf = (flags: Flags) =>
+  Result.map(
+    required(flags, "--findings"),
+    (findingsFile) =>
+      new RunCorrect({
+        findingsFile,
+        waive: Arr.contains(flags.switches, "--waive"),
+        attest: Arr.contains(flags.switches, "--attest"),
+      }),
+  )
+
+/** `reject`: an optional note. */
+const rejectOf = (flags: Flags) => new RejectHandoff({ note: noteOf(flags) })
 
 /** `implement`: `--waive` or nothing. */
 const implementOf = (flags: Flags) => new RunImplement({ waive: Arr.contains(flags.switches, "--waive") })
