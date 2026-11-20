@@ -14,7 +14,6 @@ import { Roles } from "../../src/domain/roles.ts"
 import { CloseKinds, SessionId, Sha256 } from "../../src/domain/session.ts"
 import { correct } from "../../src/program/correct.ts"
 import { closeFinished } from "../../src/program/handoff.ts"
-import { review } from "../../src/program/review.ts"
 import { closeSession } from "../../src/program/session.ts"
 import { claudeCrash } from "../fixtures/clients/claude-crash.ts"
 import { claudeLingeringChild, lingeringFile } from "../fixtures/clients/claude-lingering-child.ts"
@@ -22,12 +21,18 @@ import { codexReviewClean } from "../fixtures/clients/codex-review-clean.ts"
 import { codexReviewMalformed } from "../fixtures/clients/codex-review-malformed.ts"
 import { git } from "../runtime/git-repo.ts"
 import {
+  attestedClose,
+  attestedCorrect,
+  attestedReview,
+  unattestedCorrect,
+  unattestedReview,
+} from "./handoff-commands.ts"
+import {
   afterClean,
   afterFindings,
   afterImplement,
   corrected,
   implemented,
-  ownerFindings,
   rejected,
   reviewed,
   sessionIdOf,
@@ -35,27 +40,6 @@ import {
 } from "./handoff-steps.ts"
 import { type Harness, head, withHarness } from "./session-harness.ts"
 import { append, opened, refusedFor, tranche } from "./session-steps.ts"
-
-/** `review --waive` without `--attest`. */
-const unattestedReview = (harness: Harness) => review(harness.context, { waive: true, attest: false })
-
-/** `correct` of the owner's findings without `--attest`. */
-const unattestedCorrect = (harness: Harness) =>
-  Effect.flatMap(ownerFindings(harness), (findingsFile) =>
-    correct(harness.context, { findingsFile, waive: false, attest: false }),
-  )
-
-/** `review --waive --attest`. */
-const attestedReview = (harness: Harness) => review(harness.context, { waive: true, attest: true })
-
-/** `correct --attest` of the owner's findings. */
-const attestedCorrect = (harness: Harness) =>
-  Effect.flatMap(ownerFindings(harness), (findingsFile) =>
-    correct(harness.context, { findingsFile, waive: false, attest: true }),
-  )
-
-/** `session close --finished --attest`. */
-const attestedClose = (harness: Harness) => closeFinished(harness.context, { note: "", attest: true })
 
 const noAttestReview = (harness: Harness) =>
   Effect.gen(function* () {
