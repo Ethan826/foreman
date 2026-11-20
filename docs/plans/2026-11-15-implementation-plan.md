@@ -1699,6 +1699,25 @@ Deferred cleanups, recorded and not excused by the green checks:
 - `test/program/admission.test.ts` is 261 lines (from B11b), also over
   the limit.
 
+#### B11d: the pinned git runner (authorized 2026-11-19)
+
+Scope: [the B11d scope](2026-11-19-b11d-pinned-git-scope.md). The
+pinned runner adds the recorded `GIT_DIR`, `GIT_WORK_TREE` and
+`GIT_COMMON_DIR` to the clean environment, and its first consumer is the
+startup attribute check after identity verification.
+
+Owner authorization (2026-11-19), on condition that check and docs pass
+for 601c776. Both passed: check run 44644574511 and docs run
+44644574375, with build and deploy. The authorization keeps the existing
+identity-verification checks, and the clean runner for creation and
+discovery. It excludes protected digests, commit procedures, review
+worktrees, B12 to B18 and the deferred cleanups. Control: one fresh
+worker with a short brief, no delegation and no automatic follow-up. The
+estimate is about 200k worker tokens plus a focused review; it is
+uncertain and not a cap. `bun run docs`, `bun run check` and the full
+`bun run test` must pass. Measured usage is recorded, and the work stops
+for Codex review. Landing and push are not authorized.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
