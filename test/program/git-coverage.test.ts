@@ -1,5 +1,7 @@
 // Every git command the Program entry points run gets the clean
-// environment and the three overrides (plan B11b). The production entry
+// environment and the three overrides (plan B11b), and the startup
+// attribute check's commands also get the recorded worktree's GIT_DIR,
+// GIT_WORK_TREE and GIT_COMMON_DIR (plan B11d). The production entry
 // points are `worktreeProgramWith(startGit)`. The first test drives that
 // same factory over a recording process call, which passes each
 // invocation on to the real one, so creation and the startup check run
@@ -81,15 +83,19 @@ const createdAndIdentified = (dir: string, owner: string) =>
     ])
     expect(calls.filter(isConfigRead).map((each) => each.cwd)).toEqual([owner, owner, created.path, created.path])
     expect(calls.filter((each) => !startsWithOverrides(each))).toEqual([])
-    expect(calls.map((each) => each.env)).toEqual(
-      calls.map(() => ({
-        PATH: "/usr/bin:/bin",
-        HOME: emptyHome,
-        GIT_CONFIG_NOSYSTEM: "1",
-        GIT_CONFIG_GLOBAL: "/dev/null",
-        GIT_ATTR_SOURCE: "4b825dc642cb6eb9a060e54bf8d69288fbe24904",
-      })),
-    )
+    const clean = {
+      PATH: "/usr/bin:/bin",
+      HOME: emptyHome,
+      GIT_CONFIG_NOSYSTEM: "1",
+      GIT_CONFIG_GLOBAL: "/dev/null",
+      GIT_ATTR_SOURCE: "4b825dc642cb6eb9a060e54bf8d69288fbe24904",
+    }
+    const pinned = { ...clean, GIT_DIR: created.gitDir, GIT_WORK_TREE: created.path, GIT_COMMON_DIR: created.commonDir }
+    const unpinnedCount = calls.length - attributeReads.length
+    expect(calls.map((each) => each.env)).toEqual([
+      ...calls.slice(0, unpinnedCount).map(() => clean),
+      ...attributeReads.map(() => pinned),
+    ])
   })
 
 /**
@@ -187,7 +193,7 @@ describe("Program's git commands", () => {
     expect(productionDefinition(renamed).startGitSources).not.toEqual(['"../runtime/git.ts"'])
   })
 
-  it.effect("creation and the startup check run every git command clean, with the overrides first", () =>
+  it.effect("every git command runs clean with the overrides first, and only the startup attribute reads are pinned", () =>
     withRepo(createdAndIdentified))
 
   it.effect("the production entry points run git with the same environment as the factory over startGit", () =>

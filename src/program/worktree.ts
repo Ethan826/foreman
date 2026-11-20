@@ -6,7 +6,8 @@
 // and the ruling on R2 of the B11a review). Creation lives here because it
 // runs Features checks and Runtime imports only Domain. The production
 // entry points, `worktreeProgram`, run every git command through the clean
-// runner (plan B11b).
+// runner (plan B11b), and the startup attribute check through the runner
+// pinned to the recorded worktree (plan B11d).
 import { Effect, Option, Result } from "effect"
 import { WorktreeCreated } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
@@ -18,7 +19,7 @@ import { refuseExistingBranch, refuseExistingPath, requireAbsolute } from "../fe
 import { decodeIdentityRun, decodeRevParseLine, decodeRevParsePath, decodeRevParseRevision } from "../format/rev-parse.ts"
 import { decodeWorktreeList } from "../format/worktree-list.ts"
 import { statOf } from "../runtime/file-paths.ts"
-import { cleanGitWith, startGit, type GitOutput, type RunGit, type StartGit } from "../runtime/git.ts"
+import { cleanGitWith, pinnedGitWith, startGit, type GitOutput, type PinGit, type RunGit, type StartGit } from "../runtime/git.ts"
 import {
   addWorktreeWith,
   listWorktreesWith,
@@ -74,7 +75,8 @@ export interface WorktreeProgram {
    * the recorded git identity; otherwise fails with `WorktreeCheckFailed`
    * naming each failed condition, and `run` stops and reports. When those
    * hold, the attribute check runs inside the supervisor worktree, so its
-   * `config.worktree` applies, against the recorded `base` (plan B11c) and
+   * `config.worktree` applies, with git pinned to the recorded `gitDir`,
+   * `path` and `commonDir` (plan B11d), against the recorded `base` (plan B11c) and
    * fails with `AttributeSourcesRefused`, including for any conditional
    * include (option R); no working tree's `.gitattributes` is read. Fails with
    * `PathUnreadable` when the recorded path cannot be inspected, and with
@@ -120,14 +122,18 @@ export const createWorktreeWith = (run: RunGit) =>
   })
 
 /**
- * {@link WorktreeProgram.identifyWorktree} over an injected git runner. Lists the worktrees
- * from the recorded common directory, so the check runs even when the
- * worktree's own path is gone, and reads the recorded path's directory.
- * The attribute check runs after the worktree conditions pass, inside
- * the supervisor worktree, whose path they have just shown present,
- * against the recorded base.
+ * {@link WorktreeProgram.identifyWorktree} over an injected clean runner
+ * `run` and pinned runner builder `pinTo`. Lists the worktrees from the
+ * recorded common directory through `run`, so the check runs even when
+ * the worktree's own path is gone, and reads the recorded path's
+ * directory, its identity reads included, through `run` too, so a moved
+ * `.git` file or another repository there is still seen. The attribute
+ * check runs only after the worktree conditions pass, through
+ * `pinTo(worktree)`: git is pinned to the recorded `gitDir`, `path` and
+ * `commonDir` (plan B11d) and runs in the supervisor worktree, so its
+ * `config.worktree` applies, against the recorded base.
  */
-export const identifyWorktreeWith = (run: RunGit) =>
+export const identifyWorktreeWith = (run: RunGit, pinTo: PinGit) =>
   Effect.fn("identifyWorktree")(function* (worktree: WorktreeCreated) {
     const text = yield* listWorktreesWith(run)(worktree.commonDir)
     const entries = yield* Effect.fromResult(
@@ -137,21 +143,24 @@ export const identifyWorktreeWith = (run: RunGit) =>
     const directory = yield* directoryOf(reading)
     const entry = yield* Effect.fromResult(checkWorktree(worktree, entries, directory))
     const site = { cwd: worktree.path, commonDir: worktree.commonDir }
-    yield* checkAttributeSourcesWith(run)(site, worktree.base)
+    yield* checkAttributeSourcesWith(pinTo(worktree))(site, worktree.base)
     return entry
   })
 
 /**
- * The worktree entry points with every git command run through
- * `cleanGitWith(start)(home)`: one clean runner shared by creation and
- * the startup check. `home` is an empty directory the caller creates and
- * owns; nothing here checks it.
+ * The worktree entry points over one process call and one `home`.
+ * Creation and the startup check's listing, `stat` and identity reads run
+ * through `cleanGitWith(start)(home)`; the startup attribute check runs
+ * through `pinnedGitWith(start)(home)` for the recorded worktree (plan
+ * B11d). `home` is an empty directory the caller creates and owns;
+ * nothing here checks it.
  */
 export const worktreeProgramWith =
   (start: StartGit) =>
   (home: string): WorktreeProgram => {
     const run = cleanGitWith(start)(home)
-    return { createWorktree: createWorktreeWith(run), identifyWorktree: identifyWorktreeWith(run) }
+    const pinTo = pinnedGitWith(start)(home)
+    return { createWorktree: createWorktreeWith(run), identifyWorktree: identifyWorktreeWith(run, pinTo) }
   }
 
 /**

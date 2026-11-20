@@ -1,14 +1,14 @@
 // The clean git runner (design "Git environment", E7; plan B11b). The
 // process call is checked against real child processes: an executable
 // named `git` that runs `/usr/bin/env` prints exactly the environment it
-// was given, and shows which PATH resolved it. The clean runner is checked
-// with a recording process call beneath it.
+// was given, and shows which PATH resolved it. The clean and pinned runners
+// are checked with a recording process call beneath them.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
 import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { GitCommandFailed } from "../../src/domain/worktree.ts"
-import { cleanGitWith, startGit, type GitInvocation, type StartGit } from "../../src/runtime/git.ts"
+import { cleanGitWith, pinnedGitWith, startGit, type GitInvocation, type StartGit } from "../../src/runtime/git.ts"
 
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
@@ -100,5 +100,52 @@ describe("cleanGitWith", () => {
       const start: StartGit = () => Effect.succeed({ exitCode: 3, stdout: "out\n", stderr: "err\n" })
       const output = yield* cleanGitWith(start)("/injected/home")("/repo", ["status"])
       expect(output).toEqual({ exitCode: 3, stdout: "out\n", stderr: "err\n" })
+    }))
+})
+
+/** A recorded identity whose three values differ from each other and from every clean value. */
+const recorded = {
+  path: "/state/worktree",
+  gitDir: "/owner/.git/worktrees/worktree",
+  commonDir: "/owner/.git",
+}
+
+describe("pinnedGitWith", () => {
+  it.effect("runs each command with exactly the five clean variables and the three recorded ones", () =>
+    Effect.gen(function* () {
+      const calls: Array<GitInvocation> = []
+      const run = pinnedGitWith(recordingStart(calls))("/injected/home")(recorded)
+      yield* run("/state/worktree", ["config", "--get", "core.attributesFile"])
+      expect(calls).toEqual([
+        {
+          cwd: "/state/worktree",
+          args: [...overrides, "config", "--get", "core.attributesFile"],
+          env: {
+            PATH: "/usr/bin:/bin",
+            HOME: "/injected/home",
+            GIT_CONFIG_NOSYSTEM: "1",
+            GIT_CONFIG_GLOBAL: "/dev/null",
+            GIT_ATTR_SOURCE: "4b825dc642cb6eb9a060e54bf8d69288fbe24904",
+            GIT_DIR: "/owner/.git/worktrees/worktree",
+            GIT_WORK_TREE: "/state/worktree",
+            GIT_COMMON_DIR: "/owner/.git",
+          },
+        },
+      ])
+    }))
+
+  it.effect("passes the process call's output through unchanged", () =>
+    Effect.gen(function* () {
+      const start: StartGit = () => Effect.succeed({ exitCode: 3, stdout: "out\n", stderr: "err\n" })
+      const output = yield* pinnedGitWith(start)("/injected/home")(recorded)("/state/worktree", ["status"])
+      expect(output).toEqual({ exitCode: 3, stdout: "out\n", stderr: "err\n" })
+    }))
+
+  it.effect("passes the process call's failure through unchanged", () =>
+    Effect.gen(function* () {
+      const failure = new GitCommandFailed({ args: ["status"], exitCode: Option.none(), stderr: "killed\n" })
+      const start: StartGit = () => Effect.fail(failure)
+      const refused = yield* Effect.flip(pinnedGitWith(start)("/injected/home")(recorded)("/state/worktree", ["status"]))
+      expect(refused).toBe(failure)
     }))
 })

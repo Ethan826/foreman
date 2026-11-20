@@ -6,8 +6,9 @@
 // judges the whole reading. Creation runs it in the owner's checkout before
 // `git worktree add`, and the startup check runs it inside the supervisor
 // worktree against the recorded revision, so that worktree's
-// `config.worktree` applies; both go through the one clean runner of
-// `worktreeProgramWith`.
+// `config.worktree` applies. `worktreeProgramWith` passes creation the
+// clean runner and the startup check the runner pinned to the recorded
+// worktree (plan B11d); the check runs whichever `RunGit` it is given.
 import { Array as Arr, Effect, Match, Option } from "effect"
 import type { AttributesEntryRead, TreeEntry, TreeReading } from "../domain/attributes.ts"
 import { TreeListed } from "../domain/attributes.ts"

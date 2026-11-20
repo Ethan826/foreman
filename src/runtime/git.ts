@@ -1,11 +1,12 @@
-// The clean git command environment (design "Git environment", E7; plan
-// B11b). Every git command foreman runs goes through `cleanGit`: the
-// process gets exactly the five variables of {@link cleanGitEnvironment}
-// and nothing from the parent, and the three `-c` overrides come before
-// the command's own args. This is the one module that starts a process
-// for git (`test/runtime/git-process-gate.test.ts`). The pinned
-// `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR` for the supervisor's
-// tree and `--no-verify` are not applied here (excluded from B11b).
+// The git command environments (design "Git environment", E7; plans B11b
+// and B11d). Every git command foreman runs gets exactly the five
+// variables of {@link cleanGitEnvironment} and nothing from the parent,
+// and the three `-c` overrides come before the command's own args: through
+// `cleanGitWith`, or through `pinnedGitWith`, which adds the recorded
+// `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR` of one worktree. This is
+// the one module that starts a process for git
+// (`test/runtime/git-process-gate.test.ts`). `--no-verify` is not applied
+// here.
 import { Effect, Option } from "effect"
 import { execFile, type ExecFileError } from "node:child_process"
 import { GitCommandFailed } from "../domain/worktree.ts"
@@ -99,6 +100,64 @@ export const cleanGitWith = (start: StartGit) => (home: string): RunGit => {
 
 /** The production git runner: {@link cleanGitWith} over {@link startGit}. */
 export const cleanGit = cleanGitWith(startGit)
+
+/**
+ * The git identity recorded for a worktree when it was created: its top
+ * level, its own git directory and the repository's common directory,
+ * each an absolute path. The names match the fields of `WorktreeCreated`,
+ * so the record passes as it is.
+ */
+export interface RecordedGitIdentity {
+  /** The worktree's top level; becomes `GIT_WORK_TREE`. */
+  readonly path: string
+  /** The worktree's own git directory; becomes `GIT_DIR`. */
+  readonly gitDir: string
+  /** The repository's common git directory; becomes `GIT_COMMON_DIR`. */
+  readonly commonDir: string
+}
+
+/**
+ * Builds the runner for one recorded identity. Program receives one from
+ * {@link pinnedGitWith}; a test may inject another.
+ */
+export type PinGit = (identity: RecordedGitIdentity) => RunGit
+
+/**
+ * The environment of a pinned git command (design "Git environment", E7;
+ * plan B11d): the five variables of {@link cleanGitEnvironment} and
+ * exactly three more, `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR`,
+ * taken from the recorded identity. git then takes the worktree's git
+ * directory, the common directory's config and objects, and the work tree
+ * from these values, not from the directory, a `.git` file, the
+ * worktree's `commondir` file or `core.worktree`. Under git 2.50.1 refs
+ * are still found through the `commondir` file (probed for plan B11d).
+ */
+export const pinnedGitEnvironment = (
+  home: string,
+  identity: RecordedGitIdentity,
+): Readonly<Record<string, string>> => ({
+  ...cleanGitEnvironment(home),
+  GIT_DIR: identity.gitDir,
+  GIT_WORK_TREE: identity.path,
+  GIT_COMMON_DIR: identity.commonDir,
+})
+
+/**
+ * The pinned runner over an injected process call: each command gets the
+ * {@link cleanGitOverrides} before its args and runs with
+ * {@link pinnedGitEnvironment} for `home` and the identity it is given.
+ * The identity is the caller's record, not something this runner reads
+ * or checks; a `rev-parse` run through it reports these values back and
+ * so verifies nothing. Output and failures pass through as with
+ * {@link cleanGitWith}.
+ */
+export const pinnedGitWith =
+  (start: StartGit) =>
+  (home: string): PinGit =>
+  (identity) => {
+    const env = pinnedGitEnvironment(home, identity)
+    return (cwd, args) => start({ cwd, args: [...cleanGitOverrides, ...args], env })
+  }
 
 /** An `execFile` result as a {@link GitOutput}, or a failure when git did not exit. */
 const outcome = (

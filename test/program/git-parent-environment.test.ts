@@ -3,14 +3,14 @@
 // through the parent's HOME or GIT_CONFIG_GLOBAL, and a parent GIT_DIR
 // naming another repository. These tests set HOME, GIT_CONFIG_GLOBAL or
 // GIT_DIR in this test process's environment for the length of one test
-// and restore it afterwards (accepted by the owner, 2026-11-18: tests in a
-// file run one at a time, and each file has its own worker process).
+// and restore it afterwards, through `withParentEnvironment`.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import type { RunGit } from "../../src/runtime/git.ts"
 import { revParseArgs } from "../../src/runtime/worktree.ts"
 import { cleanRun, git, gitWith, makeRepo, withRepo } from "../runtime/git-repo.ts"
+import { withParentEnvironment } from "../runtime/parent-environment.ts"
 import {
   commitFile,
   createAndIdentifyClean,
@@ -41,41 +41,6 @@ const hostileGlobalConfig = (dir: string) => {
   )
   return { home: `${dir}/hostile`, config: `${dir}/hostile/.gitconfig`, marker: `${dir}/global.marker` }
 }
-
-/** The parent variables these tests set, each unset again by a static delete. */
-const unsetters = {
-  HOME: () => {
-    delete process.env.HOME
-  },
-  GIT_CONFIG_GLOBAL: () => {
-    delete process.env.GIT_CONFIG_GLOBAL
-  },
-  GIT_DIR: () => {
-    delete process.env.GIT_DIR
-  },
-}
-
-/** A variable of the parent environment that these tests set. */
-type ParentVariable = keyof typeof unsetters
-
-/**
- * Runs `use` with one variable set in this process's environment, and
- * restores it (or unsets it, if it was unset) afterwards.
- */
-const withParentEnvironment = <A, E>(name: ParentVariable, value: string, use: Effect.Effect<A, E>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const saved = process.env[name]
-      process.env[name] = value
-      return saved
-    }),
-    () => use,
-    (saved) =>
-      Effect.sync(() => {
-        if (saved === undefined) unsetters[name]()
-        else process.env[name] = saved
-      }),
-  )
 
 /**
  * Plants the hostile global config, points the parent variable `name` at
