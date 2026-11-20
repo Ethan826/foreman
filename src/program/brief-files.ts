@@ -8,7 +8,7 @@ import type { BriefRecorded } from "../domain/events.ts"
 import type { SessionAttempt, SessionState } from "../domain/session-state.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import type { HandoffFacts } from "./attempt.ts"
-import { fileIntact } from "./recorded-files.ts"
+import { fileIntact, type RecordedFileReader } from "./recorded-files.ts"
 import type { SessionContext } from "./session-context.ts"
 
 /** Whether every attempt of the open session has its brief recorded and intact; true with none open. */
@@ -32,7 +32,7 @@ export const withBriefsIntact =
     }))
 
 /** Whether one attempt's brief is recorded and its file has the recorded hash. */
-export const attemptBriefIntact = (context: SessionContext, attempt: SessionAttempt) =>
+export const attemptBriefIntact = (context: RecordedFileReader, attempt: SessionAttempt) =>
   Option.match(attempt.brief, {
     onNone: () => Effect.succeed(false),
     onSome: (brief: BriefRecorded) => fileIntact(context, brief.briefPath, brief.briefSha256),

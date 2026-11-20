@@ -17,7 +17,11 @@ declare module "bun:sqlite" {
 
   /** One connection to a SQLite database file. */
   export class Database {
-    constructor(filename: string, options?: { readonly create?: boolean })
+    /**
+     * Opens `filename`. With `create` a missing file is created; with
+     * `readonly` it is opened for reading only and never created.
+     */
+    constructor(filename: string, options?: { readonly create?: boolean; readonly readonly?: boolean })
     /** Runs one or more SQL statements with no parameters. */
     exec(sql: string): void
     /** Prepares (and caches) a statement. */

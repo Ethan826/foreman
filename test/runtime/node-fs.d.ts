@@ -2,8 +2,9 @@
 // runtime tests use to make and remove a temporary directory, to
 // signal readiness between processes through a file, and to make and
 // resolve a symbolic link, to make a directory unsearchable and
-// restore it, to write executable scripts for the git hazard tests, and
-// to read the file a git filter wrote, and to make a Unix socket.
+// restore it, to write executable scripts for the git hazard tests, to
+// read the file a git filter wrote, to make a Unix socket, and to list a
+// directory with each entry's modification time for the status tests.
 declare module "node:fs" {
   /**
    * Creates a new, empty directory whose name is `prefix` followed by six
@@ -51,6 +52,21 @@ declare module "node:fs" {
     path: string,
     options: { readonly recursive: boolean; readonly force: boolean },
   ): void
+  /** The names of the entries in the directory at `path`, without `.` and `..`. */
+  export function readdirSync(path: string): Array<string>
+  /**
+   * A file's status, following symbolic links, with its modification time
+   * in milliseconds since the epoch (`bigint: false` keeps numbers).
+   */
+  export function statSync(
+    path: string,
+    options: { readonly bigint: false },
+  ): {
+    /** The modification time, in milliseconds since the epoch. */
+    readonly mtimeMs: number
+    /** Whether the entry, after following symbolic links, is a directory. */
+    isDirectory(): boolean
+  }
 }
 declare module "node:os" {
   export function tmpdir(): string

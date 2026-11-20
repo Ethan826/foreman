@@ -17,9 +17,9 @@ import { implement } from "../program/implement.ts"
 import { review } from "../program/review.ts"
 import { production, type Production } from "../program/production.ts"
 import { closeSession, openSession, stepEnded } from "../program/session.ts"
-import { status, StatusReport } from "../program/status.ts"
+import { productionStatus, StatusOutcome } from "../program/production-status.ts"
 import { createRecordedWorktree } from "../program/worktree-command.ts"
-import { type CliCommand, parseArguments, usage } from "./cli-arguments.ts"
+import { type CliCommand, type Invocation, parseArguments, type ShowStatus, usage } from "./cli-arguments.ts"
 
 /** The exit status of a command that failed. */
 const failedStatus = 1
@@ -40,14 +40,25 @@ export const main = (
   Result.match(parseArguments(argv), {
     onFailure: (error) => Effect.as(Console.error(`${error.message}\n${usage}`), usageStatus),
     onSuccess: (invocation) =>
-      Effect.matchCauseEffect(Effect.scoped(Effect.flatMap(production(invocation.configPath, environment), run(invocation.command))), {
+      Effect.matchCauseEffect(Effect.scoped(executed(invocation, environment)), {
         onFailure: (cause) => Effect.as(Console.error(described(cause)), failedStatus),
         onSuccess: (text) => Effect.as(Console.log(text), 0),
       }),
   })
 
-/** The Program call for one command, its result printed as JSON. */
-const run = (command: CliCommand) => (env: Production) =>
+/**
+ * The command run and printed. `status` has its own construction, which
+ * opens nothing for writing and takes no lock (review item B11); every
+ * other command runs over the production context.
+ */
+const executed = (invocation: Invocation, environment: Readonly<Record<string, string | undefined>>) =>
+  Match.value(invocation.command).pipe(
+    Match.tag("ShowStatus", () => printed(StatusOutcome, productionStatus(invocation.configPath, environment))),
+    Match.orElse((command) => Effect.flatMap(production(invocation.configPath, environment), run(command))),
+  )
+
+/** The Program call for one command other than `status`, its result printed as JSON. */
+const run = (command: Exclude<CliCommand, ShowStatus>) => (env: Production) =>
   Match.value(command).pipe(
     Match.tag("CreateWorktree", () =>
       printed(WorktreeCreated, createRecordedWorktree(
@@ -60,7 +71,6 @@ const run = (command: CliCommand) => (env: Production) =>
     Match.tag("RunReview", (options) => printed(AttemptRecorded, review(env.context, options))),
     Match.tag("RunCorrect", (options) => printed(AttemptRecorded, correct(env.context, options))),
     Match.tag("RejectHandoff", (options) => printed(HandoffRejected, reject(env.context, options))),
-    Match.tag("ShowStatus", () => printed(StatusReport, status(env.context))),
     Match.tag("EndStep", (ended) => printed(StepEndedByOwner, stepEnded(env.context, ended))),
     Match.tag("CloseSession", (close) => printed(SessionClosed, closeSession(env.context, close))),
     Match.tag("FinishSession", (finish) => printed(SessionClosed, closeFinished(env.context, finish))),
@@ -68,7 +78,7 @@ const run = (command: CliCommand) => (env: Production) =>
   )
 
 /** The result of `effect`, encoded by `schema` and laid out as indented JSON. */
-const printed = <A, I, E>(schema: Schema.Codec<A, I>, effect: Effect.Effect<A, E>) =>
+const printed = <A, I, E, R>(schema: Schema.Codec<A, I>, effect: Effect.Effect<A, E, R>) =>
   Effect.map(Effect.flatMap(effect, Schema.encodeEffect(schema)), (encoded) =>
     Formatter.formatJson(encoded, { space: jsonIndent }),
   )

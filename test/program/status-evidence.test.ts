@@ -26,8 +26,8 @@ const descendantOnly =
 
 /** The harness's context with `listing` as the process listing. */
 const listing = (harness: Harness, text: string) => ({
-  ...harness.context,
-  capabilities: { ...harness.context.capabilities, readProcesses: () => Effect.succeed(text) },
+  ...harness.status,
+  capabilities: { ...harness.status.capabilities, readProcesses: () => Effect.succeed(text) },
 })
 
 const finishedLeaderWithDescendant = (harness: Harness) =>
@@ -61,7 +61,7 @@ const spawnedBeforeBatchL = (harness: Harness) =>
     yield* Effect.exit(implement(harness.context, { waive: false }))
     expect(harness.client.launches).toHaveLength(1)
     const intent = yield* firstIntent(harness)
-    const report = yield* status(harness.context)
+    const report = yield* status(harness.status)
     expect(report.incomplete).toEqual([{ opId: intent.opId, grantId: intent.grantId }])
     expect(report.launches).toMatchObject([
       { opId: intent.opId, finished: false, launched: Option.none(), evidence: { _tag: "LaunchUnknown" } },
@@ -70,7 +70,7 @@ const spawnedBeforeBatchL = (harness: Harness) =>
 
 const showsCoverage = (harness: Harness) =>
   Effect.gen(function* () {
-    expect((yield* status(harness.context)).coverage).toBe(snapshotCoverage)
+    expect((yield* status(harness.status)).coverage).toBe(snapshotCoverage)
   })
 
 describe("status evidence", () => {

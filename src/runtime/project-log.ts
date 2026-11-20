@@ -94,7 +94,8 @@ const connectionOf = (db: Database): TxConnection<ProjectLogError> => ({
   active: withDb(() => db.inTransaction),
 })
 
-const readFromDb = (db: Database, position: LogPosition) =>
+/** Every event after `position` on the connection `db`, in order; a status read uses it too. */
+export const readFromDb = (db: Database, position: LogPosition) =>
   Effect.gen(function* () {
     const rows = yield* Effect.flatMap(
       withDb(() =>

@@ -186,8 +186,8 @@ const appendOne = (db: Database) => (row: LedgerRow) =>
     return Option.some(seq)
   })
 
-/** Every stored row, in seq order. */
-const readAll = (db: Database): Effect.Effect<LedgerSnapshot, LedgerError | LedgerBusy> =>
+/** Every stored row, in seq order, in one statement on `db`; a status read uses it too. */
+export const readAll = (db: Database): Effect.Effect<LedgerSnapshot, LedgerError | LedgerBusy> =>
   Effect.gen(function* () {
     const stored = yield* Effect.flatMap(
       withDb(() => db.query(unionSql).all()),

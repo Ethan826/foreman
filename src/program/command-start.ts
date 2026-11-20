@@ -17,7 +17,8 @@ import type { SessionCommand } from "../domain/session.ts"
 import type { SessionState } from "../domain/session-state.ts"
 import { allowed, Allowed, type CommandChecks } from "../features/command-rules.ts"
 import { holdsInPlace, pinMatches } from "../features/launch-facts.ts"
-import type { SessionContext } from "./session-context.ts"
+import type { LedgerSnapshot } from "../domain/ledger.ts"
+import type { SessionCapabilities, SessionContext, SessionSettings } from "./session-context.ts"
 import { CommandRefused } from "./session-errors.ts"
 
 /** The log as one command read it: every event and the position after the last. */
@@ -27,8 +28,8 @@ export interface LogRead {
   readonly events: ReadonlyArray<ProjectEvent>
 }
 
-/** Reads the whole log. */
-export const readLog = (log: ProjectLog) =>
+/** Reads the whole log; needs only the log's read. */
+export const readLog = (log: Pick<ProjectLog, "readFrom">) =>
   Effect.map(
     log.readFrom(LogPosition.make(0)),
     (logged): LogRead => ({
@@ -50,7 +51,10 @@ export const recordedWorktree = (events: ReadonlyArray<ProjectEvent>): Option.Op
  * passes, or why not. Never fails, so a command that does not need the
  * check still runs.
  */
-export const worktreeReading = (context: SessionContext, events: ReadonlyArray<ProjectEvent>) =>
+export const worktreeReading = (
+  context: { readonly capabilities: Pick<SessionCapabilities, "checkWorktree"> },
+  events: ReadonlyArray<ProjectEvent>,
+) =>
   Option.match(recordedWorktree(events), {
     onNone: () => Effect.succeed(Result.fail("no supervisor worktree is recorded; run `worktree create`")),
     onSome: (recorded) =>
@@ -61,21 +65,39 @@ export const worktreeReading = (context: SessionContext, events: ReadonlyArray<P
  * Whether the installed `client` matches its pin. A client that cannot
  * be started does not match.
  */
-export const pinReading = (context: SessionContext, client: Client) =>
+export const pinReading = (
+  context: {
+    readonly capabilities: Pick<SessionCapabilities, "readClientVersion">
+    readonly settings: Pick<SessionSettings, "pins">
+  },
+  client: Client,
+) =>
   Effect.match(context.capabilities.readClientVersion(client), {
     onFailure: () => false,
     onSuccess: (output) => pinMatches(context.settings.pins[client], output),
   })
 
+/** What {@link holdsFrom} reads besides the log and the ledger: the clocks and the admission settings. */
+export interface HoldsContext {
+  readonly capabilities: Pick<SessionCapabilities, "nowMono">
+  readonly settings: Pick<SessionSettings, "admission" | "estimates">
+}
+
 /** The holds in place now: the log's holds less quota holds that readings release. */
 export const holdsNow = (context: SessionContext, read: LogRead) =>
+  Effect.flatMap(
+    context.capabilities.ledger.transact((tx) => tx.read),
+    (snapshot) => holdsFrom(context, read, snapshot),
+  )
+
+/** The holds in place now, from the log as read and a ledger snapshot read by the caller. */
+export const holdsFrom = (context: HoldsContext, read: LogRead, snapshot: LedgerSnapshot) =>
   Effect.gen(function* () {
-    const snapshot = yield* context.capabilities.ledger.transact((tx) => tx.read)
     return holdsInPlace(read.logged, snapshot, {
       now: yield* Clock.currentTimeMillis,
       nowMono: yield* context.capabilities.nowMono,
       context: context.settings.admission,
-      estimate: estimateOf(context),
+      estimate: estimateOf(context.settings),
     })
   })
 
@@ -104,6 +126,6 @@ export const requireAllowed = (command: SessionCommand, state: SessionState, che
 
 /** A provider's next grant estimate: the implementer's for Claude, the reviewer's for Codex. */
 const estimateOf =
-  (context: SessionContext) =>
+  (settings: Pick<SessionSettings, "estimates">) =>
   (provider: Client): number =>
-    context.settings.estimates[provider === Clients.Claude ? Roles.Implementer : Roles.Reviewer]
+    settings.estimates[provider === Clients.Claude ? Roles.Implementer : Roles.Reviewer]

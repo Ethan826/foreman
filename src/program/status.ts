@@ -3,8 +3,10 @@
 // holds in place, the armed waivers, the pin check of each client, the
 // worktree check, the integrity of each recorded report and brief, the
 // snapshot coverage statement, and the advisory process evidence for
-// every attempt of the open session, finished ones included. It never takes the lock and never appends
-// to the log or the ledger, so it works while another command runs and
+// every attempt of the open session, finished ones included. It runs
+// over a `StatusContext`, which holds reads only: no lock, no ledger
+// transaction that takes the write lock, and nothing that publishes or
+// appends (review item B11). So it works while another command runs and
 // whatever else is broken.
 import { Array as Arr, Effect, Match, Option, Result, Schema } from "effect"
 import { Client, Clients } from "../domain/clients.ts"
@@ -19,10 +21,11 @@ import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
 import { snapshotCoverage } from "../format/brief.ts"
 import { decodePs } from "../format/ps.ts"
-import { holdsNow, pinReading, readLog, worktreeReading } from "./command-start.ts"
+import { holdsFrom, pinReading, readLog, worktreeReading } from "./command-start.ts"
 import { attemptBriefIntact } from "./brief-files.ts"
 import { fileIntact } from "./recorded-files.ts"
-import type { SessionContext } from "./session-context.ts"
+import type { RecordedFileReader } from "./recorded-files.ts"
+import type { StatusContext } from "./status-context.ts"
 
 /** What `status` says about process evidence every time it shows some (plan "Process evidence"). */
 export const evidenceCaveat =
@@ -86,6 +89,8 @@ export const WorktreeStatus = Schema.Struct({ passed: Schema.Boolean, detail: Sc
 /** Everything `status` shows. */
 export const StatusReport = Schema.Struct({
   state: SessionState,
+  /** Whether a ledger file was found; without one the ledger reads as no rows. */
+  ledgerFound: Schema.Boolean,
   incomplete: Schema.Array(IncompleteAttempt),
   launches: Schema.Array(LaunchEvidence),
   holds: Schema.Array(Hold),
@@ -101,18 +106,24 @@ export const StatusReport = Schema.Struct({
 /** A status report; see {@link StatusReport}. */
 export type StatusReport = typeof StatusReport.Type
 
-/** Builds the status report (see the module comment). Fails only when the log or ledger cannot be read. */
-export const status = (context: SessionContext) =>
+/**
+ * Builds the status report (see the module comment) from reads alone.
+ * A missing ledger reads as no rows, and `ledgerFound` says so. Fails
+ * only when the log or the ledger cannot be read.
+ */
+export const status = (context: StatusContext) =>
   Effect.gen(function* () {
     const read = yield* readLog(context.capabilities.log)
     const fold = foldSession(read.events)
     const worktree = yield* worktreeReading(context, read.events)
     const listing = yield* Effect.result(context.capabilities.readProcesses())
+    const ledger = yield* context.capabilities.ledgerRows
     return {
       state: fold.state,
+      ledgerFound: Option.isSome(ledger),
       incomplete: Arr.map(incompleteOf(fold.state), incompleteAttempt),
       launches: Arr.map(attemptsOf(fold.state), (attempt) => launchEvidence(attempt, listing)),
-      holds: yield* holdsNow(context, read),
+      holds: yield* holdsFrom(context, read, Option.getOrElse(ledger, () => ({ entries: [] }))),
       armedWaivers: fold.armedWaivers,
       pinsMatch: {
         [Clients.Claude]: yield* pinReading(context, Clients.Claude),
@@ -176,14 +187,14 @@ const attemptsOf = (state: SessionState): ReadonlyArray<SessionAttempt> =>
   Option.match(openSessionOf(state), { onNone: () => [], onSome: (session) => session.attempts })
 
 /** Whether an attempt's brief is recorded and present with its recorded hash. */
-const briefIntegrityOf = (context: SessionContext, attempt: SessionAttempt) =>
+const briefIntegrityOf = (context: RecordedFileReader, attempt: SessionAttempt) =>
   Effect.map(
     attemptBriefIntact(context, attempt),
     (briefIntact): BriefIntegrity => ({ opId: attempt.intent.opId, briefIntact }),
   )
 
 /** Whether a report's two files are present with their recorded hashes. */
-const integrityOf = (context: SessionContext, report: ReportRecorded) =>
+const integrityOf = (context: RecordedFileReader, report: ReportRecorded) =>
   Effect.all({
     opId: Effect.succeed(report.opId),
     rawIntact: fileIntact(context, report.rawPath, report.rawSha256),

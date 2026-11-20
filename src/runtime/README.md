@@ -16,6 +16,8 @@ Tests run on the Bun runtime (`bun --bun vitest run`), so they reach `bun:sqlite
 
 [`project-log.ts`](project-log.ts) implements Domain's `ProjectLog`: one SQLite table of events numbered from 1. Each append includes the position its writer last read and runs in one `BEGIN IMMEDIATE` transaction. If another writer appended first, the append fails with `PositionMoved` and writes nothing. The writer then re-reads the log and decides again.
 
+[`state-read.ts`](state-read.ts) opens the log and the ledger for `status` only to read. A store whose file is missing gives none, and nothing is created: each file is opened read-only, and only when it is there. The ledger is read in one deferred transaction, which never takes the write lock, so the read is a consistent snapshot while another connection writes. Like every reader of a WAL database, it records its read mark in SQLite's shared-memory index (`-shm`); the database file and its WAL file are not written.
+
 [`project-lock.ts`](project-lock.ts) gives one holder at a time and refuses a second at once with `LockHeld`. Bun has no `flock`, so the lock is SQLite's exclusive lock on a dedicated lock file, held with `busy_timeout` 0. SQLite's unix locks are POSIX advisory locks, which the operating system drops when the holder's process dies. [`sqlite.ts`](sqlite.ts) holds what the stores share: recognizing `SQLITE_BUSY` and reading an error's message.
 
 ## Supervisor worktree

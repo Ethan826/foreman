@@ -75,7 +75,7 @@ const changedBriefRefuses = (change: (path: string) => void) => (harness: Harnes
     const [brief] = yield* briefsOf(harness)
     change(brief?.briefPath ?? "")
     yield* refusedFor(harness, review(harness.context, { waive: true, attest: true }), ["ReportsNotIntact"])
-    expect((yield* status(harness.context)).briefs).toEqual([{ opId: brief?.opId, briefIntact: false }])
+    expect((yield* status(harness.status)).briefs).toEqual([{ opId: brief?.opId, briefIntact: false }])
   })
 
 describe("the attempt's brief", () => {

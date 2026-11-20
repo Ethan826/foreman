@@ -3,13 +3,18 @@
 // session close-only. These reads check the hash before anything uses
 // the file.
 import { Effect } from "effect"
-import { sha256Of } from "../runtime/state-files.ts"
+import { sha256Of, type StateFiles } from "../runtime/state-files.ts"
 import { utf8Text } from "./client-output.ts"
 import type { SessionContext } from "./session-context.ts"
 import { RecordedFileChanged } from "./session-errors.ts"
 
+/** What reading a recorded file needs: the state files' read. */
+export interface RecordedFileReader {
+  readonly capabilities: { readonly stateFiles: Pick<StateFiles, "read"> }
+}
+
 /** Whether the file at `path` reads with SHA-256 `sha256`; an unreadable file is not intact. */
-export const fileIntact = (context: SessionContext, path: string, sha256: string) =>
+export const fileIntact = (context: RecordedFileReader, path: string, sha256: string) =>
   Effect.match(context.capabilities.stateFiles.read(path), {
     onFailure: () => false,
     onSuccess: (bytes) => sha256Of(bytes) === sha256,

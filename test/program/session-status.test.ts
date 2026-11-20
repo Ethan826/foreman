@@ -34,7 +34,7 @@ const statusReadsOnly = (harness: Harness) =>
     const rows = yield* rowsOf(harness)
     harness.trace.length = 0
     const report = yield* Effect.scoped(
-      Effect.andThen(tryLock(`${harness.dir}/lock.sqlite`), status(harness.context)),
+      Effect.andThen(tryLock(`${harness.dir}/lock.sqlite`), status(harness.status)),
     )
     expect(harness.trace).toEqual([])
     expect(yield* eventsOf(harness)).toEqual(events)
@@ -53,7 +53,7 @@ const statusNotLaunched = (harness: Harness) =>
     harness.inject.startFails = true
     yield* open(harness)
     yield* Effect.exit(implement(harness.context, { waive: false }))
-    const report = yield* status(harness.context)
+    const report = yield* status(harness.status)
     expect(report.launches).toMatchObject([{ evidence: { _tag: "LaunchUnknown" } }])
   })
 
@@ -63,8 +63,8 @@ const statusShowsEvidenceAndHolds = (harness: Harness) =>
     yield* append(harness, [failureHold, new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-c") })])
     const listing = `  PID  PGID STARTED                      COMMAND\n ${String(fakePid)} ${String(fakePid)} ${fakeStartedAt} claude -p\n`
     const report = yield* status({
-      ...harness.context,
-      capabilities: { ...harness.context.capabilities, readProcesses: () => Effect.succeed(listing) },
+      ...harness.status,
+      capabilities: { ...harness.status.capabilities, readProcesses: () => Effect.succeed(listing) },
     })
     expect(report.launches).toMatchObject([{ evidence: { _tag: "ProcessesListed", leader: { _tag: "LeaderListed" } } }])
     expect(report.holds).toMatchObject([{ _tag: "Failure" }])
@@ -76,24 +76,36 @@ const statusReportIntegrity = (harness: Harness) =>
     yield* open(harness)
     yield* implement(harness.context, { waive: false })
     const intent = yield* firstIntent(harness)
-    expect((yield* status(harness.context)).reports).toEqual([
+    expect((yield* status(harness.status)).reports).toEqual([
       { opId: intent.opId, rawIntact: true, handoffIntact: true },
     ])
-    const report = (yield* status(harness.context)).state
+    const report = (yield* status(harness.status)).state
     expect(report).toMatchObject({ _tag: "AwaitingHandoff", outcome: { _tag: "Crashed" } })
     const raw = harness.client.launches[0]?.rawPath.replace(/\.streaming$/, "") ?? ""
     writeFileSync(raw, "tampered\n")
-    expect((yield* status(harness.context)).reports).toEqual([
+    expect((yield* status(harness.status)).reports).toEqual([
       { opId: intent.opId, rawIntact: false, handoffIntact: true },
     ])
   })
 
 const statusShowsPinAndWorktreeFailures = (harness: Harness) =>
   Effect.gen(function* () {
-    const report = yield* status(harness.context)
+    const report = yield* status(harness.status)
     expect(report.state).toMatchObject({ _tag: "NoSession" })
     expect(report.pinsMatch).toEqual({ [Clients.Claude]: false, [Clients.Codex]: true })
     expect(report.worktree).toEqual({ passed: false, detail: "not locked" })
+  })
+
+const statusWithoutLedger = (harness: Harness) =>
+  Effect.gen(function* () {
+    yield* append(harness, [failureHold])
+    const report = yield* status({
+      ...harness.status,
+      capabilities: { ...harness.status.capabilities, ledgerRows: Effect.succeed(Option.none()) },
+    })
+    expect(report.ledgerFound).toBe(false)
+    expect(report.holds).toMatchObject([{ _tag: "Failure" }])
+    expect((yield* status(harness.status)).ledgerFound).toBe(true)
   })
 
 describe("status", () => {
@@ -103,6 +115,7 @@ describe("status", () => {
   it.effect("shows report integrity and a crashed outcome", () =>
     withHarness({ script: claudeCrash }, statusReportIntegrity),
   )
+  it.effect("reads a missing ledger as no rows and says it is missing", () => withHarness({}, statusWithoutLedger))
   it.effect("shows a pin mismatch and a failed worktree check", () =>
     withHarness({ installed: "2.1.329 (Claude Code)", worktreePasses: false }, statusShowsPinAndWorktreeFailures),
   )

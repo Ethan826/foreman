@@ -14,7 +14,14 @@ import { Clients } from "../../src/domain/clients.ts"
 import { BootId } from "../../src/domain/clock.ts"
 import { LogPosition, type WorktreeCreated } from "../../src/domain/events.ts"
 import { ProjectId, type Revision } from "../../src/domain/ids.ts"
-import { type LedgerRow, type LedgerStore, ReadingRow } from "../../src/domain/ledger.ts"
+import {
+  type LedgerBusy,
+  type LedgerError,
+  type LedgerRow,
+  type LedgerSnapshot,
+  type LedgerStore,
+  ReadingRow,
+} from "../../src/domain/ledger.ts"
 import { ClientStartFailed } from "../../src/domain/process.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import { Roles } from "../../src/domain/roles.ts"
@@ -23,10 +30,12 @@ import { allocationsInFallback } from "../../src/features/admission.ts"
 import { ownerOnly } from "../../src/features/counting.ts"
 import { handoffGitWith } from "../../src/program/handoff-git.ts"
 import { type SessionContext, WorktreeUnready } from "../../src/program/session-context.ts"
+import type { StatusContext } from "../../src/program/status-context.ts"
 import type { GitInvocation } from "../../src/runtime/git.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
 import { tryLock } from "../../src/runtime/project-lock.ts"
+import { openLedgerReader } from "../../src/runtime/state-read.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { type ClientScript, type FakeClient, fakeClient } from "../fixtures/clients/fake-client.ts"
 import { emptyHome } from "../runtime/git-repo.ts"
@@ -64,6 +73,8 @@ export interface Harness {
   readonly gitCalls: Array<GitInvocation>
   /** The ledger without tracing or injection, for the tests' own reads. */
   readonly rawLedger: LedgerStore
+  /** What `status` runs over: the same capabilities, with the stores opened read-only. */
+  readonly status: StatusContext
 }
 
 export interface HarnessOptions {
@@ -150,10 +161,29 @@ const build = (dir: string, options: HarnessOptions) =>
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
       },
     }
+    const ledgerReader = yield* Effect.flatMap(openLedgerReader(`${dir}/ledger.sqlite`, busyMillis), Effect.fromOption)
+    const status = statusOver(context, ledgerReader.read)
     return {
-      context, dir, taskFile, trace, shown, client, inject, worktree, base, gitCalls, rawLedger: ledger,
+      context, dir, taskFile, trace, shown, client, inject, worktree, base, gitCalls, rawLedger: ledger, status,
     } satisfies Harness
   })
+
+/** A status context over `context`'s reads, with the ledger read by `ledgerRead`. */
+export const statusOver = (
+  context: SessionContext,
+  ledgerRead: Effect.Effect<LedgerSnapshot, LedgerError | LedgerBusy>,
+): StatusContext => ({
+  capabilities: {
+    log: context.capabilities.log,
+    ledgerRows: Effect.map(ledgerRead, Option.some),
+    readProcesses: context.capabilities.readProcesses,
+    readClientVersion: context.capabilities.readClientVersion,
+    checkWorktree: context.capabilities.checkWorktree,
+    nowMono: context.capabilities.nowMono,
+    stateFiles: context.capabilities.stateFiles,
+  },
+  settings: context.settings,
+})
 
 /** Runs `use` over a fresh harness and removes its directory afterwards. */
 export const withHarness = <A, E>(
