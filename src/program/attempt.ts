@@ -1,0 +1,149 @@
+// The launch protocol of `implement`, `review` and `correct` (plan "Write
+// protocol", steps 1 and 3 to 8; step 2 belongs to a plan's `observe`).
+// Every log write is one atomic batch through `ProjectLog.append`, at the
+// position this command last wrote or read, and files are published
+// before the record that names them:
+//
+// 1. Take the lock, read the log, settle, fold, check the prerequisites.
+// 3. Admission and the waiver step (attempt-admission.ts): batches Q, W.
+// 4. Batch I: the plan's consent events, then `Intended`. A
+//    `PositionMoved` cancels the grant as a lost race.
+// 5-7. Start the client, batch L, publish the files, batch F
+//    (attempt-run.ts).
+// 8. Settle again, so the grant is charged at its estimate.
+//
+// A failure at any point stops the command and records nothing more, so
+// the state left matches the plan's crash table; nothing is replayed.
+// A2 adds `review` and `correct` by supplying a `LaunchPlan`: its facts
+// for the rules, its consent events, its brief, its handoff and decoding.
+import { Effect, Option, Result, Schema } from "effect"
+import type { Client } from "../domain/clients.ts"
+import { Intended, type ProjectEvent } from "../domain/events.ts"
+import { GrantId, OpId } from "../domain/ids.ts"
+import { StepOutcome } from "../domain/outcomes.ts"
+import type { Role } from "../domain/roles.ts"
+import type { Correct, Implement, Review } from "../domain/session.ts"
+import type { OpenSession, SessionFold } from "../domain/session-state.ts"
+import type { SnapshotCheck } from "../features/command-rules.ts"
+import { openSessionOf } from "../features/session-phases.ts"
+import { foldSession } from "../features/session.ts"
+import type { DecodedAttempt } from "../features/step-outcome.ts"
+import type { StateFileFailed } from "../runtime/state-files.ts"
+import { applySettle, cancelLostRace } from "./admission.ts"
+import { admitStep, type Grant } from "./attempt-admission.ts"
+import { type AttemptFiles, runClient } from "./attempt-run.ts"
+import { holdsNow, pinReading, readLog, requireAllowed, worktreeReading } from "./command-start.ts"
+import type { SessionContext } from "./session-context.ts"
+import { LostRace } from "./session-errors.ts"
+
+/** The facts a handoff command observes before the rules (A2): none for `implement`. */
+export interface HandoffFacts {
+  readonly attested: boolean
+  readonly reportsIntact: boolean
+  readonly snapshot: Option.Option<SnapshotCheck>
+}
+
+/** What a plan prepares once the rules allow it, before admission. */
+export interface Prepared {
+  /** The prompt the client receives. */
+  readonly brief: string
+  /** The correction round (decision P9); 0 for the implementation. */
+  readonly round: number
+  /** The events written in batch I before `Intended` (the owner's consent). */
+  readonly consent: ReadonlyArray<ProjectEvent>
+}
+
+/**
+ * One launch command: the rules' command, the role and client it
+ * launches, the owner's `--waive`, and the steps that differ by role.
+ * Errors of type `E` stop the command like any other failure.
+ */
+export interface LaunchPlan<E> {
+  readonly command: Implement | Review | Correct
+  readonly role: Role
+  readonly provider: Client
+  readonly waive: boolean
+  /** Step 2 and the handoff facts (A2); runs after the settle step. */
+  readonly observe: (fold: SessionFold) => Effect.Effect<HandoffFacts, E>
+  /** The brief, round and consent events, from recorded files only. */
+  readonly prepare: (session: OpenSession) => Effect.Effect<Prepared, E>
+  /** The client's argv from the brief and the attempt's files (a fixed profile). */
+  readonly argv: (brief: string, files: AttemptFiles) => readonly [string, ...Array<string>]
+  /** The handoff bytes once the leader exited; empty when the client gave none. */
+  readonly handoff: (files: AttemptFiles) => Effect.Effect<Uint8Array, E | StateFileFailed>
+  /** The decoded output classification reads. */
+  readonly decode: (lines: ReadonlyArray<string>, handoff: Uint8Array) => DecodedAttempt
+}
+
+/** The facts of a command with no handoff: `implement`. */
+export const noHandoffFacts: HandoffFacts = { attested: false, reportsIntact: true, snapshot: Option.none() }
+
+/** The attempt ran to batch F and the settle step after it. */
+export class AttemptRecorded extends Schema.TaggedClass<AttemptRecorded>()("AttemptRecorded", {
+  opId: OpId,
+  grantId: GrantId,
+  outcome: StepOutcome,
+}) {}
+
+/**
+ * Runs `plan`'s launch protocol (see the module comment) under the
+ * project lock, and returns the attempt's outcome. Fails with
+ * `CommandRefused`, `QuotaHeld`, `WaiverRefused` or `LostRace` as the
+ * protocol says, and with any capability's failure, after which nothing
+ * more is written.
+ */
+export const runAttempt = <E>(context: SessionContext, plan: LaunchPlan<E>) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const { capabilities, settings } = context
+      yield* capabilities.lock
+      const read = yield* readLog(capabilities.log)
+      yield* applySettle(capabilities.ledger, read.events, settings.project)
+      const fold = foldSession(read.events)
+      const facts = yield* plan.observe(fold)
+      const holds = yield* holdsNow(context, read)
+      const allowedNow = yield* requireAllowed(plan.command, fold.state, {
+        lockHeld: true,
+        worktreeCheckPassed: Result.isSuccess(yield* worktreeReading(context, read.events)),
+        provider: plan.provider,
+        pinMatches: yield* pinReading(context, plan.provider),
+        holds,
+        ...facts,
+      })
+      const session = yield* Effect.fromOption(openSessionOf(fold.state))
+      const prepared = yield* plan.prepare(session)
+      const grant = yield* admitStep(context, plan, { read, fold, holds, waiverStep: allowedNow.waiverStep })
+      const intent = intentOf(plan, session, prepared, grant)
+      const position = yield* appendIntent(context, grant, [...prepared.consent, intent])
+      const outcome = yield* runClient(context, plan, { session, intent, brief: prepared.brief, position })
+      yield* settleNow(context)
+      return new AttemptRecorded({ opId: intent.opId, grantId: intent.grantId, outcome })
+    }),
+  )
+
+/** The attempt's `Intended`: the session's tranche and base, the grant and any waiver. */
+const intentOf = <E>(plan: LaunchPlan<E>, session: OpenSession, prepared: Prepared, grant: Grant) =>
+  new Intended({
+    opId: grant.opId,
+    tranche: session.opened.tranche,
+    step: { role: plan.role, round: prepared.round },
+    baseRevision: session.opened.baseRevision,
+    grantId: grant.grantId,
+    client: plan.provider,
+    waiverId: grant.waiverId,
+  })
+
+/** Appends batch I; a moved log cancels the grant as a lost race (step 4). */
+const appendIntent = (context: SessionContext, grant: Grant, batch: ReadonlyArray<ProjectEvent>) =>
+  Effect.catchTag(context.capabilities.log.append(grant.position, batch), "PositionMoved", () =>
+    Effect.andThen(
+      cancelLostRace(context.capabilities.ledger, grant.grantId),
+      Effect.fail(new LostRace({ grantId: grant.grantId })),
+    ),
+  )
+
+/** Step 8: settles against the log as it is now. */
+const settleNow = (context: SessionContext) =>
+  Effect.flatMap(readLog(context.capabilities.log), (read) =>
+    applySettle(context.capabilities.ledger, read.events, context.settings.project),
+  )
