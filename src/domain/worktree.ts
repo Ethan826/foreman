@@ -178,8 +178,9 @@ export class PathUnreadable extends Schema.TaggedError<PathUnreadable>()(
 ) {}
 
 /**
- * A git command could not run or exited non-zero. `exitCode` is none
- * when git did not start or was ended by a signal.
+ * A git command could not run, exited non-zero, or printed bytes that are
+ * not valid UTF-8 (review finding B17; `stderr` then names that). `exitCode`
+ * is none when git did not start or was ended by a signal.
  */
 export class GitCommandFailed extends Schema.TaggedError<GitCommandFailed>()(
   "GitCommandFailed",

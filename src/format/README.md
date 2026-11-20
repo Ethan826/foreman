@@ -75,6 +75,8 @@ classDiagram
 
 [`blob-id.ts`](blob-id.ts) holds `blobId`, git's id of a blob: the SHA-1 of the header `blob <size>`, a NUL and the raw bytes, as 40 lowercase hexadecimal digits. A symbolic link's blob is its link text. No conversion is applied, so the id is that of the bytes as they are on disk, which is what the snapshot's raw checks compare with the tree. The digest is injected; Runtime passes the platform's SHA-1, and `test/format/blob-id.test.ts` checks the result against `git hash-object`. `isSha1ObjectFormat` accepts a `rev-parse --show-object-format` run only when it exited 0 and printed exactly `sha1`, so a SHA-256 repository is refused.
 
+[`path-list.ts`](path-list.ts) holds `decodePathList`, the strict decoder for a NUL-terminated path list as `git ls-files -z` prints it, which the snapshot's preflight reads (review finding B08). Each path is kept verbatim, a directory with its trailing slash. Output that does not end in a NUL, or holds an empty path, is `PathListUndecodable`, never a shorter list.
+
 ## Process listing
 
 [`ps.ts`](ps.ts) decodes `ps -A -o pid,pgid,lstart,command` as BSD ps and procps print it under `LC_ALL=C` with `decodePs`. The start time keeps the fixed `lstart` layout as text, and the command is the rest of the line. Decoding is strict: a missing final newline, another header or any row that does not decode fails the whole listing with `ProcessListingUndecodable`, because a skipped row would hide a process from the evidence. `startTimeOf` reads one pid's start time, or none, which is how the leader's start is read right after spawn.

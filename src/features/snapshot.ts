@@ -1,7 +1,9 @@
 // The snapshot's raw checks and the review's currency (plan A2, "Snapshot
 // identity and raw checks", AC5, M14). git staged the worktree into a
 // tree; these checks confirm that each entry of that tree is exactly what
-// is on disk, read with `lstat` and never through a link, so a conversion
+// is on disk, read with `lstat` and never through a link at the entry's
+// own path (the directories above it are trusted under the rung's
+// quiescence, review limit L02), so a conversion
 // git applied while staging (such as `core.autocrlf`) or a change after
 // staging is refused rather than reviewed. A gitlink, and any mode other
 // than a regular, executable or symbolic-link blob, is refused.

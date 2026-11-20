@@ -2,11 +2,16 @@
 // checks", AC5). A snapshot is the tree id of the worktree's covered
 // contents, staged in a temporary index. Each entry of that tree is
 // checked against what is on disk at its path, read without following a
-// symbolic link: Runtime's observations, the mismatches Features finds,
-// the verdict, whether a review is still current, and the typed failures
-// of taking a snapshot.
+// symbolic link at the path itself: Runtime's observations, the
+// mismatches Features finds, the verdict, whether a review is still
+// current, and the typed failures of taking a snapshot. Before anything is
+// staged, a preflight walk of the covered worktree refuses what staging
+// would drop or turn into a gitlink (review finding B08, M14). Every
+// observation assumes the assisted rung's quiescence: the directories
+// above a path are resolved as they stand, so a parent swapped for a link
+// by a concurrent writer is not detected (review limit L02).
 import { Schema } from "effect"
-import { TreeEntry } from "./attributes.ts"
+import { FileKind, TreeEntry } from "./attributes.ts"
 import { Revision } from "./ids.ts"
 import { GitText } from "./worktree.ts"
 
@@ -44,7 +49,11 @@ export class ObservedUnreadable extends Schema.TaggedClass<ObservedUnreadable>()
 
 /** What Runtime found at one tree entry's path; see {@link ObservedEntry}. */
 export const ObservedEntry = Schema.Union([ObservedRegular, ObservedLink, ObservedOther, ObservedAbsent, ObservedUnreadable])
-/** What was on disk at a path, read with `lstat` and never through a link. */
+/**
+ * What was on disk at a path, read with `lstat`, never through a link at
+ * the path itself; the directories above it are trusted to stay put
+ * (review limit L02).
+ */
 export type ObservedEntry = typeof ObservedEntry.Type
 
 /**
@@ -148,3 +157,77 @@ export class SnapshotRefused extends Schema.TaggedError<SnapshotRefused>()(
   "SnapshotRefused",
   { tree: Revision, mismatches: Schema.Array(SnapshotMismatch) },
 ) {}
+
+/**
+ * One entry of a directory as the preflight walk found it with `lstat`,
+ * never through a link at the entry: its name, decoded as strict UTF-8,
+ * and its kind.
+ */
+export const WalkedChild = Schema.Struct({ name: GitText, kind: FileKind })
+/** One entry of a walked directory; see {@link WalkedChild}. */
+export type WalkedChild = typeof WalkedChild.Type
+
+/** The base revision's tree holds a gitlink (mode 160000) at the path. */
+export class GitlinkInBase extends Schema.TaggedClass<GitlinkInBase>()("GitlinkInBase", { path: GitText }) {}
+
+/**
+ * A covered directory holds a `.git` entry of any kind, so `add -A` would
+ * stage it as a gitlink or skip the files under its git directory.
+ */
+export class NestedRepository extends Schema.TaggedClass<NestedRepository>()(
+  "NestedRepository",
+  { path: GitText },
+) {}
+
+/**
+ * A covered path is neither a regular file, a directory nor a symbolic
+ * link (a FIFO, a socket or a device), which `add -A` silently leaves out.
+ */
+export class SpecialFile extends Schema.TaggedClass<SpecialFile>()("SpecialFile", { path: GitText }) {}
+
+/**
+ * A covered directory could not be listed, one of its entries could not
+ * be inspected, or an entry's name is not valid UTF-8; `.` is the
+ * worktree's top level.
+ */
+export class WalkUnreadable extends Schema.TaggedClass<WalkUnreadable>()(
+  "WalkUnreadable",
+  { path: GitText, reason: Schema.String },
+) {}
+
+/** One reason the preflight refuses; see {@link PreflightFinding}. */
+export const PreflightFinding = Schema.Union([GitlinkInBase, NestedRepository, SpecialFile, WalkUnreadable])
+/** What the preflight walk found that the snapshot cannot cover exactly. */
+export type PreflightFinding = typeof PreflightFinding.Type
+
+/**
+ * The preflight refused the worktree before anything was staged: no
+ * `read-tree`, `add` or `write-tree` ran. Lists every finding.
+ */
+export class SnapshotPreflightRefused extends Schema.TaggedError<SnapshotPreflightRefused>()(
+  "SnapshotPreflightRefused",
+  { findings: Schema.Array(PreflightFinding) },
+) {}
+
+/**
+ * The walk descends into the directory at `path`; when `unlessIgnored`,
+ * only after `git check-ignore` says the directory is not ignored.
+ */
+export class WalkInto extends Schema.TaggedClass<WalkInto>()(
+  "WalkInto",
+  { path: GitText, unlessIgnored: Schema.Boolean },
+) {}
+
+/**
+ * The walk records `finding`; when `unlessIgnored`, only after `git
+ * check-ignore` says its path is not ignored.
+ */
+export class WalkFound extends Schema.TaggedClass<WalkFound>()(
+  "WalkFound",
+  { finding: PreflightFinding, unlessIgnored: Schema.Boolean },
+) {}
+
+/** One step the walk takes for a listed directory; see {@link WalkStep}. */
+export const WalkStep = Schema.Union([WalkInto, WalkFound])
+/** What the walk does next for one entry of a listed directory. */
+export type WalkStep = typeof WalkStep.Type

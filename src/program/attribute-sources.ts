@@ -45,7 +45,8 @@ export interface AttributeCheckSite {
  * `revision` when Features passes the reading under `allowance`, and fails with
  * `AttributeSourcesRefused` listing every refusal otherwise. A git run's
  * non-zero exit and an undecodable listing are refusals; it fails with
- * `GitCommandFailed` only when git could not start.
+ * `GitCommandFailed` only when git could not start or printed bytes that
+ * are not UTF-8 (review finding B17).
  *
  * Stated dependency, not checked: the check does not read
  * `$HOME/.config/git/attributes`, which git keeps in force under the

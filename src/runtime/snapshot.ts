@@ -1,6 +1,7 @@
 // The snapshot's Runtime pieces (plan A2, "Snapshot identity and raw
-// checks"): its git commands, the fresh temporary index file in the state
-// directory, and the platform SHA-1 that Format's blob id frames. Every
+// checks"): its git commands, the preflight's among them (review finding
+// B08), the fresh temporary index file in the state directory, and the
+// platform SHA-1 that Format's blob id frames. Every
 // command runs through the snapshot runner of `git.ts`, which points
 // `GIT_INDEX_FILE` at the temporary index, so the worktree's own index is
 // never read or written and no ref moves.
@@ -22,13 +23,25 @@ const unknownReason = "unknown error"
 export const snapshotArgs = {
   /** The repository's object format; only SHA-1 is accepted. */
   objectFormat: ["rev-parse", "--show-object-format"],
+  /**
+   * The ignored paths, before anything is staged (review finding B08): an
+   * ignored directory is printed once, with a trailing slash. Run with the
+   * fresh index, which does not exist yet, so every path counts as
+   * untracked and the base's paths are covered separately.
+   */
+  ignoredListing: ["ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"],
+  /**
+   * Whether git ignores `path`, by exit code alone: 0 ignored, 1 not
+   * ignored. `./` keeps a leading `:` from reading as pathspec magic.
+   */
+  checkIgnore: (path: string): ReadonlyArray<string> => ["check-ignore", "-q", "--", `./${path}`],
   /** Fills the fresh index from the base revision's tree. */
   readTree: (base: Revision): ReadonlyArray<string> => ["read-tree", base],
   /** Stages every tracked and untracked file git does not ignore. */
   addAll: ["add", "-A"],
   /** Writes the staged index as a tree and prints its id. */
   writeTree: ["write-tree"],
-  /** Lists every blob and gitlink of `tree`. */
+  /** Lists every blob and gitlink of `tree`, or of the base revision's tree for the preflight. */
   listTree: (tree: Revision): ReadonlyArray<string> => ["ls-tree", "--full-tree", "-r", "-z", tree],
   /**
    * The paths that differ between `base` and `tree`, for the review brief

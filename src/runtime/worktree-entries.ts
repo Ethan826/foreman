@@ -1,11 +1,19 @@
 // What is on disk at one entry of the snapshot's tree (plan A2, "Snapshot
 // identity and raw checks"). `lstat` decides the kind without following a
-// link: a symbolic link gives its link text through `readlink`, and its
-// target is never opened or inspected; a regular file is opened with
-// O_NOFOLLOW, so a link swapped in after the `lstat` fails rather than
-// being followed, and its bytes and executable bit come from that open
-// descriptor; anything else is reported as another kind and not read.
-// Raw results only: Program computes blob ids and Features judges.
+// link at the path itself: a symbolic link gives its link text through
+// `readlink`, and its target is never opened or inspected; a regular file
+// is opened with O_NOFOLLOW, so a link swapped in at the final component
+// after the `lstat` fails rather than being followed, and its bytes and
+// executable bit come from that open descriptor; anything else is
+// reported as another kind and not read. Raw results only: Program
+// computes blob ids and Features judges.
+//
+// Limit (review L02): `lstat`, `readlink` and O_NOFOLLOW protect only the
+// final component. The directories above it are resolved normally, so a
+// directory swapped for a link to somewhere outside the worktree between
+// staging and these reads would redirect them. These observations assume
+// the assisted rung's quiescence, with no concurrent writer in the
+// worktree; they do not defend against one.
 import { Array as Arr, Data, Effect, Predicate } from "effect"
 import { closeSync, constants, fstatSync, lstatSync, openSync, readFileSync, readlinkSync } from "node:fs"
 
@@ -31,8 +39,10 @@ export class EntryUnreadable extends Data.TaggedClass("EntryUnreadable")<{ reado
 export type WorktreeEntryReading = RegularRead | LinkRead | OtherRead | EntryAbsent | EntryUnreadable
 
 /**
- * Reads what is at an absolute path without following a link. Never
- * fails: a failure to inspect or read is {@link EntryUnreadable}.
+ * Reads what is at an absolute path without following a link at its
+ * final component; the directories above it are resolved normally (review
+ * limit L02). Never fails: a failure to inspect or read is
+ * {@link EntryUnreadable}.
  */
 export type ReadWorktreeEntry = (path: string) => Effect.Effect<WorktreeEntryReading>
 
@@ -51,7 +61,7 @@ const asBytes = { encoding: "buffer" } as const
 /**
  * The production {@link ReadWorktreeEntry}: `lstat`, then `readlink` for a
  * link, an O_NOFOLLOW read for a regular file, and nothing for any other
- * kind.
+ * kind. Each guards the final component only.
  */
 export const readWorktreeEntry: ReadWorktreeEntry = (path) =>
   Effect.catch(readingAt(path), (cause) => Effect.succeed(failedReading(cause)))

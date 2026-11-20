@@ -7,10 +7,13 @@
 // through `snapshotGitWith`, which adds `GIT_INDEX_FILE` to that (plan A2,
 // "Snapshot identity and raw checks"). This is the one module that starts a process for git
 // (`test/runtime/git-process-gate.test.ts`). `--no-verify` is not applied
-// here.
+// here. git's stdout and stderr arrive as bytes and are decoded as strict
+// UTF-8 (review finding B17): bytes that are not UTF-8 fail the run rather
+// than turning into U+FFFD, which could collide with a genuine U+FFFD path.
 import { Effect, Option } from "effect"
 import { execFile, type ExecFileError } from "node:child_process"
 import { GitCommandFailed } from "../domain/worktree.ts"
+import { strictUtf8 } from "./strict-utf8.ts"
 
 /** What a finished git command printed and its exit code. */
 export interface GitOutput {
@@ -21,8 +24,8 @@ export interface GitOutput {
 
 /**
  * Runs git with `args` in directory `cwd`. Succeeds with any exit code;
- * fails with {@link GitCommandFailed} only when git could not start or a
- * signal ended it. Production builds it with {@link cleanGit}; a test
+ * fails with {@link GitCommandFailed} only when git could not start, a
+ * signal ended it, or it printed bytes that are not UTF-8. Production builds it with {@link cleanGit}; a test
  * injects one to see or alter the commands.
  */
 export type RunGit = (
@@ -52,6 +55,12 @@ export type StartGit = (invocation: GitInvocation) => Effect.Effect<GitOutput, G
 export const emptyTree = "4b825dc642cb6eb9a060e54bf8d69288fbe24904"
 
 /**
+ * The `stderr` of the {@link GitCommandFailed} for a run that printed
+ * bytes which are not UTF-8 (review finding B17).
+ */
+export const undecodableOutput = "git printed output that is not valid UTF-8"
+
+/**
  * The `-c` overrides that precede every command: no hooks, no fsmonitor
  * and no signing program (design "Git environment").
  */
@@ -77,14 +86,18 @@ export const cleanGitEnvironment = (home: string): Readonly<Record<string, strin
 
 /**
  * Starts `git` through `execFile` with exactly the invocation's
- * environment, reading stdout and stderr as UTF-8. Bun 1.3.6 resolves
- * `git` on the given environment's PATH, not the parent's (checked by
+ * environment, reading stdout and stderr as raw bytes and decoding each as
+ * strict UTF-8, a leading byte order mark kept. Bytes that are not UTF-8
+ * in either stream fail the run with {@link GitCommandFailed}, git's exit
+ * code and {@link undecodableOutput}, before any caller sees a path or
+ * content (review finding B17). Bun 1.3.6 resolves `git` on the given
+ * environment's PATH, not the parent's (checked by
  * `test/runtime/git.test.ts`).
  */
 export const startGit: StartGit = ({ cwd, args, env }) =>
   Effect.callback<GitOutput, GitCommandFailed>((resume) => {
-    execFile("git", args, { cwd, env, encoding: "utf8" }, (error, stdout, stderr) => {
-      resume(outcome(args, error, stdout, stderr))
+    execFile("git", args, { cwd, env, encoding: "buffer" }, (error, stdout, stderr) => {
+      resume(Effect.flatMap(outcome(args, error, stderr), decodedWith(args, stdout, stderr)))
     })
   })
 
@@ -185,17 +198,28 @@ export const snapshotGitWith =
     return (cwd, args) => start({ cwd, args: [...cleanGitOverrides, ...args], env })
   }
 
-/** An `execFile` result as a {@link GitOutput}, or a failure when git did not exit. */
+/** The exit code of an `execFile` result, or a failure when git did not exit. */
 const outcome = (
   args: ReadonlyArray<string>,
   error: ExecFileError | null,
-  stdout: string,
-  stderr: string,
-): Effect.Effect<GitOutput, GitCommandFailed> =>
+  stderr: Uint8Array,
+): Effect.Effect<number, GitCommandFailed> =>
   Option.match(exitCodeOf(error), {
-    onNone: () => Effect.fail(notRun(args, error, stderr)),
-    onSome: (exitCode) => Effect.succeed({ exitCode, stdout, stderr }),
+    onNone: () => Effect.fail(notRun(args, error, diagnostic(stderr))),
+    onSome: Effect.succeed,
   })
+
+/** The run's output with both streams decoded, or the undecodable failure with git's exit code. */
+const decodedWith =
+  (args: ReadonlyArray<string>, stdout: Uint8Array, stderr: Uint8Array) =>
+  (exitCode: number): Effect.Effect<GitOutput, GitCommandFailed> =>
+    Option.match(Option.all({ stdout: strictUtf8(stdout), stderr: strictUtf8(stderr) }), {
+      onNone: () => Effect.fail(new GitCommandFailed({ args, exitCode: Option.some(exitCode), stderr: undecodableOutput })),
+      onSome: (streams) => Effect.succeed({ exitCode, ...streams }),
+    })
+
+/** The stderr of a git that did not exit, or {@link undecodableOutput} when it is not UTF-8. */
+const diagnostic = (stderr: Uint8Array): string => Option.getOrElse(strictUtf8(stderr), () => undecodableOutput)
 
 /** The exit code: 0 with no error, the error's numeric code, or none. */
 const exitCodeOf = (error: ExecFileError | null): Option.Option<number> =>

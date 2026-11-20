@@ -15,6 +15,7 @@ import type { RecordedGitIdentity } from "../domain/session.ts"
 import type {
   SnapshotIndexFailed,
   SnapshotObjectFormatRefused,
+  SnapshotPreflightRefused,
   SnapshotRefused,
   SnapshotStepFailed,
 } from "../domain/snapshot.ts"
@@ -41,9 +42,14 @@ export class WorktreeUnready extends Schema.TaggedError<WorktreeUnready>()("Work
  */
 export type CheckWorktree = (recorded: WorktreeCreated) => Effect.Effect<Revision, WorktreeUnready>
 
-/** Why a snapshot was not taken, or was refused by the raw checks (`SnapshotRefused`). */
+/**
+ * Why a snapshot was not taken: refused before staging
+ * (`SnapshotPreflightRefused`, review finding B08), or refused by the raw
+ * checks (`SnapshotRefused`).
+ */
 export type SnapshotFailure =
   | SnapshotObjectFormatRefused
+  | SnapshotPreflightRefused
   | SnapshotRefused
   | SnapshotStepFailed
   | SnapshotIndexFailed

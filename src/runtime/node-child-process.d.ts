@@ -4,9 +4,11 @@
 // documents it, `statSync`, `realpathSync`, and `lstatSync` and
 // `readFileSync` for the attribute check (plan B11c), and for the
 // snapshot (plan A2) the reads of a worktree entry that never follow a
-// link, the temporary index directory and `node:crypto`'s SHA-1.
-// `execFile` takes the
-// child's whole environment, required, so no call inherits the parent's.
+// link, the preflight's directory listing (review finding B08), the
+// temporary index directory and `node:crypto`'s SHA-1.
+// git's output is read as raw bytes and decoded with `node:util`'s strict
+// UTF-8 decoder (review finding B17). `execFile` takes the child's whole
+// environment, required, so no call inherits the parent's.
 // For the assisted cycle (plan A1): `spawn` for a client process, the
 // file calls of the atomic state-file publish, `createHash` from
 // `node:crypto` and `dirname` from `node:path`. `spawn` takes the whole
@@ -41,6 +43,20 @@ declare module "node:child_process" {
       readonly maxBuffer?: number
     },
     callback: (error: ExecFileError | null, stdout: string, stderr: string) => void,
+  ): unknown
+  /**
+   * {@link execFile} with stdout and stderr as raw bytes, undecoded, so the
+   * caller chooses how to decode them (review finding B17).
+   */
+  export function execFile(
+    file: string,
+    args: ReadonlyArray<string>,
+    options: {
+      readonly cwd: string
+      readonly env: Readonly<Record<string, string>>
+      readonly encoding: "buffer"
+    },
+    callback: (error: ExecFileError | null, stdout: Uint8Array, stderr: Uint8Array) => void,
   ): unknown
 
   /** A child's piped stdout or stderr. */
@@ -109,6 +125,20 @@ declare module "node:crypto" {
   export function createHash(algorithm: "sha1" | "sha256"): Hash
 }
 
+declare module "node:util" {
+  /**
+   * The WHATWG text decoder. With `fatal: true` {@link TextDecoder.decode}
+   * throws a TypeError on bytes that are not valid UTF-8 instead of
+   * replacing them with U+FFFD; with `ignoreBOM: true` a leading byte order
+   * mark is kept as U+FEFF instead of being dropped.
+   */
+  export class TextDecoder {
+    constructor(label: "utf-8", options: { readonly fatal: true; readonly ignoreBOM: true })
+    /** The text of `bytes`; throws as the constructor's options say. */
+    decode(bytes: Uint8Array): string
+  }
+}
+
 declare module "node:path" {
   /** The directory part of `path`: everything before its last segment. */
   export function dirname(path: string): string
@@ -142,6 +172,12 @@ declare module "node:fs" {
     /** Whether the entry is a regular file. */
     isFile(): boolean
   }
+  /**
+   * The names of the entries of the directory at `path`, without `.` and
+   * `..`, as raw bytes, undecoded, in no particular order. Throws when the
+   * directory cannot be read.
+   */
+  export function readdirSync(path: string, options: { readonly encoding: "buffer" }): ReadonlyArray<Uint8Array>
   /** Reads the whole file at `path` as UTF-8 text; throws when it cannot be read. */
   export function readFileSync(path: string, encoding: "utf8"): string
   /**

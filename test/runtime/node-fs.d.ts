@@ -3,7 +3,7 @@
 // signal readiness between processes through a file, and to make and
 // resolve a symbolic link, to make a directory unsearchable and
 // restore it, to write executable scripts for the git hazard tests, and
-// to read the file a git filter wrote.
+// to read the file a git filter wrote, and to make a Unix socket.
 declare module "node:fs" {
   /**
    * Creates a new, empty directory whose name is `prefix` followed by six
@@ -23,10 +23,11 @@ declare module "node:fs" {
    */
   export function mkdirSync(path: string): void
   /**
-   * Writes `data` to `path` as UTF-8, creating the file or replacing its
-   * contents. The parent directory must exist.
+   * Writes `data` to `path`, a string as UTF-8 and bytes as they are,
+   * creating the file or replacing its contents. The parent directory
+   * must exist.
    */
-  export function writeFileSync(path: string, data: string): void
+  export function writeFileSync(path: string, data: string | Uint8Array): void
   /** Reads the whole file at `path` as UTF-8 text; throws when it cannot be read. */
   export function readFileSync(path: string, encoding: "utf8"): string
   /**
@@ -53,4 +54,15 @@ declare module "node:fs" {
 }
 declare module "node:os" {
   export function tmpdir(): string
+}
+declare module "node:net" {
+  /** A server; the snapshot preflight tests use one only to make a Unix socket file. */
+  export interface Server {
+    /** Listens on the Unix socket at `path`, creating the socket file, then calls `ready`. */
+    listen(path: string, ready: () => void): unknown
+    /** Stops listening, removes the socket file, then calls `closed`. */
+    close(closed: () => void): unknown
+  }
+  /** Makes a server that is not yet listening. */
+  export function createServer(): Server
 }
