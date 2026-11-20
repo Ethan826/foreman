@@ -6,7 +6,9 @@
 //
 // State directory layout: `log.sqlite`, `ledger.sqlite`, `lock.sqlite`,
 // the session's published files, and `git-home`, the empty HOME every git
-// command runs with (plan B11b); a missing `git-home` reads as empty. A
+// command runs with (plan B11b). Foreman creates `git-home` itself, private
+// and empty, before any git command, and refuses one that is not (batch
+// review B02). A
 // handoff's git work runs through the runner pinned to the session's
 // recorded worktree, with the configured attribute allowance.
 import { Clock, Console, Effect, Formatter, Option, Random, Record } from "effect"
@@ -30,6 +32,7 @@ import { startClientWith } from "../runtime/spawn.ts"
 import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
 import { publishClaudeProfileWith } from "./claude-profile.ts"
+import { gitHomePath, preparedGitHome } from "./git-home.ts"
 import { utf8Text } from "./client-output.ts"
 import { handoffGitWith } from "./handoff-git.ts"
 import { type SessionContext, WorktreeUnready } from "./session-context.ts"
@@ -76,7 +79,7 @@ export const production = (
     const text = yield* utf8Text(yield* stateFiles.read(configPath))
     const config = yield* Effect.fromResult(decodeForemanConfig(text))
     const { stateDir } = config
-    const home = `${stateDir}/git-home`
+    const home = yield* preparedGitHome(gitHomePath(stateDir))
     const worktree = worktreeProgramWith(startGit, config.attributeAllowance)(home)
     const parentEnvironment = Record.getSomes(Record.map(environment, Option.fromNullishOr))
     const context: SessionContext = {

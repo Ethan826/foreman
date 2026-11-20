@@ -69,6 +69,7 @@ declare module "node:fs" {
   }
 }
 declare module "node:os" {
+  /** The system's directory for temporary files, under which tests make their own. */
   export function tmpdir(): string
 }
 declare module "node:net" {

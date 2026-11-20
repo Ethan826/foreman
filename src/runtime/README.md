@@ -55,3 +55,7 @@ These reads have a limit (review L02). `lstat`, `readlink` and `O_NOFOLLOW` guar
 ## State files
 
 [`state-files.ts`](state-files.ts) reads and publishes the files that events name by path and SHA-256, such as an attempt's handoff. `publish` writes `<path>.tmp`, flushes it, renames it over `path` and flushes the directory, so the final name holds either the earlier file or the complete new one. It returns the SHA-256 of the bytes it was given. A stale `<path>.tmp` from an interrupted publish is overwritten, and any failure is `StateFileFailed`. The directory's descriptor is closed even when its flush fails, and the flush failure is the one reported. `readIfPresent` gives none only when no file is at the path; a file it cannot read fails.
+
+## Git's private HOME
+
+[`git-home.ts`](git-home.ts) reads what is at git's `HOME` path without following a link (`readHome`) and creates the directory (`createHome`, batch review B02). Creation makes one directory with mode 0700 and sets that mode again, so the umask cannot change it. Nothing here removes, empties or changes an existing entry.

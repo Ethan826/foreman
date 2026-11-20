@@ -171,6 +171,10 @@ declare module "node:fs" {
     isDirectory(): boolean
     /** Whether the entry is a regular file. */
     isFile(): boolean
+    /** The entry's type and permission bits, as st_mode. */
+    readonly mode: number
+    /** The numeric id of the entry's owner. */
+    readonly uid: number
   }
   /**
    * The names of the entries of the directory at `path`, without `.` and

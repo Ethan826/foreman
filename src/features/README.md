@@ -153,3 +153,7 @@ So `status`, `step-ended` and `close` stay reachable when the worktree, a client
 [`process-evidence.ts`](process-evidence.ts) holds `processEvidence`, which reads a decoded `ps` listing against the leader `Launched` recorded. The leader counts as listed only with its recorded start time, since the system reuses process ids; members are the processes in the recorded group. The result is advisory and proves nothing.
 
 [`client-environment.ts`](client-environment.ts) holds `clientEnvironment`: the parent's environment minus every variable whose name starts with `GIT_` (decision P2), so foreman's own git settings cannot redirect a client's git commands.
+
+## Production boundaries
+
+[`git-home.ts`](git-home.ts) holds `judgeGitHome` (batch review B02). Git's `HOME` passes only when it is a directory and not a symbolic link, foreman's user owns it, its mode is exactly 0700 and it is empty. Anything else is refused with every reason. An absent path is refused too, because Program judges only after creating it.

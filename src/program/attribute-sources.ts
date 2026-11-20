@@ -48,11 +48,11 @@ export interface AttributeCheckSite {
  * `GitCommandFailed` only when git could not start or printed bytes that
  * are not UTF-8 (review finding B17).
  *
- * Stated dependency, not checked: the check does not read
+ * Stated dependency, not checked here: the check does not read
  * `$HOME/.config/git/attributes`, which git keeps in force under the
  * clean environment (probed for plan B11c). What keeps that file out of
- * force is the empty, private `HOME` that the eventual Runtime caller
- * creates and owns (B11b ruling 2) and passes to `worktreeProgramWith`.
+ * force is the empty, private `HOME` that production creates and checks
+ * before any git command (git-home.ts; B11b ruling 2, batch review B02).
  * A caller that passes a `HOME` holding that file lets its attributes
  * apply, whatever this check finds.
  */

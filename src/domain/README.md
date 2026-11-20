@@ -250,3 +250,7 @@ stateDiagram-v2
 [`attributes.ts`](attributes.ts) holds the attribute check's readings and refusals, and `AttributeAllowance`: exact lines a target may keep in its root `.gitattributes` (owner decision M09, option a). `noAttributeAllowance` permits no line.
 
 Read next: [Format](../format/README.md) and [Features](../features/README.md), which import these types.
+
+## Production boundaries
+
+[`git-home.ts`](git-home.ts) holds what Runtime reads at git's private `HOME` (batch review B02). The path is empty (`HomeAbsent`), holds an entry (`HomeFound`), or could not be read (`HomeUnreadable`). A found entry records whether it is a link or a directory, its permission bits, its owner and how many names it holds. The refusal, `GitHomeRefused`, lists each reason the home cannot be used.
