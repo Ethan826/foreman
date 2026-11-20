@@ -1,9 +1,9 @@
 // The one-attempt waiver rule against every kind of stop (design
 // "Waivers"; review items B15 and R01). A launch attempt that a
 // deliberate refusal stops before `Intended` expires every armed waiver:
-// a changed task file, an unreadable findings file, an unsafe profile
-// path, refused attribute sources and a snapshot preflight refusal, as
-// well as the rules' own refusals. A storage failure or a crash expires
+// a changed task file, a task that is not UTF-8, an unreadable findings
+// file, an unsafe profile path, refused attribute sources and a snapshot
+// preflight refusal, as well as the rules' own refusals. A storage failure or a crash expires
 // nothing, so the retry after batch W still launches with its waiver.
 import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Effect, Exit, Option, Schema } from "effect"
@@ -18,7 +18,7 @@ import { ProfilePathUnsafe } from "../../src/format/claude-settings.ts"
 import { correct } from "../../src/program/correct.ts"
 import { implement } from "../../src/program/implement.ts"
 import { review } from "../../src/program/review.ts"
-import { FindingsFileUnreadable, TaskFileChanged } from "../../src/program/session-errors.ts"
+import { FileNotUtf8, FindingsFileUnreadable, TaskFileChanged } from "../../src/program/session-errors.ts"
 import { StateFileFailed } from "../../src/runtime/state-files.ts"
 import { afterFindings, afterImplement } from "./handoff-steps.ts"
 import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
@@ -97,6 +97,14 @@ const changedTask = (harness: Harness) =>
     yield* expiresWaiver(harness, Clients.Claude, implement(harness.context, { waive: false }), Schema.is(TaskFileChanged))
   })
 
+const taskNotUtf8 = (harness: Harness) =>
+  Effect.gen(function* () {
+    writeFileSync(harness.taskFile, new Uint8Array([0x41, 0xff, 0x0a]))
+    yield* opened(harness)
+    yield* armed(harness, Clients.Claude)
+    yield* expiresWaiver(harness, Clients.Claude, implement(harness.context, { waive: false }), Schema.is(FileNotUtf8))
+  })
+
 const textAttributes = (harness: Harness) =>
   Effect.gen(function* () {
     yield* afterImplement(harness)
@@ -159,6 +167,7 @@ const crashKeeps = (harness: Harness) =>
 
 describe("a deliberate refusal before Intended expires every armed waiver", () => {
   it.effect("a changed task file, with Claude's waiver armed", () => withHarness({}, changedTask))
+  it.effect("a task that is not UTF-8, with Claude's waiver armed", () => withHarness({}, taskNotUtf8))
   it.effect("`* text` added before review, with Codex's waiver armed", () =>
     withHarness({ repository: true }, textAttributes),
   )

@@ -21,7 +21,7 @@ import { claudeSettingsPath } from "./claude-profile.ts"
 import { claudeDecoded, claudeHandoff } from "./client-output.ts"
 import { recordedText } from "./recorded-files.ts"
 import type { SessionContext } from "./session-context.ts"
-import { TaskFileChanged } from "./session-errors.ts"
+import { type FileNotUtf8, TaskFileChanged } from "./session-errors.ts"
 
 /** The owner's options for `implement`. */
 export interface ImplementOptions {
@@ -37,7 +37,7 @@ export const implement = (context: SessionContext, options: ImplementOptions) =>
 const implementPlan = (
   context: SessionContext,
   options: ImplementOptions,
-): LaunchPlan<TaskFileChanged | ProfilePathUnsafe | StateFileFailed> => ({
+): LaunchPlan<TaskFileChanged | FileNotUtf8 | ProfilePathUnsafe | StateFileFailed> => ({
   command: new Implement(),
   role: Roles.Implementer,
   provider: defaultRoleClients[Roles.Implementer],
@@ -59,10 +59,12 @@ const implementPlan = (
 /**
  * The session's task file as text, read from its published copy. Fails
  * with {@link TaskFileChanged} when it is missing or its hash differs
- * from the record, which leaves the session close-only.
+ * from the record, which leaves the session close-only, and with
+ * `FileNotUtf8` when its bytes are not UTF-8 (review finding R04).
  */
 export const recordedTask = (context: SessionContext, session: OpenSession) =>
-  Effect.mapError(
+  Effect.catchTag(
     recordedText(context, session.opened.taskPath, session.opened.taskSha256),
-    () => new TaskFileChanged({ path: session.opened.taskPath }),
+    "RecordedFileChanged",
+    () => Effect.fail(new TaskFileChanged({ path: session.opened.taskPath })),
   )

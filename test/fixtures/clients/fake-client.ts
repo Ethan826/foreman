@@ -7,9 +7,9 @@
 // it supply recorded-shape stream-json and `--json` events. A test may
 // queue a script per launch; the first in the queue plays next, and the
 // fake's own script plays when the queue is empty.
-import { Effect, Option, Stream } from "effect"
+import { Effect, Option, Result, Stream } from "effect"
 import { writeFileSync } from "node:fs"
-import type { ClientExit } from "../../../src/domain/process.ts"
+import type { ClientExit, StdoutLine } from "../../../src/domain/process.ts"
 import type { ClientLaunch, StartClient } from "../../../src/runtime/spawn.ts"
 
 /** What a scripted client prints and how its leader ends. */
@@ -54,7 +54,7 @@ export const fakeClient = (script: ClientScript): FakeClient => {
         pid: fakePid,
         pgid: fakePid,
         leaderStartedAt: Option.some(fakeStartedAt),
-        lines: Stream.fromIterable(playing.lines),
+        lines: Stream.fromIterable(playing.lines.map(asStdoutLine)),
         exit: Effect.succeed(playing.exit),
       }
     })
@@ -67,6 +67,9 @@ const writeLastMessage = (launch: ClientLaunch, script: ClientScript) => {
   const path = launch.argv[index + 1]
   if (script.lastMessage !== undefined && index >= 0 && path !== undefined) writeFileSync(path, script.lastMessage)
 }
+
+/** A scripted line as the starter streams it: text, since the script holds only text. */
+const asStdoutLine = (line: string): StdoutLine => Result.succeed(line)
 
 /** A leader that exited with `code`. */
 export const exitedWith = (code: number): ClientExit => ({ code: Option.some(code), signal: Option.none() })

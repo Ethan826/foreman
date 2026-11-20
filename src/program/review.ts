@@ -11,6 +11,7 @@
 // decides the outcome, and when it decodes it is published as the
 // session's findings draft for the owner to edit.
 import { type Cause, Effect, Option, Result, String } from "effect"
+import { MalformedFindings } from "../domain/findings.ts"
 import { HandoffApproved, SnapshotTaken } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
 import { codexReviewArgv } from "../domain/profiles.ts"
@@ -27,7 +28,7 @@ import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedPassing, handoffTextOf, takeSnapshot } from "./handoff-facts.ts"
 import { recordedTask } from "./implement.ts"
 import type { HandoffGitFailure, SessionContext } from "./session-context.ts"
-import { ChangedPathsUnread, type RecordedFileChanged, type TaskFileChanged } from "./session-errors.ts"
+import { ChangedPathsUnread, type FileNotUtf8, type RecordedFileChanged, type TaskFileChanged } from "./session-errors.ts"
 
 /** The owner's options for `review`. */
 export interface ReviewOptions {
@@ -42,6 +43,7 @@ export type ReviewFailure =
   | HandoffGitFailure
   | TaskFileChanged
   | RecordedFileChanged
+  | FileNotUtf8
   | ChangedPathsUnread
   | Cause.NoSuchElementError
 
@@ -73,7 +75,7 @@ const reviewPlan = (context: SessionContext, options: ReviewOptions): LaunchPlan
   prepare: (input) => prepared(context, input),
   argv: (brief, files) => codexReviewArgv({ brief, lastMessageFile: files.lastMessage }),
   handoff: (files) => lastMessage(context, files),
-  decode: (lines, handoff) => ({ client: codexDecoded(lines), findings: findingsOf(handoff) }),
+  decode: (lines, handoff) => ({ client: codexDecoded(lines), findings: findingsOfMessage(handoff) }),
   afterHandoff: (session, handoff) => publishDraft(context, session, handoff),
 })
 
@@ -130,6 +132,20 @@ const lastMessage = (context: SessionContext, files: AttemptFiles) =>
 /** The findings block of a final message; none when there was no message to read. */
 const findingsOf = (handoff: string) =>
   String.isEmpty(handoff) ? Option.none() : Option.some(decodeFindingsBlock(handoff))
+
+/**
+ * The findings block of a final message that may not be UTF-8: a final
+ * message whose bytes are not UTF-8 has malformed findings, which makes
+ * the review `Unclassified` (review finding R04).
+ */
+const findingsOfMessage = (handoff: Option.Option<string>) =>
+  Option.match(handoff, { onNone: notUtf8Findings, onSome: findingsOf })
+
+/** The findings of a final message that is not UTF-8. */
+const notUtf8Findings = () => Option.some(Result.fail(new MalformedFindings({ reason: notUtf8Reason })))
+
+/** Why the findings of a final message that is not UTF-8 are malformed. */
+const notUtf8Reason = "the final message is not valid UTF-8"
 
 /** Publishes the findings draft when the final message's findings decode. */
 const publishDraft = (context: SessionContext, session: OpenSession, handoff: string) =>

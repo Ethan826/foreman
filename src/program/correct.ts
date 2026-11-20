@@ -20,7 +20,7 @@ import { Attestations, Correct } from "../domain/session.ts"
 import type { OpenSession } from "../domain/session-state.ts"
 import { correctBrief } from "../format/brief.ts"
 import { type LaunchPlan, type PrepareInput, runAttempt } from "./attempt.ts"
-import { claudeDecoded, claudeHandoff, utf8Text } from "./client-output.ts"
+import { claudeDecoded, claudeHandoff, strictText } from "./client-output.ts"
 import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedOnReviewedTree, handoffTextOf, lastEdit, takeSnapshot } from "./handoff-facts.ts"
 import { recordedTask } from "./implement.ts"
@@ -28,7 +28,7 @@ import type { ProfilePathUnsafe } from "../format/claude-settings.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
 import { claudeSettingsPath } from "./claude-profile.ts"
 import type { HandoffGitFailure, SessionContext } from "./session-context.ts"
-import { FindingsFileUnreadable, type RecordedFileChanged, type TaskFileChanged } from "./session-errors.ts"
+import { type FileNotUtf8, FindingsFileUnreadable, type RecordedFileChanged, type TaskFileChanged } from "./session-errors.ts"
 
 /** The owner's options for `correct`. */
 export interface CorrectOptions {
@@ -45,6 +45,7 @@ export type CorrectFailure =
   | HandoffGitFailure
   | TaskFileChanged
   | RecordedFileChanged
+  | FileNotUtf8
   | FindingsFileUnreadable
   | StateFileFailed
   | ProfilePathUnsafe
@@ -103,6 +104,9 @@ const prepared = (context: SessionContext, options: CorrectOptions, input: Prepa
     return { brief, round: session.corrections + 1, consent }
   })
 
+/** Why a findings file whose bytes are not UTF-8 is unreadable (review finding R04). */
+const findingsNotUtf8 = "not valid UTF-8"
+
 /**
  * The owner's findings file, read and published in the state directory
  * as `<sessionId>.<reviewOpId>.findings.md`: its text and its SHA-256.
@@ -116,5 +120,9 @@ const ownerFindings = (context: SessionContext, session: OpenSession, reviewOpId
     )
     const copy = `${context.settings.stateDir}/${session.opened.sessionId}.${reviewOpId}.findings.md`
     const sha256 = yield* stateFiles.publish(copy, bytes)
-    return { text: yield* utf8Text(bytes), sha256 }
+    const text = yield* Effect.mapError(
+      strictText(path, bytes),
+      () => new FindingsFileUnreadable({ path, reason: findingsNotUtf8 }),
+    )
+    return { text, sha256 }
   })

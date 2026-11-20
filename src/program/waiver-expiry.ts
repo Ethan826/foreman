@@ -38,6 +38,7 @@ import type { SessionContext } from "./session-context.ts"
 import type {
   ChangedPathsUnread,
   CommandRefused,
+  FileNotUtf8,
   FindingsFileUnreadable,
   LostRace,
   QuotaHeld,
@@ -52,6 +53,7 @@ export type AttemptStop =
   | ChangedPathsUnread
   | ClientStartFailed
   | CommandRefused
+  | FileNotUtf8
   | FindingsFileUnreadable
   | GitCommandFailed
   | GrantSettled
@@ -85,9 +87,9 @@ const failure = constant(false)
  * waiver, or a failure to read, write or run, which expires none. A
  * refusal is foreman deciding, from what it read, that the attempt must
  * not launch: the rules, quota, a refused `--waive`, a lost race at
- * batch I, a changed recorded file, an unreadable findings file, an
- * unsafe profile path, refused attribute sources and the snapshot's
- * refusals. A failure is a store, file, git command or process that did
+ * batch I, a changed recorded file, a file that is not UTF-8, an
+ * unreadable findings file, an unsafe profile path, refused attribute
+ * sources and the snapshot's refusals. A failure is a store, file, git command or process that did
  * not do its work, after which a retry may succeed with the same
  * consent. `NoSuchElementError` arises only when state the rules
  * required is missing, which is a fault, not a decision.
@@ -100,6 +102,7 @@ export const isRefusal: (stop: AttemptStop) => boolean = Match.type<AttemptStop>
     ChangedPathsUnread: failure,
     ClientStartFailed: failure,
     CommandRefused: refusal,
+    FileNotUtf8: refusal,
     FindingsFileUnreadable: refusal,
     GitCommandFailed: failure,
     GrantSettled: failure,

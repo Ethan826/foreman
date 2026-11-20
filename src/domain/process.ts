@@ -4,7 +4,7 @@
 // advisory evidence that `status` shows, and the typed failures of
 // starting a client and reading the listing. Foreman never signals a
 // client, so nothing here describes stopping one.
-import { Schema } from "effect"
+import { type Result, Schema } from "effect"
 
 /** A process or process group id as `ps` prints it: a positive integer. */
 export const ProcessId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))
@@ -131,6 +131,19 @@ export class NothingListed extends Schema.TaggedClass<NothingListed>()("NothingL
 export const ProcessEvidence = Schema.Union([ProcessesListed, NothingListed])
 /** Advisory process evidence; see {@link ProcessEvidence}. */
 export type ProcessEvidence = typeof ProcessEvidence.Type
+
+/**
+ * A line of a client's stdout whose bytes are not UTF-8 (review finding
+ * R04): `byteLength` bytes without the line's end. Its text is never
+ * guessed, so classification counts it malformed; the raw file keeps
+ * the bytes.
+ */
+export class UndecodableLine extends Schema.TaggedClass<UndecodableLine>()("UndecodableLine", {
+  byteLength: Schema.Int,
+}) {}
+
+/** One line of a client's stdout: its text when its bytes are UTF-8, or an {@link UndecodableLine}. */
+export type StdoutLine = Result.Result<string, UndecodableLine>
 
 /**
  * A client could not be started: the executable or directory was not

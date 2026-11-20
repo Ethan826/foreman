@@ -6,6 +6,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Option, Result } from "effect"
 import { Success, Unclassified } from "../../src/domain/outcomes.ts"
+import type { StdoutLine } from "../../src/domain/process.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { classifyAttempt } from "../../src/features/step-outcome.ts"
 import { claudeDecoded, codexDecoded } from "../../src/program/client-output.ts"
@@ -13,14 +14,17 @@ import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { codexCompletedLines } from "../fixtures/clients/codex-events.ts"
 import { exitedWith } from "../fixtures/clients/fake-client.ts"
 
+/** Text lines as the starter streams them. */
+const asLines = (lines: ReadonlyArray<string>): ReadonlyArray<StdoutLine> => lines.map((line) => Result.succeed(line))
+
 /** An implementer's outcome from Claude's lines, with exit code 0. */
 const claudeOutcome = (lines: ReadonlyArray<string>) =>
-  classifyAttempt(Roles.Implementer, exitedWith(0), { client: claudeDecoded(lines), findings: Option.none() })
+  classifyAttempt(Roles.Implementer, exitedWith(0), { client: claudeDecoded(asLines(lines)), findings: Option.none() })
 
 /** A reviewer's outcome from Codex's lines, with exit code 0 and an empty findings block. */
 const codexOutcome = (lines: ReadonlyArray<string>) =>
   classifyAttempt(Roles.Reviewer, exitedWith(0), {
-    client: codexDecoded(lines),
+    client: codexDecoded(asLines(lines)),
     findings: Option.some(Result.succeed([])),
   })
 

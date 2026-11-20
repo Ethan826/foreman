@@ -13,8 +13,9 @@ import { Deferred, Effect, MutableRef, Option, Predicate, Queue, Result, Schema,
 import type { Array as Arr, Cause } from "effect"
 import { spawn, type ChildProcess } from "node:child_process"
 import { closeSync, openSync, writeSync } from "node:fs"
-import { ClientStartFailed, type ClientExit } from "../domain/process.ts"
+import { ClientStartFailed, type ClientExit, type StdoutLine } from "../domain/process.ts"
 import type { ReadProcesses } from "./processes.ts"
+import { stdoutLines } from "./stdout-lines.ts"
 
 /**
  * The raw file could not be written or closed while the client ran. The
@@ -43,11 +44,12 @@ export interface RunningClient {
   /** The leader's start time, read once after spawn; none when the read failed or did not list it. */
   readonly leaderStartedAt: Option.Option<string>
   /**
-   * Stdout as UTF-8 lines without their ends (`\n`, `\r\n` or `\r`), in
-   * order, ending when stdout closes. Lines are buffered from spawn, and
-   * the stream can be consumed once.
+   * Stdout as lines without their ends (`\n`, `\r\n` or `\r`), in order,
+   * ending when stdout closes; each is strict UTF-8 text or an
+   * `UndecodableLine` (stdout-lines.ts). Lines are buffered from spawn,
+   * and the stream can be consumed once.
    */
-  readonly lines: Stream.Stream<string>
+  readonly lines: Stream.Stream<StdoutLine>
   /**
    * Completes once the leader has exited and its output is closed. Fails
    * with {@link RawOutputFailed} when the raw file could not be fully
@@ -120,7 +122,7 @@ export const startClientOver =
         pid,
         pgid: pid,
         leaderStartedAt: Option.flatMap(listing, (text) => readStartTime(text, pid)),
-        lines: Stream.splitLines(Stream.decodeText(Stream.fromQueue(sinks.stdout))),
+        lines: stdoutLines(Stream.fromQueue(sinks.stdout)),
         exit: Deferred.await(sinks.exit),
       }
     })

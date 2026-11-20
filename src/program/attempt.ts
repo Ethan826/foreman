@@ -30,6 +30,7 @@ import { BriefRecorded, Intended, type ProjectEvent } from "../domain/events.ts"
 import { GrantId, OpId } from "../domain/ids.ts"
 import { StepOutcome } from "../domain/outcomes.ts"
 import type { Role } from "../domain/roles.ts"
+import type { StdoutLine } from "../domain/process.ts"
 import type { Correct, Implement, Review } from "../domain/session.ts"
 import type { OpenSession, SessionFold, SessionState } from "../domain/session-state.ts"
 import type { CommandChecks, SnapshotCheck } from "../features/command-rules.ts"
@@ -40,7 +41,7 @@ import type { StateFileFailed } from "../runtime/state-files.ts"
 import { applySettle, cancelLostRace } from "./admission.ts"
 import { admitStep, type Grant } from "./attempt-admission.ts"
 import { type AttemptFiles, attemptFiles, runClient } from "./attempt-run.ts"
-import { utf8Bytes, utf8Text } from "./client-output.ts"
+import { strictText, utf8Bytes } from "./client-output.ts"
 import { holdsNow, type LogRead, pinReading, readLog, requireAllowed, worktreeReading } from "./command-start.ts"
 import type { SessionContext } from "./session-context.ts"
 import { LostRace } from "./session-errors.ts"
@@ -93,10 +94,14 @@ export interface LaunchPlan<E> {
   /** The client's argv from the brief and the attempt's files (a fixed profile). */
   readonly argv: (brief: string, files: AttemptFiles) => readonly [string, ...Array<string>]
   /** The handoff bytes once the leader exited, from its files or its output lines; empty when the client gave none. */
-  readonly handoff: (files: AttemptFiles, lines: ReadonlyArray<string>) => Effect.Effect<Uint8Array, E | StateFileFailed>
-  /** The decoded output classification reads, from the lines and the handoff's text. */
-  readonly decode: (lines: ReadonlyArray<string>, handoff: string) => DecodedAttempt
-  /** Publishes what follows from the handoff's text, before batch F (a review's findings draft). */
+  readonly handoff: (files: AttemptFiles, lines: ReadonlyArray<StdoutLine>) => Effect.Effect<Uint8Array, E | StateFileFailed>
+  /**
+   * The decoded output classification reads, from the lines and the
+   * handoff's text; none when the handoff's bytes are not UTF-8 (review
+   * finding R04).
+   */
+  readonly decode: (lines: ReadonlyArray<StdoutLine>, handoff: Option.Option<string>) => DecodedAttempt
+  /** Publishes what follows from the handoff's text, before batch F (a review's findings draft); not run when the handoff is not UTF-8. */
   readonly afterHandoff: (session: OpenSession, handoff: string) => Effect.Effect<void, E | StateFileFailed>
 }
 
@@ -198,7 +203,7 @@ const publishedBrief = (context: SessionContext, session: OpenSession, opId: OpI
     const { sessionId } = session.opened
     return {
       recorded: new BriefRecorded({ sessionId, opId, briefPath, briefSha256 }),
-      text: yield* utf8Text(bytes),
+      text: yield* strictText(briefPath, bytes),
     }
   })
 

@@ -9,7 +9,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Fiber, Option, Result, Schema, Stream } from "effect"
 import { existsSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { ClientStartFailed, ProcessReadFailed } from "../../src/domain/process.ts"
+import { ClientStartFailed, ProcessReadFailed, type StdoutLine } from "../../src/domain/process.ts"
 import { clientEnvironment } from "../../src/features/client-environment.ts"
 import { decodePs, startTimeOf } from "../../src/format/ps.ts"
 import { readProcesses } from "../../src/runtime/processes.ts"
@@ -45,11 +45,14 @@ const plainEnvironment = { PATH: "/usr/bin:/bin" }
 const launchIn = (dir: string, argv: ClientLaunch["argv"]): ClientLaunch =>
   ({ argv, cwd: dir, env: plainEnvironment, rawPath: `${dir}/raw` })
 
+/** The text of stdout lines; a line that is not UTF-8 shows as a marker no test expects. */
+const textsOf = (lines: Iterable<StdoutLine>) => Array.from(lines, (line) => Result.getOrElse(line, () => "<not UTF-8>"))
+
 /** Starts the launch, collects every line and waits for the exit. */
 const runToEnd = (launch: ClientLaunch) =>
   Effect.gen(function* () {
     const running = yield* startClient(launch)
-    const lines = yield* Stream.runCollect(running.lines)
+    const lines = textsOf(yield* Stream.runCollect(running.lines))
     const exit = yield* running.exit
     return { running, lines, exit }
   })
@@ -76,7 +79,7 @@ const leadsNewGroup = (dir: string) =>
     const running = yield* startClient(launchIn(dir, ["/bin/sh", "-c", script, "leader", release]))
     const readListing = Effect.flatMap(readProcesses(), (text) => Effect.fromResult(decodePs(text)))
     const listed = yield* releasing(running, release, readListing)
-    const lines = yield* Stream.runCollect(running.lines)
+    const lines = textsOf(yield* Stream.runCollect(running.lines))
     expect(running.pgid).toBe(running.pid)
     expect(lines.map((line) => Number(line.trim()))).toEqual([running.pid, running.pid])
     const row = listed.find((each) => each.pid === running.pid)
@@ -211,7 +214,7 @@ const exitFailsWhenRawWriteFails = (dir: string) =>
   Effect.gen(function* () {
     const start = startClientOver(failingAppend)(readProcesses, startTimeOf)
     const running = yield* start(launchIn(dir, ["/usr/bin/seq", "1", "3"]))
-    expect(yield* Stream.runCollect(running.lines)).toEqual(["1", "2", "3"])
+    expect(textsOf(yield* Stream.runCollect(running.lines))).toEqual(["1", "2", "3"])
     const failure = yield* Effect.flip(running.exit)
     expect(Schema.is(RawOutputFailed)(failure)).toBe(true)
     expect(failure.rawPath).toBe(`${dir}/raw`)

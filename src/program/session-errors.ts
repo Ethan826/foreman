@@ -49,6 +49,15 @@ export class TaskFileChanged extends Schema.TaggedError<TaskFileChanged>()("Task
   path: Schema.String,
 }) {}
 
+/**
+ * The file at `path`, read for its text, is not valid UTF-8 (review
+ * finding R04). Its bytes are never read with U+FFFD in place of the
+ * invalid ones; nothing was recorded.
+ */
+export class FileNotUtf8 extends Schema.TaggedError<FileNotUtf8>()("FileNotUtf8", {
+  path: Schema.String,
+}) {}
+
 /** The project log names no supervisor worktree: run `worktree create` first. */
 export class NoWorktreeRecorded extends Schema.TaggedError<NoWorktreeRecorded>()(
   "NoWorktreeRecorded",

@@ -6,15 +6,19 @@
 // handoff (a review's findings draft), classify the outcome in Features, and
 // append batch F, `Finished` with its `ReportRecorded`, in one batch. The
 // raw output streams into `<raw>.streaming`; the published raw file is a
-// copy made atomically once the leader is done.
-import { Array as Arr, Clock, Effect, Stream } from "effect"
+// copy made atomically once the leader is done. The handoff's text is
+// strict UTF-8 (review finding R04): a handoff that is not UTF-8 is
+// published as it is, nothing is derived from it, and the plan decodes
+// it as none.
+import { Array as Arr, Clock, Effect, Option, Result, Stream } from "effect"
 import { Finished, type Intended, Launched, type LogPosition } from "../domain/events.ts"
+import type { StdoutLine, UndecodableLine } from "../domain/process.ts"
 import { ReportRecorded } from "../domain/session-events.ts"
 import type { OpenSession } from "../domain/session-state.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { classifyAttempt } from "../features/step-outcome.ts"
 import type { LaunchPlan } from "./attempt.ts"
-import { utf8Text } from "./client-output.ts"
+import { strictUtf8 } from "../runtime/strict-utf8.ts"
 import type { SessionContext } from "./session-context.ts"
 
 /** The files of one attempt, all in the state directory. */
@@ -67,7 +71,8 @@ export const runClient = <E>(context: SessionContext, plan: LaunchPlan<E>, state
     })
     const launched = new Launched({ opId, pgid: running.pgid, leaderStartedAt: running.leaderStartedAt })
     const position = yield* capabilities.log.append(state.position, [launched])
-    const lines = Arr.fromIterable(yield* Stream.runCollect(Stream.tap(running.lines, capabilities.show)))
+    const showLine = (line: StdoutLine) => capabilities.show(shown(line))
+    const lines = Arr.fromIterable(yield* Stream.runCollect(Stream.tap(running.lines, showLine)))
     const exit = yield* running.exit
     const rawSha256 = yield* capabilities.stateFiles.publish(
       files.raw,
@@ -75,8 +80,11 @@ export const runClient = <E>(context: SessionContext, plan: LaunchPlan<E>, state
     )
     const handoff = yield* plan.handoff(files, lines)
     const handoffSha256 = yield* capabilities.stateFiles.publish(files.handoff, handoff)
-    const handoffText = yield* utf8Text(handoff)
-    yield* plan.afterHandoff(state.session, handoffText)
+    const handoffText = strictUtf8(handoff)
+    yield* Option.match(handoffText, {
+      onNone: () => Effect.void,
+      onSome: (text) => plan.afterHandoff(state.session, text),
+    })
     const outcome = classifyAttempt(plan.role, exit, plan.decode(lines, handoffText))
     const finished = new Finished({ opId, outcome, endedAt: yield* Clock.currentTimeMillis })
     const report = new ReportRecorded({
@@ -91,3 +99,10 @@ export const runClient = <E>(context: SessionContext, plan: LaunchPlan<E>, state
     yield* capabilities.log.append(position, [finished, report])
     return outcome
   })
+
+/** What the owner sees for a stdout line: its text, or a notice when it is not UTF-8. */
+const shown = (line: StdoutLine): string => Result.getOrElse(line, undecodableNotice)
+
+/** The notice shown in place of a stdout line that is not UTF-8; the raw file keeps its bytes. */
+const undecodableNotice = (line: UndecodableLine): string =>
+  `[foreman: a line of ${String(line.byteLength)} bytes is not valid UTF-8; the raw file keeps it]`
