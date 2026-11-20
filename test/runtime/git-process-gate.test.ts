@@ -1,11 +1,13 @@
 // Process gate (plan B11b; owner ruling on A1, 2026-11-19): only four
 // modules in src/ can start a process, named by path: `src/runtime/git.ts`
 // (git), `spawn.ts` (clients), `processes.ts` (`ps`) and
-// `client-version.ts` (`<client> --version`). Every `execFile` and
-// `spawn` call, in any module, gives an explicit environment, and only
-// git.ts passes "git" as the program, so no production path runs git with
-// the parent's environment or outside the clean runners. Decided on the
-// TypeScript syntax tree, not on text.
+// `client-version.ts` (`<client> --version`). git.ts keeps its B11b
+// policy and may import any of the process modules below; the other three
+// may import `node:child_process` and no other (review B16). Every
+// `execFile` and `spawn` call, in any module, gives an explicit
+// environment, and only git.ts passes "git" as the program, so no
+// production path runs git with the parent's environment or outside the
+// clean runners. Decided on the TypeScript syntax tree, not on text.
 //
 // What counts as starting a process or reading the parent environment:
 // importing, re-exporting, `import()`ing or `require()`ing
@@ -39,14 +41,18 @@
 // path nothing does. The must-fail cases below show what this gate
 // detects.
 import { describe, expect, it } from "@effect/vitest"
-import { callsNamed, entryModule, gitModule, processFindings, processStarters, sources } from "./process-gate-scan.ts"
+import { callsNamed, findingsAt, gitModule, processFindings, sources } from "./process-gate-scan.ts"
+
+const spawnModule = "../../src/runtime/spawn.ts"
+const processesModule = "../../src/runtime/processes.ts"
+const versionModule = "../../src/runtime/client-version.ts"
 
 describe("only the four process modules start a process, always with an explicit environment", () => {
   it.each([
     [gitModule, 1, 0],
-    ["../../src/runtime/spawn.ts", 0, 1],
-    ["../../src/runtime/processes.ts", 1, 0],
-    ["../../src/runtime/client-version.ts", 1, 0],
+    [spawnModule, 0, 1],
+    [processesModule, 1, 0],
+    [versionModule, 1, 0],
   ])("scans %s with its process calls (scan minimum)", (path, execFiles, spawns) => {
     expect(Object.keys(sources).length).toBeGreaterThanOrEqual(40)
     expect(callsNamed("execFile", sources[path] ?? "")).toBe(execFiles)
@@ -54,9 +60,7 @@ describe("only the four process modules start a process, always with an explicit
   })
 
   it.each(Object.entries(sources))("%s", (path, text) => {
-    expect(processFindings(text, processStarters.includes(path), path === gitModule, path === entryModule)).toEqual(
-      [],
-    )
+    expect(findingsAt(path, text)).toEqual([])
   })
 })
 
@@ -71,7 +75,7 @@ describe("process gate must-fail cases", () => {
     ["the Bun global", `Bun.spawn(["git"])`, ["references Bun"]],
     ["the parent environment", `const home = process.env.HOME`, ["references process"]],
   ])("flags %s outside git.ts", (_name, text, expected) => {
-    expect(processFindings(text, false, false)).toEqual(expected)
+    expect(processFindings(text, [], false)).toEqual(expected)
   })
 
   it.each([
@@ -79,7 +83,7 @@ describe("process gate must-fail cases", () => {
     ["an unterminated string", `const program = "git`],
     ["a stray brace", `export const run = () => { startGit() }}`],
   ])("flags a module that does not parse: %s", (_name, text) => {
-    expect(processFindings(text, true, true).filter((finding) => finding.startsWith("does not parse:"))).not.toEqual([])
+    expect(findingsAt(gitModule, text).filter((finding) => finding.startsWith("does not parse:"))).not.toEqual([])
   })
 
   it.each([
@@ -87,7 +91,7 @@ describe("process gate must-fail cases", () => {
     ["options without env", `execFile("git", [], { cwd, encoding: "utf8" }, cb)`],
     ["options passed by name", `execFile("git", [], options, cb)`],
   ])("flags execFile with %s, even in git.ts", (_name, text) => {
-    expect(processFindings(text, true, true)).toEqual(["execFile without env"])
+    expect(findingsAt(gitModule, text)).toEqual(["execFile without env"])
   })
 
   it.each([
@@ -95,25 +99,45 @@ describe("process gate must-fail cases", () => {
     ["options without env", `spawn("claude", [], { cwd, detached: true })`],
     ["options passed by name", `spawn("claude", [], options)`],
   ])("flags spawn with %s, even in a module that may start processes", (_name, text) => {
-    expect(processFindings(text, true, true)).toEqual(["spawn without env"])
+    expect(findingsAt(spawnModule, text)).toEqual(["spawn without env"])
   })
 
   it.each([
     ["execFile", `execFile("git", [], { cwd, env, encoding: "utf8" }, cb)`],
     ["spawn", `spawn("git", [], { cwd, env, detached: true, stdio })`],
   ])("flags git as the program of %s outside git.ts", (_name, text) => {
-    expect(processFindings(text, true, false)).toEqual(["runs git outside git.ts"])
+    expect(findingsAt(spawnModule, text)).toEqual(["runs git outside git.ts"])
   })
 
   it.each([
     [
-      "spawn.ts",
+      spawnModule,
       `import { spawn } from "node:child_process"; const child = spawn(file, args, { cwd, env: launch.env, detached: true })`,
     ],
-    ["processes.ts", `import { execFile } from "node:child_process"; execFile(ps, args, { cwd, env: listing }, cb)`],
-    ["client-version.ts", `import { execFile } from "node:child_process"; execFile(client, args, { cwd, env }, cb)`],
-  ])("passes a process start like %s's in a module that may start processes", (_name, text) => {
-    expect(processFindings(text, true, false)).toEqual([])
+    [processesModule, `import { execFile } from "node:child_process"; execFile(ps, args, { cwd, env: listing }, cb)`],
+    [versionModule, `import { execFile } from "node:child_process"; execFile(client, args, { cwd, env }, cb)`],
+  ])("passes a process start like its own in %s", (path, text) => {
+    expect(findingsAt(path, text)).toEqual([])
+  })
+
+  it.each(
+    [spawnModule, processesModule, versionModule].flatMap((path) => [
+      [path, `import { spawn } from "bun"`, ["imports bun"]],
+      [path, `export { spawn } from "bun"`, ["imports bun"]],
+      [path, `const cluster = await import("cluster")`, ["imports cluster"]],
+      [path, `import cluster from "node:cluster"`, ["imports node:cluster"]],
+      [path, `const cp = require("child_process")`, ["imports child_process"]],
+    ]),
+  )("flags in %s, which may import only node:child_process: %s", (path, text, expected) => {
+    expect(findingsAt(path, text)).toEqual(expected)
+  })
+
+  it.each([
+    `import { spawn } from "bun"`,
+    `import cluster from "node:cluster"`,
+    `const cp = require("child_process")`,
+  ])("keeps git.ts's B11b policy, which passes %j", (text) => {
+    expect(findingsAt(gitModule, text)).toEqual([])
   })
 
   it.each([
@@ -122,6 +146,6 @@ describe("process gate must-fail cases", () => {
     `const env = { PATH: "/usr/bin:/bin" }; execFile("git", [], { cwd, env, encoding: "utf8" }, cb)`,
     `const value = record.process`,
   ])("passes %j in git.ts", (text) => {
-    expect(processFindings(text, true, true)).toEqual([])
+    expect(findingsAt(gitModule, text)).toEqual([])
   })
 })

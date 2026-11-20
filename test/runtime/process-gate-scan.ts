@@ -16,9 +16,8 @@ export const sources = import.meta.glob<string>("../../src/**/*.ts", {
 /** The one module that may start git. */
 export const gitModule = "../../src/runtime/git.ts"
 
-/** The modules that may start a process (owner ruling on A1). */
-export const processStarters = [
-  gitModule,
+/** The three modules besides git.ts that may start a process (owner ruling on A1, 2026-11-19). */
+export const clientStarters = [
   "../../src/runtime/spawn.ts",
   "../../src/runtime/processes.ts",
   "../../src/runtime/client-version.ts",
@@ -37,6 +36,22 @@ const entryMembers = ["argv", "env", "exit"]
 const processCalls = ["execFile", "spawn"]
 
 const processModules = ["node:child_process", "child_process", "node:cluster", "cluster", "bun"]
+
+/**
+ * The process modules each module may import, by path. git.ts keeps the
+ * policy it had under B11b, every process module. The owner's ruling on
+ * A1 (2026-11-19) lets the three client starters import
+ * `node:child_process` and nothing else: not `bun`, `cluster`,
+ * `node:cluster` or the unprefixed `child_process` (review B16). Every
+ * other module, the entry module included, gets none.
+ */
+const importPolicy: Readonly<Record<string, ReadonlyArray<string>>> = {
+  [gitModule]: processModules,
+  ...Object.fromEntries(clientStarters.map((path) => [path, ["node:child_process"]])),
+}
+
+/** The process modules the module at `path` may import; none for a path the policy does not name. */
+const permittedImports = (path: string): ReadonlyArray<string> => importPolicy[path] ?? []
 
 const processGlobals = ["Bun", "process"]
 
@@ -153,21 +168,21 @@ const parseFindings = (text: string): ReadonlyArray<string> =>
 
 /**
  * What a module does that the gate forbids: a syntax error, a process
- * module imported (unless `mayStartProcesses`), a process global
+ * module imported that `permitted` does not list, a process global
  * referenced (except `process.argv`, `process.env` and `process.exit`
  * when `isEntry`), an `execFile` or `spawn` call without an explicit
  * `env`, or "git" as such a call's program (unless `mayRunGit`).
  */
 export const processFindings = (
   text: string,
-  mayStartProcesses: boolean,
+  permitted: ReadonlyArray<string>,
   mayRunGit: boolean,
   isEntry = false,
 ): ReadonlyArray<string> => [
   ...parseFindings(text),
   ...nodesOf(text).flatMap((node) => [
     ...importedBy(node)
-      .filter((name) => processModules.includes(name) && !mayStartProcesses)
+      .filter((name) => processModules.includes(name) && !permitted.includes(name))
       .map((name) => `imports ${name}`),
     ...(ts.isIdentifier(node) && isGlobalReference(node) && !(isEntry && isEntryMember(node))
       ? [`references ${node.text}`]
@@ -178,6 +193,10 @@ export const processFindings = (
     ...(ts.isCallExpression(node) && !mayRunGit && runsGit(node) ? ["runs git outside git.ts"] : []),
   ]),
 ]
+
+/** What the module at `path` does that the gate forbids, under that path's own rules. */
+export const findingsAt = (path: string, text: string): ReadonlyArray<string> =>
+  processFindings(text, permittedImports(path), path === gitModule, path === entryModule)
 
 /** The number of calls named `name` in a module. */
 export const callsNamed = (name: string, text: string) =>
