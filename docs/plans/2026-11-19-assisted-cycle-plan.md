@@ -716,3 +716,39 @@ tokens. Two items recorded from that pass:
   runs; the timeouts were not raised. Open item: both sit near their
   limit under load and need a sized limit or a cheaper test, by owner
   decision.
+
+Correction round complete (2026-11-20). Integrated onto `assisted`:
+`fix-l3-gates` (165,625 tokens), `fix-snapshot` (259,641),
+`fix-protocol` (402,228), `fix-production` (399,537) and the
+`fix-integrate` pass (207,859), which merged fix-production onto the
+protocol fixes and made `status` read-only under the new target, layout,
+ledger and git-home model. Total 1,434,890 tokens, against an estimate
+of 1M to 1.45M. On 8cd5bb5: docs (no warnings), check (0 blocking, 45
+notes) and test (120 files, 1,473 tests) pass. Two intermediate
+integration commits (fcb1a41, e0616e3) fail the docs build alone (one
+TSDoc the reconciliation commit adds); tsc passes on every commit. The
+production worker committed one change before its full test run had
+finished, then amended it after a load-timeout run.
+
+Open for the re-review and the owner:
+- B15: a refused retry after batch W now expires its own waiver, and a
+  refused `--waive` expires the waiver (superseding one crash-table
+  line). B11: the read-only SQLite open still writes a read mark to
+  `-shm`. Status now prints a wrapper (`target`, `gitHome`, `report`);
+  a damaged binding or a broken layout still refuses status.
+- B03: the generated profile allows no target test command; L03 open.
+  B04/B06: nothing checks that the bound target is Waxwing; client pins
+  are not bound; a state directory cannot be rebound; foreman does not
+  create `~/.foreman`.
+- B08: a preflight refusal reaches the owner as a command failure, not
+  the rules' `SnapshotRefused`. B17: the same lossy decoding remains in
+  the `info/attributes` read, `client-version.ts` and `processes.ts`.
+- L3 scripts: a worktree path with `*`, `(` or `)` could change Claude's
+  rule matching; `test-scripts.sh` is not in `bun run test`.
+- The 5-second prose and large-file test timeouts under load (above).
+
+Coordinator's slip (2026-11-20): the M08 commit was first made with
+`bun run check` failing (two blocking prose findings in the new
+AGENTS.md status text), because the command chain did not stop on the
+failed check. The wording was fixed and the unpushed commit amended;
+check, docs and the full suite pass on the amended commit.

@@ -1,4 +1,4 @@
-# Checkpoint (updated 2026-11-18)
+# Checkpoint (updated 2026-11-20)
 
 Where the foreman work stands, for the next session.
 
@@ -44,10 +44,23 @@ slice does not authorize it.
   provisional 60-second limit (83870d8), and it passed on CI in 6,486 ms.
   The `git.test.ts` fixture no longer links to `/usr/bin/env`, which is a
   multi-call binary on ubuntu-26.04 (be991f8).
-- The rest of B11 (the pinned environment, the protected digest, the
-  commit procedure and the review worktree) and B12 to B18 remain
-  unauthorized. L3 waits on B16, and L4 waits on B13 to B15. Each push
-  needs the owner's OK.
+- On the local branch `assisted` (not landed or pushed): B11d (the
+  pinned runner), W1 (Waxwing's exact attribute line) and the assisted
+  cycle, MVP-D0 slices A1 and A2, with a runnable `bun
+  src/facade/main.ts --config <path> <command>`. Built 2026-11-19 with
+  parallel workers; the Codex batch review found B01 to B17, and four
+  correction groups plus an integration pass corrected them on
+  2026-11-20. On 8cd5bb5: `bun run docs` (no warnings), `bun run check`
+  (0 blocking, 45 notes) and `bun run test` (120 files, 1,473 tests)
+  pass. Measured worker use: 2,979,906 tokens to build, 1,434,890 to
+  correct. The record is the execution section of
+  `2026-11-19-assisted-cycle-plan.md`. Next: Codex's re-review against
+  the findings ledger.
+- The L3 subset is prepared, not run (`research/live/l3-subset/`). It
+  needs the owner's ruling on L03 and a separate authorization.
+- The rest of B11 (the protected digest, the commit procedure and the
+  review worktree) and B12 to B18 remain unauthorized. L4 waits on B13 to
+  B15. Each push needs the owner's OK.
 
 Deferred findings keep their recorded triggers: R5 before extending the
 listing decoder or claiming strict validation, and F8 with B15. R7 is

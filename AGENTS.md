@@ -7,24 +7,31 @@ before the next tranche. It paces launches against the user's
 subscription windows, renews context with every step, and keeps durable
 checkpoints.
 
-Status (2026-11-18): the owner approved the design at revision 6.1; its
-open items stay open unless a later owner ruling resolves them. Part A
-landed on 2026-11-16, Part B milestone 1 (B1 to B10) on 2026-11-17, and
-B11a (supervisor worktree creation and identity) and B11b (every git
-command in the clean environment, including review item R8) on
-2026-11-18, all on `main`. Production git runs only through
-`worktreeProgram` and `cleanGit` in `src/runtime/git.ts`. Work is stopped
-at an approval gate: the rest of B11 and B12 to B18 are not authorized,
-and scoping a slice does not authorize it. `bun run check` (tsc, ESLint
-and the prose gate) and `bun run test` must pass before any commit, and
-`bun run docs` must build without warnings, as CI's docs workflow
-requires.
+Status (2026-11-20): the owner approved the design at revision 6.1; its
+open items stay open unless a later owner ruling resolves them. On
+`main`: Part A (2026-11-16), Part B milestone 1 (B1 to B10, 2026-11-17),
+B11a and B11b (2026-11-18) and B11c (2026-11-19). The local branch
+`assisted` holds work that waits for landing: B11d (the pinned runner), W1 (Waxwing's
+attribute line) and the assisted cycle, MVP-D0 slices A1 and A2
+(`docs/plans/2026-11-19-assisted-cycle-plan.md`), corrected for the
+batch review's findings and awaiting its re-review. Production git runs
+through `cleanGit`, `pinnedGitWith` and `snapshotGitWith` in
+`src/runtime/git.ts`, with a private git home that foreman creates and
+checks. Landing, push, the L3 subset's live run, the rest of B11 and B12
+to B18 each need the owner's authorization; scoping a slice does not
+authorize it.
+
+Before any commit, `bun run check` (tsc, ESLint and the prose gate),
+`bun run test` and `bun run docs` must pass; the docs build must also be
+free of warnings, as CI's docs workflow requires.
 
 Live tests L1 (Claude usage readings) and L2 (Codex usage windows) ran on
 2026-11-16 and both came back positive; results and limits are in
-`research/live/results-2026-11-16.md`. L3 (permissions) waits on B16;
-L4 (crash and restart) waits on B13 to B15. No live client call is
-authorized by this status update.
+`research/live/results-2026-11-16.md`. The L3 subset for the assisted
+cycle is prepared in `research/live/l3-subset/` and has not run; it
+needs the owner's ruling on L03 (whether user settings and hooks load)
+and a separate authorization. L4 (crash and restart) waits on B13 to
+B15. No live client call is authorized by this status update.
 Until the Codex windows enter the default policy, every Codex launch
 needs a waiver.
 
