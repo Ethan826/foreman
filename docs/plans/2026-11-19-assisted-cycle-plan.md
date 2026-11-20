@@ -570,3 +570,27 @@ Wave 1, in parallel, each in its own worktree:
   allowance, empty by default.
 - `l3-prep`: the L3 subset's runbook and disposable-repository scripts;
   no live calls.
+
+Integrated onto `assisted` so far (each verified after integration with
+docs, check and the full test suite; measured worker use from the
+harness):
+
+| Branch | Commits on `assisted` | Measured tokens |
+|---|---|---|
+| `w1-waxwing` | e8cbd0f | 154,493 |
+| `a1-events` | ddea966, d7dbb3e, bcb64d9 | 141,051 |
+| `a2-snapshot` | 09977db | 211,551 |
+| `l3-prep` | 60f4417 (prepared, not run) | 148,369 |
+| `a1-core` | 5dbb46c, cb23f85, dadcb2a | 281,093 |
+| `a1-runtime`, part 1 | a1d3903 (the declaration file merged by the coordinator) | 236,870 for the first pass |
+
+Owner ruling (2026-11-19, evening), on the `a1-runtime` worker's scope
+stop: B11b's process gate (`test/runtime/git-process-gate.test.ts`)
+allows exactly four modules to import `node:child_process`, by path:
+`src/runtime/git.ts`, `spawn.ts`, `processes.ts` and
+`client-version.ts`. It is tightened at the same time: every `spawn`
+call must pass an explicit `env`, and no module other than `git.ts` may
+pass "git" as the program. Must-fail fixtures prove each new rule.
+
+Wave 3 started: `a2-briefs` (the brief builder and the name-status
+decoder). The A1 Program wave starts once `a1-runtime` finishes.
