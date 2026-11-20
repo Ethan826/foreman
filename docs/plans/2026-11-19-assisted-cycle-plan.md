@@ -1,8 +1,12 @@
 # Assisted cycle (MVP-D0): bounded plan for A1 and A2
 
-Status: DRAFT FOR REVIEW, revision 2, 2026-11-19. Nothing here is
-authorized: no worker, live call, landing or push. Revision 2 corrects
-revision 1 (4f1b949) for the Codex review's findings AC1 to AC6. The
+Status: DRAFT FOR REVIEW, revision 3, 2026-11-19. Nothing here is
+authorized: no worker, live call, landing or push. Revision 2 (29c3c81)
+corrected revision 1 (4f1b949) for the Codex review's findings AC1 to
+AC6. Revision 3 makes the revision-2 review's three corrections: the
+waiver step runs past a quota hold and writes batch Q before batch W;
+the first review covers the owner-attested current candidate; and the
+closed-vocabulary registrations AGENTS.md requires are allowed. The
 specification below is self-contained; it does not depend on the
 untracked design delta it came from.
 
@@ -37,8 +41,12 @@ verification, commits, process cleanup and protected-input inspection.
   `--continue`. No signal is ever sent to a client process.
 - Holds stay distinct. A handoff consent never releases an approval
   hold; a timer never grants anything.
-- No new dependency, and no change to `package.json`, lint configuration
-  or CI in A1 or A2.
+- No new dependency, and no change to `package.json` or CI in A1 or A2.
+- Lint configuration changes are limited to what AGENTS.md requires for
+  new closed vocabularies: adding their names to `closedNames`, their
+  modules to `canonicalModules`, the rule message's list of constants,
+  and one fixture line and assertion per name. No rule is weakened and
+  no exemption is added.
 - Git commands run only through B11b's clean runner, B11d's pinned
   runner, or the snapshot runner defined below.
 
@@ -68,10 +76,10 @@ available when the worktree, a client or a file is broken.
 | Session state | any | none open | open, no attempt | awaiting handoff after a usable implement or correct | awaiting handoff after a usable review with changes requested | awaiting handoff | incomplete attempt | open (see close rules) |
 | Startup worktree check (B11a to B11d) | reported | required | required | required | required | not needed | not needed | not needed |
 | Client version pin | reported | not needed | required (Claude) | required (Codex) | required (Claude) | not needed | not needed | not needed |
-| Holds | reported | no non-quota hold | none that `blocks` Claude | none that `blocks` Codex | none that `blocks` Claude | not needed | not needed | not needed |
+| Holds | reported | no non-quota hold | no non-quota hold; a Claude quota hold goes to the waiver step | no non-quota hold; a Codex quota hold goes to the waiver step | as `implement` | not needed | not needed | not needed |
 | Recorded report files intact | reported | n/a | n/a | required | required | not needed | not needed | not needed |
 | Owner attestation (`--attest`) | n/a | n/a | n/a | required | required | not needed | itself an attestation | required for `--finished` |
-| Snapshot valid and unchanged | reported | n/a | n/a | required | required | not needed | not needed | required for `--finished` |
+| Snapshot | reported | n/a | n/a | taken now, after `--attest`; must pass the raw checks | must equal the reviewed tree | not needed | not needed | `--finished`: must equal the reviewed tree |
 
 `blocks` is the existing provider-specific rule: a quota hold blocks
 only its own provider; every other hold blocks every launch.
@@ -125,15 +133,24 @@ A launch command (`implement`, `review`, `correct`) runs these steps:
 2. For `review` and `correct` only: re-run the B11c attribute-source
    check through the pinned runner, then take the snapshot (below). For
    `correct`, also compare it with the reviewed tree.
-3. Decide admission (pure, from the ledger snapshot).
-   - Admitted: the ledger transaction writes the grant.
-   - Refused by pacing, without `--waive`: append batch Q =
-     [`HoldCreated(Quota)`] (as today), stop. Nothing else is recorded;
-     the owner's consent is not consumed.
-   - Refused by pacing, with `--waive`: append batch W =
-     [`HoldCreated(Quota)` if absent, `Waived(provider, waiverId)`], only
-     if `waiveAccepted` holds; then decide again with the armed waiver;
-     the ledger transaction writes the grant.
+3. Admission and the waiver step. Non-quota holds already stopped the
+   command in step 1; a quota hold for this provider does not.
+   - An armed waiver for this provider exists (a retry after batch W):
+     decide with it; the ledger transaction writes the grant.
+   - Otherwise, if no quota hold for this provider exists, decide
+     admission (pure, from the ledger snapshot). Admitted: the ledger
+     transaction writes the grant, and the command goes to step 4.
+     Refused by pacing: append batch Q = [`HoldCreated(Quota)`] (as
+     today).
+   - Now a quota hold for this provider exists. Without `--waive`, stop:
+     nothing else is recorded, and the owner's consent is not consumed.
+   - With `--waive`: check `waiveAccepted` (the hold now exists, so the
+     only refusal is another armed waiver). If accepted, append batch W
+     = [`Waived(provider, waiverId)`], decide again with the armed
+     waiver, and the ledger transaction writes the grant. If refused,
+     stop; nothing beyond batch Q was written.
+   - A quota hold released by readings (`quotaReleased`) is treated as
+     absent, as today.
 4. Append batch I, which is the consent and the intent together:
    - `implement`: [`Intended`].
    - `review`: [`SnapshotTaken`, `HandoffApproved`, `Intended`].
@@ -154,15 +171,15 @@ Every crash point and what follows:
 | Crash after | State seen next | Next command allowed |
 |---|---|---|
 | step 1 or 2 | nothing new (snapshot objects only, unreferenced) | the same command again |
-| batch Q | quota hold | the same command with `--waive`, or `close --abandoned` |
-| batch W, before the grant | armed waiver, no grant | the same command (it uses the armed waiver); `close` expires it |
+| batch Q | quota hold | the same command with `--waive` (it skips batch Q and writes batch W), or `close --abandoned` |
+| batch W, before the grant | armed waiver, no grant | the same command, with or without `--waive` (it uses the armed waiver and writes no second `Waived`); `close` expires it |
 | the grant, before batch I | orphan grant | any; the settle step cancels it `orphan` |
 | batch I, before batch L | incomplete attempt (may or may not have started) | `status`, `step-ended`, then `close --interrupted` |
 | batch L, before batch F | incomplete attempt (may still run) | the same |
 | batch F, before step 8 | finished attempt, charge pending | any; the next settle step charges it |
 
-A refused `--waive` (another waiver armed, or no quota hold) writes
-nothing beyond batch Q. Retrying any command after any row above neither
+A refused `--waive` (another provider's waiver armed) writes nothing
+beyond batch Q. Retrying any command after any row above neither
 launches twice nor strands the session: the only way past an incomplete
 attempt is `step-ended` and then `close --interrupted`, and nothing is
 ever replayed.
@@ -225,6 +242,14 @@ establish cleanup. Foreman never signals.
 A snapshot is the tree id of the worktree's covered contents, built in a
 temporary index in foreman's state directory. The worktree's own index
 is never read or written.
+
+What gets reviewed: the first `review` after an attempt reviews the
+worktree's current candidate, the one the owner's `--attest` selects. No
+snapshot exists between an attempt's end and that review, so foreman
+cannot see an edit made in between, and the plan does not claim to. Any
+such edit is part of the candidate the owner attested. After that, every
+`correct` and `close --finished` requires the worktree to still equal the
+reviewed tree.
 
 - Runner: `snapshotGitWith(start)(home)(identity)(indexFile)`, the B11d
   pinned runner plus `GIT_INDEX_FILE`, exactly nine variables, with the
@@ -387,9 +412,18 @@ A1 tests:
   signaled.
 - `test/runtime/state-files.test.ts`: publish is atomic; hash matches.
 - `test/program/attempt-protocol.test.ts`: the exact sequence with a
-  fake client: settle, grant, batch I, batch L, batch F, settle; with
-  `--waive` under refusing pacing: batch Q, batch W, grant, batch I
-  naming the waiver; without `--waive`: batch Q only.
+  fake client: settle, grant, batch I, batch L, batch F, settle. Under
+  refusing pacing:
+  - a fresh `--waive`: batch Q, then batch W, then the grant, then batch
+    I naming the waiver;
+  - without `--waive`: batch Q only, and a second run without it appends
+    nothing;
+  - a retry with `--waive` after batch Q: no second hold, batch W, grant,
+    batch I;
+  - a retry after batch W (with or without `--waive`): no second
+    `Waived`, grant, batch I naming the armed waiver;
+  - a non-quota hold, or a quota hold of the other provider plus that
+    provider's armed waiver: refused, nothing appended.
 - `test/program/attempt-crash.test.ts`: a failure injected after batch Q,
   batch W, the grant, batch I, batch L, the raw file's publication and
   batch F, and a failed settle transaction and a `PositionMoved` on
@@ -428,9 +462,9 @@ A2 tests:
   (`--attest`), correct (`--attest`), review, close `--finished`, with
   fake clients. The log is exactly the expected batches; each brief holds
   only recorded inputs; nothing launched without its command.
-- `test/program/handoff-refusals.test.ts`: no `--attest`; stale snapshot
-  (edit before review); a write during review detected at the next
-  handoff; a report from another session; a report whose bytes changed;
+- `test/program/handoff-refusals.test.ts`: no `--attest`; a candidate
+  that fails the raw checks; a write during review detected at the next
+  handoff (`correct` and `close --finished` both refuse); a report from another session; a report whose bytes changed;
   `review` twice; `correct` before a review; a third `correct`; after
   `reject` only `close --abandoned`; an unusable outcome allows only
   close; a fake implementer whose leader exits while a child keeps
