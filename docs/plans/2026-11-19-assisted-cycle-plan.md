@@ -1,7 +1,7 @@
 # Assisted cycle (MVP-D0): bounded plan for A1 and A2
 
-Status: DRAFT FOR REVIEW, revision 3, 2026-11-19. Nothing here is
-authorized: no worker, live call, landing or push. Revision 2 (29c3c81)
+Status: revision 3, 2026-11-19; decisions P1 to P13 approved. Nothing here
+authorizes a worker, live call, landing or push. Revision 2 (29c3c81)
 corrected revision 1 (4f1b949) for the Codex review's findings AC1 to
 AC6. Revision 3 makes the revision-2 review's three corrections: the
 waiver step runs past a quota hold and writes batch Q before batch W;
@@ -521,9 +521,13 @@ twice; `status` and `close` reachable under every failure in the matrix;
 the owner-ended charge happens once; the snapshot never follows a link
 or touches the real index; no client environment carries `GIT_*`.
 
-## Decisions (all pending; dispatch needs each ruled)
+## Decisions
 
-| ID | Decision | Recommendation |
+Owner ruling (2026-11-19): P1 to P13 are approved as recommended. This
+approves the plan's decisions, not dispatch. A1 still needs its own
+authorization, after B11d's review and landing (P10).
+
+| ID | Decision | Ruling |
 |---|---|---|
 | P1 | Split `events.ts` first, files as named in A1 | Approve |
 | P2 | Client environment: parent's minus every `GIT_*` | Approve |
