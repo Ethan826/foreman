@@ -1,7 +1,11 @@
-// Process gate (plan B11b): `src/runtime/git.ts` is the only module in
-// src/ that can start a process, and it gives every `execFile` call an
-// explicit environment, so no production path runs git with the parent's
-// environment. Decided on the TypeScript syntax tree, not on text.
+// Process gate (plan B11b; owner ruling on A1, 2026-11-19): only four
+// modules in src/ can start a process, named by path: `src/runtime/git.ts`
+// (git), `spawn.ts` (clients), `processes.ts` (`ps`) and
+// `client-version.ts` (`<client> --version`). Every `execFile` and
+// `spawn` call, in any module, gives an explicit environment, and only
+// git.ts passes "git" as the program, so no production path runs git with
+// the parent's environment or outside the clean runners. Decided on the
+// TypeScript syntax tree, not on text.
 //
 // What counts as starting a process or reading the parent environment:
 // importing, re-exporting, `import()`ing or `require()`ing
@@ -11,8 +15,13 @@
 //
 // Blind spots: a process started through another module this gate does
 // not name (a native addon, a worker that imports child_process,
-// `bun:ffi`), a specifier computed at run time, and an `execFile` reached
-// through an alias such as `const run = execFile`. It also cannot see a
+// `bun:ffi`), a specifier computed at run time, and an `execFile` or
+// `spawn` reached through an alias such as `const run = execFile` or a
+// namespace import (`childProcess.spawn`). The git-program rule sees only
+// a literal "git" as the first argument: a program held in a variable,
+// a path such as "/usr/bin/git", or argv chosen at run time (as spawn.ts
+// and client-version.ts take theirs) escapes it, so a client launch whose
+// argv starts with git is not caught here. It also cannot see a
 // module that imports `startGit` from git.ts and passes it an environment
 // other than the clean one. On the paths that creation and the startup
 // check take, `test/program/git-coverage.test.ts` catches that, because
@@ -30,6 +39,17 @@ const sources = import.meta.glob<string>("../../src/**/*.ts", {
 
 /** The one module that may start git. */
 const gitModule = "../../src/runtime/git.ts"
+
+/** The modules that may start a process (owner ruling on A1). */
+const processStarters = [
+  gitModule,
+  "../../src/runtime/spawn.ts",
+  "../../src/runtime/processes.ts",
+  "../../src/runtime/client-version.ts",
+]
+
+/** The calls that start a process and take an options object third. */
+const processCalls = ["execFile", "spawn"]
 
 const processModules = ["node:child_process", "child_process", "node:cluster", "cluster", "bun"]
 
@@ -61,9 +81,16 @@ const isGlobalReference = (node: ts.Identifier) => {
   return processGlobals.includes(node.text)
 }
 
-/** Whether a call is `execFile(...)` whose options object has no `env` property. */
-const isExecFileWithoutEnv = (node: ts.CallExpression) => {
-  if (!ts.isIdentifier(node.expression) || node.expression.text !== "execFile") return false
+/** The name of a process call (`execFile` or `spawn`) by identifier, if the call is one. */
+const processCallName = (node: ts.CallExpression): ReadonlyArray<string> =>
+  ts.isIdentifier(node.expression) && processCalls.includes(node.expression.text) ? [node.expression.text] : []
+
+/** Whether a process call's program (first argument) is the literal "git". */
+const runsGit = (node: ts.CallExpression) =>
+  processCallName(node).length > 0 && literalText(node.arguments[0]).includes("git")
+
+/** Whether a process call's options object (third argument) has no `env` property. */
+const isProcessCallWithoutEnv = (node: ts.CallExpression) => {
   const options = node.arguments[2]
   if (options === undefined || !ts.isObjectLiteralExpression(options)) return true
   return !options.properties.some(
@@ -102,33 +129,47 @@ const parseFindings = (text: string): ReadonlyArray<string> =>
 /**
  * What a module does that the gate forbids: a syntax error, a process
  * module imported (unless `mayStartProcesses`), a process global
- * referenced, or an `execFile` call without an explicit `env`.
+ * referenced, an `execFile` or `spawn` call without an explicit `env`,
+ * or "git" as such a call's program (unless `mayRunGit`).
  */
-export const processFindings = (text: string, mayStartProcesses: boolean): ReadonlyArray<string> => [
+export const processFindings = (
+  text: string,
+  mayStartProcesses: boolean,
+  mayRunGit: boolean,
+): ReadonlyArray<string> => [
   ...parseFindings(text),
   ...nodesOf(text).flatMap((node) => [
     ...importedBy(node)
       .filter((name) => processModules.includes(name) && !mayStartProcesses)
       .map((name) => `imports ${name}`),
     ...(ts.isIdentifier(node) && isGlobalReference(node) ? [`references ${node.text}`] : []),
-    ...(ts.isCallExpression(node) && isExecFileWithoutEnv(node) ? ["execFile without env"] : []),
+    ...(ts.isCallExpression(node) && isProcessCallWithoutEnv(node)
+      ? processCallName(node).map((name) => `${name} without env`)
+      : []),
+    ...(ts.isCallExpression(node) && !mayRunGit && runsGit(node) ? ["runs git outside git.ts"] : []),
   ]),
 ]
 
-/** The number of `execFile` calls in a module. */
-const execFileCalls = (text: string) =>
+/** The number of calls named `name` in a module. */
+const callsNamed = (name: string, text: string) =>
   nodesOf(text).filter(
-    (node) => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "execFile",
+    (node) => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name,
   ).length
 
-describe("only src/runtime/git.ts starts a process, always with an explicit environment", () => {
-  it("scans the real tree, git.ts included (scan minimum)", () => {
+describe("only the four process modules start a process, always with an explicit environment", () => {
+  it.each([
+    [gitModule, 1, 0],
+    ["../../src/runtime/spawn.ts", 0, 1],
+    ["../../src/runtime/processes.ts", 1, 0],
+    ["../../src/runtime/client-version.ts", 1, 0],
+  ])("scans %s with its process calls (scan minimum)", (path, execFiles, spawns) => {
     expect(Object.keys(sources).length).toBeGreaterThanOrEqual(40)
-    expect(execFileCalls(sources[gitModule] ?? "")).toBe(1)
+    expect(callsNamed("execFile", sources[path] ?? "")).toBe(execFiles)
+    expect(callsNamed("spawn", sources[path] ?? "")).toBe(spawns)
   })
 
   it.each(Object.entries(sources))("%s", (path, text) => {
-    expect(processFindings(text, path === gitModule)).toEqual([])
+    expect(processFindings(text, processStarters.includes(path), path === gitModule)).toEqual([])
   })
 })
 
@@ -143,7 +184,7 @@ describe("process gate must-fail cases", () => {
     ["the Bun global", `Bun.spawn(["git"])`, ["references Bun"]],
     ["the parent environment", `const home = process.env.HOME`, ["references process"]],
   ])("flags %s outside git.ts", (_name, text, expected) => {
-    expect(processFindings(text, false)).toEqual(expected)
+    expect(processFindings(text, false, false)).toEqual(expected)
   })
 
   it.each([
@@ -151,7 +192,7 @@ describe("process gate must-fail cases", () => {
     ["an unterminated string", `const program = "git`],
     ["a stray brace", `export const run = () => { startGit() }}`],
   ])("flags a module that does not parse: %s", (_name, text) => {
-    expect(processFindings(text, true).filter((finding) => finding.startsWith("does not parse:"))).not.toEqual([])
+    expect(processFindings(text, true, true).filter((finding) => finding.startsWith("does not parse:"))).not.toEqual([])
   })
 
   it.each([
@@ -159,7 +200,33 @@ describe("process gate must-fail cases", () => {
     ["options without env", `execFile("git", [], { cwd, encoding: "utf8" }, cb)`],
     ["options passed by name", `execFile("git", [], options, cb)`],
   ])("flags execFile with %s, even in git.ts", (_name, text) => {
-    expect(processFindings(text, true)).toEqual(["execFile without env"])
+    expect(processFindings(text, true, true)).toEqual(["execFile without env"])
+  })
+
+  it.each([
+    ["no options", `spawn("claude", [])`],
+    ["options without env", `spawn("claude", [], { cwd, detached: true })`],
+    ["options passed by name", `spawn("claude", [], options)`],
+  ])("flags spawn with %s, even in a module that may start processes", (_name, text) => {
+    expect(processFindings(text, true, true)).toEqual(["spawn without env"])
+  })
+
+  it.each([
+    ["execFile", `execFile("git", [], { cwd, env, encoding: "utf8" }, cb)`],
+    ["spawn", `spawn("git", [], { cwd, env, detached: true, stdio })`],
+  ])("flags git as the program of %s outside git.ts", (_name, text) => {
+    expect(processFindings(text, true, false)).toEqual(["runs git outside git.ts"])
+  })
+
+  it.each([
+    [
+      "spawn.ts",
+      `import { spawn } from "node:child_process"; const child = spawn(file, args, { cwd, env: launch.env, detached: true })`,
+    ],
+    ["processes.ts", `import { execFile } from "node:child_process"; execFile(ps, args, { cwd, env: listing }, cb)`],
+    ["client-version.ts", `import { execFile } from "node:child_process"; execFile(client, args, { cwd, env }, cb)`],
+  ])("passes a process start like %s's in a module that may start processes", (_name, text) => {
+    expect(processFindings(text, true, false)).toEqual([])
   })
 
   it.each([
@@ -168,6 +235,6 @@ describe("process gate must-fail cases", () => {
     `const env = { PATH: "/usr/bin:/bin" }; execFile("git", [], { cwd, env, encoding: "utf8" }, cb)`,
     `const value = record.process`,
   ])("passes %j in git.ts", (text) => {
-    expect(processFindings(text, true)).toEqual([])
+    expect(processFindings(text, true, true)).toEqual([])
   })
 })

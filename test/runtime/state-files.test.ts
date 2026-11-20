@@ -6,6 +6,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
+import type { Sha256 } from "../../src/domain/session.ts"
 import { StateFileFailed, stateFiles } from "../../src/runtime/state-files.ts"
 
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
@@ -32,7 +33,7 @@ large.set(Array.from({ length: 256 }, (_, index) => index))
 
 const publishesUnderFinalName = (dir: string) =>
   Effect.gen(function* () {
-    const hash = yield* stateFiles.publish(`${dir}/handoff.md`, abc)
+    const hash: Sha256 = yield* stateFiles.publish(`${dir}/handoff.md`, abc)
     expect(hash).toBe(abcSha256)
     expect(readFileSync(`${dir}/handoff.md`, "utf8")).toBe("abc")
     expect(existsSync(`${dir}/handoff.md.tmp`)).toBe(false)

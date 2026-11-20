@@ -10,6 +10,7 @@ import { Effect, Predicate, Schema } from "effect"
 import { createHash } from "node:crypto"
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from "node:fs"
 import { dirname } from "node:path"
+import { Sha256 } from "../domain/session.ts"
 
 /** A state file could not be written, flushed, renamed or read. */
 export class StateFileFailed extends Schema.TaggedError<StateFileFailed>()("StateFileFailed", {
@@ -29,7 +30,7 @@ export interface StateFiles {
    * the final name is left as it was, unless the failure came after the
    * rename, while flushing the directory.
    */
-  readonly publish: (path: string, bytes: Uint8Array) => Effect.Effect<string, StateFileFailed>
+  readonly publish: (path: string, bytes: Uint8Array) => Effect.Effect<Sha256, StateFileFailed>
   /** Reads the whole file at `path` as bytes. */
   readonly read: (path: string) => Effect.Effect<Uint8Array, StateFileFailed>
 }
@@ -40,6 +41,8 @@ export const temporarySuffix = ".tmp"
 /** The reason recorded when a thrown value carries no message. */
 const unknownReason = "unknown error"
 
+const decodeSha256 = Schema.decodeUnknownEffect(Sha256)
+
 /** The temporary path a publish of `path` writes: `<path>.tmp`. */
 export const temporaryPathOf = (path: string): string => `${path}${temporarySuffix}`
 
@@ -47,7 +50,7 @@ export const temporaryPathOf = (path: string): string => `${path}${temporarySuff
 export const sha256Of = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex")
 
 /** Writes, flushes and renames, then flushes the directory, then hashes. */
-const publish = (path: string, bytes: Uint8Array): Effect.Effect<string, StateFileFailed> =>
+const publish = (path: string, bytes: Uint8Array): Effect.Effect<Sha256, StateFileFailed> =>
   Effect.gen(function* () {
     const temporary = temporaryPathOf(path)
     yield* writeFlushed(path, temporary, bytes)
@@ -57,8 +60,18 @@ const publish = (path: string, bytes: Uint8Array): Effect.Effect<string, StateFi
     yield* attempt(path, () => {
       flushDirectory(dirname(path))
     })
-    return sha256Of(bytes)
+    return yield* digestOf(path, bytes)
   })
+
+/**
+ * The bytes' SHA-256 as Domain's {@link Sha256}. The decode cannot fail
+ * for a hex digest; if it did, the failure is reported for `path`.
+ */
+const digestOf = (path: string, bytes: Uint8Array) =>
+  Effect.mapError(
+    decodeSha256(sha256Of(bytes)),
+    (issue) => new StateFileFailed({ path, reason: issue.message }),
+  )
 
 /** Reads the file at `path`. */
 const read = (path: string): Effect.Effect<Uint8Array, StateFileFailed> => attempt(path, () => readFileSync(path))
