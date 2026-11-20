@@ -674,3 +674,29 @@ these open items from the workers:
 - `test/program/admission.test.ts` (261 lines) and `eslint.rules.js`
   stay over the limit as recorded cleanups; `eslint.rules.js` grew with
   tonight's entry exception.
+
+## Batch review and corrections (2026-11-20)
+
+The Codex batch review ([the batch review](2026-11-20-assisted-batch-review.md))
+found blockers B01 to B17, limits L01 to L04 and minor items M01 to M09:
+correct before landing or L3.
+
+Owner rulings (2026-11-20):
+- L01: foreman keeps waiting for a client's pipes to close and never
+  signals. If a command does not return after the leader exits (a
+  descendant holds an inherited pipe), the owner interrupts foreman; the
+  attempt is left incomplete and goes through `status`, `step-ended` and
+  `session close --interrupted`. A real inherited-pipe fixture proves
+  both halves.
+- B03: foreman generates the Claude settings file itself, from a fixed
+  template bound to the recorded worktree, publishes it in the state
+  directory before admission, and launches with those exact bytes. The
+  configuration cannot supply a settings path. L03 (whether user
+  settings and hooks also load) stays open until before L3.
+
+Correction groups, in parallel worktrees:
+- `fix-production`: B02 to B07, B09, B10.
+- `fix-snapshot`: B08, B17.
+- `fix-protocol`: B11 to B15, M01 to M05, L01.
+- `fix-l3-gates`: B01, B16, M06.
+M08 (AGENTS.md and checkpoint status) is the coordinator's, at the end.
