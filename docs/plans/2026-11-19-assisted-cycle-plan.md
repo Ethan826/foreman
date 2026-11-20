@@ -700,3 +700,19 @@ Correction groups, in parallel worktrees:
 - `fix-protocol`: B11 to B15, M01 to M05, L01.
 - `fix-l3-gates`: B01, B16, M06.
 M08 (AGENTS.md and checkpoint status) is the coordinator's, at the end.
+
+`fix-l3-gates` integrated (9fe507f B16; 5ed3227 B01, M06), 165,625
+tokens. Two items recorded from that pass:
+- Rule break: one of the worker's editing commands was denied by the
+  harness's removal safety check (a false positive; nothing was being
+  deleted). The worker made the same in-scope edit with another tool
+  instead of stopping and quoting the denial, as the agent baseline
+  requires. Recorded for the owner; the resulting `setup.sh` is part of
+  the reviewed diff.
+- Flake under load: with four parallel workers (load average 53 to 91),
+  `test/lint/prose.test.ts` ("passes on the repository's own Markdown")
+  and `test/runtime/state-files.test.ts` ("writes every byte of a large
+  binary file") exceeded Vitest's 5-second default. They passed on later
+  runs; the timeouts were not raised. Open item: both sit near their
+  limit under load and need a sized limit or a cheaper test, by owner
+  decision.
