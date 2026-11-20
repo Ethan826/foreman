@@ -594,3 +594,18 @@ pass "git" as the program. Must-fail fixtures prove each new rule.
 
 Wave 3 started: `a2-briefs` (the brief builder and the name-status
 decoder). The A1 Program wave starts once `a1-runtime` finishes.
+
+More integrated: `a1-runtime` part 2 (de2223f; the gate change), 252,511
+tokens for the resumed pass; `a2-briefs` (67532ad), 133,991; `a1-program`
+(9a8d0d9, e152a84, 931cd33 as 7ffa281 and its two parents), 408,984.
+
+Owner ruling (2026-11-19, evening), on the `a1-program` worker's scope
+stop: the CLI's entry statement lives in `src/facade/main.ts`, the only
+file besides the four runtime process modules that may reference the
+`process` global, and only as `process.argv`, `process.env` and
+`process.exit`. The process gate enforces both limits, with must-fail
+fixtures.
+
+Coordinator's correction: the `a1-program` brief left out
+`--permission-prompts none`, which the plan and the L3 runbook include;
+the A2 worker adds it.
