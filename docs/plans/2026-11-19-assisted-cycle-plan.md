@@ -777,3 +777,19 @@ found R01 to R06 and asked for owner rulings. Owner rulings
 
 Remaining for workers: R01 and R04 (`fix-r01-r04`), R02 and R03
 (`fix-r02-r03`).
+
+`fix-r02-r03` integrated (1b0be0b), 225,125 tokens. It also fixed a
+latent defect: the CLI's `step-ended` could never succeed (the facade's
+tagged `EndStep` overwrote the event's `_tag`).
+
+Open failure (2026-11-20, coordinator): the first full suite after that
+integration failed one test, `test/program/assisted-cycle.test.ts`,
+"writes exactly the expected batches and launches once per launch
+command" (1,483 of 1,484 passed), at a load average of about 27 with the
+`fix-r01-r04` worker running. The coordinator's command filtered the
+output and the failure message was not kept. The file then passed alone
+twice and the full suite passed (1,484). The test has no named budget,
+so Vitest's 5 s default applies; a timeout under load is likely but not
+established. It stays an open failure for the owner: a named budget
+like `endToEndMillis`, a cheaper test, or a cause found by rerunning
+under load with the output kept.
