@@ -2,7 +2,10 @@
 // Bun's Node-compatible `node:child_process` and `node:fs` that the
 // Runtime layer uses (Bun 1.3.6): `execFile` with a callback, as Node
 // documents it, `statSync`, `realpathSync`, and `lstatSync` and
-// `readFileSync` for the attribute check (plan B11c). `execFile` takes the
+// `readFileSync` for the attribute check (plan B11c), and for the
+// snapshot (plan A2) the reads of a worktree entry that never follow a
+// link, the temporary index directory and `node:crypto`'s SHA-1.
+// `execFile` takes the
 // child's whole environment, required, so no call inherits the parent's.
 declare module "node:child_process" {
   /**
@@ -61,4 +64,67 @@ declare module "node:fs" {
   }
   /** Reads the whole file at `path` as UTF-8 text; throws when it cannot be read. */
   export function readFileSync(path: string, encoding: "utf8"): string
+  /**
+   * Reads the whole file at a path, or from an open file descriptor, as
+   * raw bytes with no decoding; throws when it cannot be read.
+   */
+  export function readFileSync(file: string | number): Uint8Array
+  /**
+   * The text of the symbolic link at `path`, as raw bytes, without
+   * following it: the target is never opened or inspected. Throws when
+   * `path` is not a link (EINVAL) or cannot be read.
+   */
+  export function readlinkSync(path: string, options: { readonly encoding: "buffer" }): Uint8Array
+  /**
+   * Opens `path` with the open(2) `flags` (from {@link constants}) and
+   * returns its file descriptor; throws on failure, with `code` ELOOP when
+   * O_NOFOLLOW meets a symbolic link.
+   */
+  export function openSync(path: string, flags: number): number
+  /** The status of an open file descriptor, which cannot be a link. Throws when it cannot be read. */
+  export function fstatSync(descriptor: number): {
+    /** Whether the descriptor is a regular file. */
+    isFile(): boolean
+    /** The file's type and permission bits, as st_mode. */
+    readonly mode: number
+  }
+  /** Closes a file descriptor that {@link openSync} returned. */
+  export function closeSync(descriptor: number): void
+  /** The open(2) flags {@link openSync} takes, with the platform's values. */
+  export const constants: {
+    /** Open for reading only. */
+    readonly O_RDONLY: number
+    /** Fail with ELOOP rather than follow a symbolic link at the path. */
+    readonly O_NOFOLLOW: number
+    /** Do not block when opening, as a FIFO would. */
+    readonly O_NONBLOCK: number
+  }
+  /**
+   * Creates a new, empty directory named `prefix` followed by six random
+   * characters, and returns its path; throws when it cannot be created.
+   */
+  export function mkdtempSync(prefix: string): string
+  /**
+   * Removes `path`; with `recursive` a directory and its contents, and
+   * with `force` a missing path is not an error.
+   */
+  export function rmSync(
+    path: string,
+    options: { readonly recursive: boolean; readonly force: boolean },
+  ): void
+}
+
+declare module "node:crypto" {
+  /** A running digest; feed it with {@link Hash.update}, then read it once with {@link Hash.digest}. */
+  export interface Hash {
+    /** Adds `data` to the digest: bytes as they are, a string as its UTF-8 bytes. Returns the same digest. */
+    update(data: string | Uint8Array): Hash
+    /** The finished digest's raw bytes; the digest cannot be updated after. */
+    digest(): Uint8Array
+  }
+  /**
+   * Starts a digest with the platform's implementation of `algorithm`.
+   * Runtime uses only "sha1", for git's blob ids (plan A2).
+   */
+  export function createHash(algorithm: "sha1"): Hash
 }

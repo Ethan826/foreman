@@ -3,8 +3,9 @@
 // variables of {@link cleanGitEnvironment} and nothing from the parent,
 // and the three `-c` overrides come before the command's own args: through
 // `cleanGitWith`, or through `pinnedGitWith`, which adds the recorded
-// `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR` of one worktree. This is
-// the one module that starts a process for git
+// `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR` of one worktree, or
+// through `snapshotGitWith`, which adds `GIT_INDEX_FILE` to that (plan A2,
+// "Snapshot identity and raw checks"). This is the one module that starts a process for git
 // (`test/runtime/git-process-gate.test.ts`). `--no-verify` is not applied
 // here.
 import { Effect, Option } from "effect"
@@ -156,6 +157,31 @@ export const pinnedGitWith =
   (home: string): PinGit =>
   (identity) => {
     const env = pinnedGitEnvironment(home, identity)
+    return (cwd, args) => start({ cwd, args: [...cleanGitOverrides, ...args], env })
+  }
+
+/**
+ * Builds the snapshot runner for one temporary index file. Program
+ * receives one from {@link snapshotGitWith}; a test may inject another.
+ */
+export type SnapshotGit = (indexFile: string) => RunGit
+
+/**
+ * The snapshot runner over an injected process call (plan "Snapshot
+ * identity and raw checks"): the {@link pinnedGitWith} runner plus
+ * `GIT_INDEX_FILE`, exactly nine variables, with the
+ * {@link cleanGitOverrides} before each command's args. git's documented
+ * `GIT_INDEX_FILE` makes `read-tree`, `add` and `write-tree` use
+ * `indexFile` instead of the worktree's own index, which they never read
+ * or write. `indexFile` is the caller's fresh path; this runner neither
+ * makes nor checks it.
+ */
+export const snapshotGitWith =
+  (start: StartGit) =>
+  (home: string) =>
+  (identity: RecordedGitIdentity): SnapshotGit =>
+  (indexFile) => {
+    const env = { ...pinnedGitEnvironment(home, identity), GIT_INDEX_FILE: indexFile }
     return (cwd, args) => start({ cwd, args: [...cleanGitOverrides, ...args], env })
   }
 
