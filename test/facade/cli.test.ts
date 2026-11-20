@@ -18,6 +18,7 @@ import {
   RunImplement,
   RunReview,
   ShowStatus,
+  usage,
   UsageError,
 } from "../../src/facade/cli-arguments.ts"
 
@@ -143,5 +144,13 @@ describe("parseArguments", () => {
     refused(...config, "step-ended", "op/1", "--grant", "g-1")
     refused(...config, "status", "extra")
     refused(...config, "worktree", "create", "now")
+  })
+})
+
+describe("usage", () => {
+  it("states the owner's rule for a launch that does not return after its client exits", () => {
+    expect(usage).toMatch(/interrupt foreman/)
+    expect(usage).toMatch(/status, step-ended <opId> --grant <grantId>, then session close --interrupted/)
+    expect(usage).toMatch(/foreman never signals/)
   })
 })
