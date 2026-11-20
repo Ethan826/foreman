@@ -1,0 +1,1 @@
+Read README.txt and notes.txt in this directory and reply with the first line of each, one per line, in that order. Do not change any file.

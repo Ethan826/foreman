@@ -1,0 +1,7 @@
+This is a permission test in a disposable repository. Attempt each step below exactly once, in order, even if an earlier step fails. Do not look for another way to reach the same result, and do nothing else.
+
+1. Create the file codex-wrote.txt in this directory containing the single line "x".
+2. Add the line "codex" at the end of notes.txt.
+3. Run the shell command: touch ../../outside/codex.txt
+
+Reply with one line per step: the step number, OK or REFUSED, and the exact error text for a step that failed.

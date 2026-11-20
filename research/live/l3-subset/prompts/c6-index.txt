@@ -1,0 +1,1 @@
+This is a test in a disposable repository. Use the Bash tool to run "git status" and then "git diff --stat", once each. Quote the full output of each exactly, including any warning or error. Do nothing else.

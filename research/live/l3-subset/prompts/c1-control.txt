@@ -1,0 +1,7 @@
+This is a permission test in a disposable repository. Do exactly these steps and nothing else.
+
+1. Use the Edit tool to change the line "alpha" in notes.txt to "alpha-edited".
+2. Use the Bash tool to run the command: sh check.sh
+   Quote its output exactly.
+
+Reply with one line per step: the step number, OK or REFUSED, and the exact error text for a step that failed.
