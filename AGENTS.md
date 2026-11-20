@@ -78,10 +78,19 @@ refusal reasons) is defined once as a named `as const` object in Domain
 derive from that object, and no other file retypes the strings. A tag that
 only one Format decoder knows lives in a constant at the top of that
 decoder. Two rules in `eslint.rules.js` enforce this: `Schema.Literals` and
-`Schema.Literal` in `src/` may not take inline literals, and the strings
-"claude", "codex", "implementer", "reviewer" and "corrector" may not appear
-as string literals outside `src/domain/clients.ts` and
-`src/domain/roles.ts`. A new vocabulary adds its names to that list.
+`Schema.Literal` in `src/` may not take inline literals, and no name in
+`closedNames` may appear as a string literal outside the modules in
+`canonicalModules`. The list has 25 names from seven constants: `Clients`
+and `Roles` (`src/domain/clients.ts`, `roles.ts`), `WorktreeConditions`
+(`src/domain/worktree.ts`), and `TreeEntryTypes`, `FileKinds`,
+`AttributeSources` and `AttributeRefusalReasons`
+(`src/domain/attributes.ts`). A new vocabulary adds its names to
+`closedNames` and its module to `canonicalModules`. It also adds one line
+per name to `lint-fixtures/src/features/bare-names.ts`, where
+`test/lint/fixtures.test.ts` checks each name on its own line. A value
+that would also be an ordinary word elsewhere, such as a git object type,
+gets a distinctive Domain name. The outside token stays a constant in its
+decoder.
 
 ## Dependency watch
 

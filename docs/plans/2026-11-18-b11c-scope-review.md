@@ -178,3 +178,73 @@ about 17 minutes versus the 100k estimate. Reviewer usage and owner
 verification are outside that measured total. Recommend one fresh,
 short-brief correction unit after the config-context scope decision,
 then a targeted review of these findings and full validation.
+
+## Correction review of 77b8ef4 and c600b98, 2026-11-19
+
+Verdict: the four correction items are addressed; no new functional
+blocker found. Recommend landing after the implementation and landing
+records are updated. Keep the preexisting file-size debt explicit, as
+described below, rather than representing every house rule as satisfied.
+The shared branch and source files were not changed by this review.
+
+Fresh baseline on c600b98: bun run check passed (0 blocking findings,
+30 advisory notes), bun run test passed (58 files, 675 tests), and bun
+run docs built without warnings. The added advisory note is the reported
+verb-no note in src/features/README.md. The startup config reads now
+use the verified supervisor path; the unconditional include traversal,
+conditional-include refusal before creation, startup refusal and passing
+unconditional include case have real-repository tests and marker controls.
+The empty private HOME precondition is stated in the attribute check's
+TSDoc, without introducing another runtime check.
+
+| Item | Status | Evidence |
+|---|---|---|
+| Startup config.worktree | CLOSED | Startup uses the supervisor path. Independently reverting it to commonDir fails the config.worktree regression and command coverage, exactly two tests. |
+| Conditional includes, option R | CLOSED | Creation and startup read the includeif listing; Features refuses exit 0, allows only exit 1 and reports all other exits as read failures. Direct and nested marker controls and refusal cases pass. |
+| Vocabulary enforcement and R7 | CLOSED in this project | Domain contains 25 distinct names. Every name has its own fixture line and expected diagnostic. Independently removing path-listed or conditional-include from the lint list makes the must-fail fixture assertion fail, one test per mutation. |
+| Empty HOME dependency | CLOSED as documentation | checkAttributeSourcesWith states that the eventual caller creates and owns an empty private HOME; this slice does not validate that caller precondition. |
+
+The count is 25: clients 2, roles 3, worktree conditions 5, tree-entry
+types 3, file kinds 4, attribute sources 4 and refusal reasons 4.
+ConditionalInclude supplies the fourth attribute source. The git token
+mapping keeps the wire words in Format and uses Domain values internally.
+
+The weak new malformed-record case is redundant, not an uncovered mapping
+failure: blob-entry contains a hyphen and is rejected by recordPattern.
+The preexisting blobby case passes that regexp and fails the GitRecord
+type schema; a direct probe returned `Expected "blob" | "tree" | "commit"
+at [0]["type"]`. The valid-record case checks all three successful
+mappings. No extra decoder correction is requested.
+
+The includeIf-regexp mutant is reported as behaviorally equivalent on
+git 2.50.1; its survival is not evidence of a missing behavior assertion.
+The coverage test intentionally pins the chosen literal invocation.
+Do not add a test that pretends equivalent Git behavior should differ.
+
+Independent mutations ran only in a temporary archive at
+/tmp/foreman-b11c-corrections.8WnGXm. Both mutation targets were restored
+byte for byte against c600b98 afterward. Their expected failures are the
+two startup failures and one fixture-suite failure for each removed name;
+the baseline suite had no failures.
+
+### Landing records and proposed maintenance follow-up
+
+- Update AGENTS.md's closed-vocabulary inventory to include the newly
+  enforced vocabulary objects and canonical attributes module. Update the
+  implementation record and checkpoint when landing actually occurs.
+- eslint.rules.js was 412 lines on the base and is now 418. This remains
+  a house-style violation, not an exemption created by passing checks.
+  Proposed separate mechanical cleanup: split the module into focused
+  rule-group modules without changing selectors, messages, severity,
+  canonical-module handling or fixture coverage; verify with the full
+  lint-fixture suite, check, test and docs. Recommend explicitly deferring
+  that cleanup out of B11c rather than launching another broad correction
+  worker. The owner must adopt that deferral; this review does not silently
+  waive the file-size rule. Keep it beside the existing admission-test
+  split and owning-skill lift handoffs until resolved.
+- No additional feature scope is needed to close the B11c findings.
+
+Worker consumption reported by the owner: correction total 327,564 tokens
+(121,821 for the conflict stop and 205,743 for the resumed pass); B11c
+total 550,441 worker tokens. Coordination and this review are outside
+that measured total. No claim of meeting the 100k estimate is made.

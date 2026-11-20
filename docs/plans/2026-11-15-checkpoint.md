@@ -28,14 +28,32 @@ slice does not authorize it.
   400k. On the landed content: `bun run docs` (no warnings), `bun run
   check` (0 blocking, 29 notes) and `bun run test` (53 files, 604 tests)
   pass.
+- B11c landed 2026-11-19 by fast-forward, after a scope review, a code
+  review, one correction and a correction review that passed. Creation
+  (before `worktree add`) and startup refuse any attribute source the
+  clean environment would change or leave in force. That covers revision
+  `.gitattributes` with any content, a non-empty common
+  `info/attributes`, a configured `core.attributesFile` (including in
+  `config.worktree`) and any `includeIf`. Read failures refuse. The
+  rulings chose option A and option R. Measured worker use: 550,441
+  tokens across three units, against estimates of about 100k each for the
+  slice and the correction. On the landed content, `bun run docs` (no
+  warnings), `bun run check` (0 blocking, 30 notes) and `bun run test`
+  (58 files, 675 tests) pass.
 - CI: the F7 lifecycle property timed out on GitHub's runner. It has a
   provisional 60-second limit (83870d8), and it passed on CI in 6,486 ms.
-- The rest of B11 and B12 to B18 remain unauthorized. L3 waits on B16;
-  L4 waits on B13 to B15. Each push needs the owner's OK.
+  The `git.test.ts` fixture no longer links to `/usr/bin/env`, which is a
+  multi-call binary on ubuntu-26.04 (be991f8).
+- The rest of B11 (the pinned environment, the protected digest, the
+  commit procedure and the review worktree) and B12 to B18 remain
+  unauthorized. L3 waits on B16, and L4 waits on B13 to B15. Each push
+  needs the owner's OK.
 
 Deferred findings keep their recorded triggers: R5 before extending the
-listing decoder or claiming strict validation; R7 at the next lint-gate
-change; F8 with B15. Re-vendoring the prose linter from the skills
+listing decoder or claiming strict validation, and F8 with B15. R7 is
+closed (c600b98). Deferred cleanups: split `eslint.rules.js` (418 lines)
+and `test/program/admission.test.ts` (261 lines) under the 250-line
+limit. Re-vendoring the prose linter from the skills
 repository and the editorial pass on the docs remain open. From B11b:
 the `gate-integrity` lift (a local draft is in
 [the B11b review note](2026-11-18-b11b-scope-review.md); writing to the

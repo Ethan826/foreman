@@ -1391,7 +1391,7 @@ Handoff items from B11b, open and not blocking:
   250-line limit. A mechanical change, proposed separately.
 - R5 and R7 stay deferred with their triggers, and F8 stays with B15.
 
-#### B11c: refuse attribute sources at creation and startup (scoped 2026-11-18, revised 2026-11-19, authorized 2026-11-19 as option A)
+#### B11c: refuse attribute sources at creation and startup (scoped 2026-11-18, revised and authorized 2026-11-19 as option A, landed 2026-11-19)
 
 Why next: B11b's empty attribute source stops `.gitattributes` filters,
 but it also changes what git does with any conversion declaration, and
@@ -1633,6 +1633,71 @@ Sizing and control: one fresh correction worker with a short brief,
 about 100k. The first B11c unit measured 222,877 tokens against a 100k
 estimate, so this figure is uncertain. A focused review follows. Same
 control as before.
+
+Corrections (2026-11-19), the same correction worker resumed after the
+rulings above. Two commits:
+
+- 77b8ef4 (findings 1, 2 and 4). Startup runs the config reads inside
+  the supervisor worktree. `git config --get-regexp '^includeif\.'` runs
+  at creation in the owner's checkout before `worktree add`, and again at
+  startup. Exit 0 refuses with the new source `conditional-include`,
+  exit 1 passes, and any other exit is a read failure. The empty-`HOME`
+  dependency is in the TSDoc of `checkAttributeSourcesWith`. The new
+  regression tests use real repositories, each with a marker filter and a
+  control run that writes the marker without the check:
+  - a `config.worktree` `core.attributesFile` is refused at startup;
+  - `includeIf.onbranch:foreman/**` is refused at creation before
+    `worktree add`, with no marker and nothing left behind;
+  - the same key nested in an unconditional `include.path` is refused;
+  - a repository with only an unconditional, harmless include passes;
+  - a conditional include added after creation is refused at startup.
+- c600b98 (finding 3, closes R7). The four git-word values are renamed:
+  `blob-entry`, `tree-entry`, `commit-entry` and `directory-kind`.
+  `closedNames` holds 25 names, including `conditional-include`, which
+  option R added. `canonicalModules` gains `src/domain/attributes.ts`,
+  and the rule's message names the seven constants. The fixture has one
+  line per name, and the fixture test takes the names from Domain.
+- Worker's mutants: startup reading config from the common directory
+  failed 2 tests. Not judging conditional includes failed 6, and passing
+  any config exit failed 3. Removing `path-listed`, `is-locked`,
+  `conditional-include` or `read-failed` from `closedNames` failed that
+  name's own assertion. Removing `attributes.ts` from `canonicalModules`
+  failed the clean control. Spelling the pattern `^includeIf\.` survives
+  the behavior tests: git 2.50.1 matches `--get-regexp` without regard to
+  case, so the mutant behaves the same, and only the coverage test pins
+  the argument.
+- Coordinator's check: `bun run docs` PASS (no warnings), `bun run check`
+  PASS (0 blocking, 30 notes; the new one is a `verb-no` note in
+  `src/features/README.md`), and `bun run test` PASS (58 files, 675
+  tests). `eslint.rules.js` changed only in `closedNames`,
+  `canonicalModules` and the message. Reverting startup's config
+  context failed the same 2 tests.
+- Consumption, measured by the harness: 121,821 tokens for the unit that
+  stopped at the scope conflict, all of it reading, and 205,743 (55 tool
+  calls, about 10.5 minutes) for the resumed pass. The correction used
+  327,564 tokens against an estimate of about 100k. B11c's measured total
+  is 550,441 tokens, plus coordination that was not measured.
+
+Correction review (2026-11-19, Codex, in the review note): passes, and
+all four items are addressed, including R7. The reviewer checked 675
+tests, check with 30 notes and docs without warnings. Reverting
+startup's config context failed the expected 2 tests. Removing
+`path-listed` or `conditional-include` failed the lint fixture suite.
+The reviewer confirmed 25 names. The surviving pattern mutant behaves
+the same, so it needs no correction. The weak new decoder case is
+redundant: the existing malformed case reaches token validation, and
+valid records test all three mappings. No further B11c worker round.
+
+B11c landed (2026-11-19): `main` was fast-forwarded to the branch, with
+no merge commit and nothing pushed. AGENTS.md's vocabulary inventory
+lists the 25 names, the seven constants and the fixture rule.
+
+Deferred cleanups, recorded and not excused by the green checks:
+
+- `eslint.rules.js` is 418 lines (412 before B11c), over the 250-line
+  house limit. It needs a separate mechanical split.
+- `test/program/admission.test.ts` is 261 lines (from B11b), also over
+  the limit.
 
 ### Task B12: Step runner (in-session process control)
 
