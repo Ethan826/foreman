@@ -793,3 +793,27 @@ so Vitest's 5 s default applies; a timeout under load is likely but not
 established. It stays an open failure for the owner: a named budget
 like `endToEndMillis`, a cheaper test, or a cause found by rerunning
 under load with the output kept.
+
+`fix-r01-r04` integrated (075224e R01, 0da0672 R04), 286,503 tokens.
+R01: `AttemptStop` lists every typed failure of a launch attempt, and
+`isRefusal` classifies each with `Match.tagsExhaustive`, so a new
+failure does not compile until it is classified. Deliberate refusals
+expire every armed waiver; storage, git and code failures and crashes
+expire none. R04: client stdout is split into lines from bytes across
+chunk boundaries and each line decoded with the fatal decoder; an
+undecodable line makes the attempt `Unclassified`, and the raw file
+keeps the exact bytes. Briefs, tasks, handoffs and findings files are
+decoded strictly too.
+
+Re-review corrections total 511,628 tokens (R01 to R04; R05 and R06 were
+rulings and a coordinator change). On 0da0672: check (0 blocking, 46
+notes), docs (no warnings) and the full suite, run twice with the output
+kept (123 files, 1,504 tests, both runs passing at load average about
+14). The cycle-test failure recorded above did not recur; it stays open.
+
+Open for the focused review and the owner: status's exit code 0 with
+findings, and the new `findings`/`inForce` fields; a refused configured
+layout still blocks `step-ended` and the closes; status reads a refused
+state directory's log; `GitCommandFailed` and `ChangedPathsUnread` keep
+the waiver; `utf8Text` stays lossy for the configuration and binding
+reads; the cycle test has no named budget.
