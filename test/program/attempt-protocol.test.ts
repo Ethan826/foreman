@@ -15,7 +15,7 @@ import { claudeEditingArgv } from "../../src/domain/profiles.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { implementBrief } from "../../src/format/brief.ts"
 import { implement } from "../../src/program/implement.ts"
-import { CommandRefused, QuotaHeld, WaiverRefused } from "../../src/program/session-errors.ts"
+import { CommandRefused, QuotaHeld } from "../../src/program/session-errors.ts"
 import { sha256Of } from "../../src/runtime/state-files.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
@@ -167,24 +167,6 @@ const refusedNothingAppended = (
     expect(harness.client.launches).toEqual([])
   })
 
-const otherWaiverOnlyBatchQ = (harness: Harness) =>
-  Effect.gen(function* () {
-    yield* opened(harness)
-    yield* append(harness, [new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-codex") })])
-    failsWith(yield* Effect.exit(implement(harness.context, { waive: true })), Schema.is(WaiverRefused))
-    expect(harness.trace).toMatchObject([logBatch("HoldCreated"), logBatch("WaiverExpired")])
-    expect(harness.client.launches).toEqual([])
-  })
-
-const otherWaiverExpiredOnly = (harness: Harness) =>
-  Effect.gen(function* () {
-    yield* opened(harness)
-    yield* append(harness, [new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-codex") }), quotaHold(Clients.Claude)])
-    failsWith(yield* Effect.exit(implement(harness.context, { waive: true })), Schema.is(WaiverRefused))
-    expect(harness.trace).toMatchObject([logBatch("WaiverExpired")])
-    expect(harness.client.launches).toEqual([])
-  })
-
 const heldAt = (windows: ReadonlyArray<(typeof Windows)[keyof typeof Windows]>) =>
   new HoldCreated({
     hold: new Quota({
@@ -243,12 +225,6 @@ describe("implement: the waiver step under refusing pacing", () => {
   )
   it.effect("a non-quota hold refuses and appends nothing", () =>
     withHarness({ allowing: false }, refusedNothingAppended([failureHold], Schema.is(CommandRefused))),
-  )
-  it.effect("a Claude quota hold with Codex's armed waiver refuses --waive and only expires that waiver", () =>
-    withHarness({ allowing: false }, otherWaiverExpiredOnly),
-  )
-  it.effect("Codex's armed waiver with no Claude hold writes batch Q, refuses --waive, then expires it", () =>
-    withHarness({ allowing: false }, otherWaiverOnlyBatchQ),
   )
   it.effect("a quota hold released by post-hold readings is treated as absent", () =>
     withHarness({ allowing: true }, releasedByReadings),

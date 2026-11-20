@@ -118,6 +118,24 @@ describe("an attempt that does not launch the waived provider expires its waiver
   it.effect("close expires another provider's armed waiver", () => withHarness({}, closeExpiresOther))
 })
 
+const otherWaiverOnlyBatchQ = (harness: Harness) =>
+  Effect.gen(function* () {
+    yield* opened(harness)
+    yield* append(harness, [new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-codex") })])
+    failsWith(yield* Effect.exit(implement(harness.context, { waive: true })), Schema.is(WaiverRefused))
+    expect(harness.trace).toMatchObject([logBatch("HoldCreated"), logBatch("WaiverExpired")])
+    expect(harness.client.launches).toEqual([])
+  })
+
+const otherWaiverExpiredOnly = (harness: Harness) =>
+  Effect.gen(function* () {
+    yield* opened(harness)
+    yield* append(harness, [new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-codex") }), quotaHold(Clients.Claude)])
+    failsWith(yield* Effect.exit(implement(harness.context, { waive: true })), Schema.is(WaiverRefused))
+    expect(harness.trace).toMatchObject([logBatch("WaiverExpired")])
+    expect(harness.client.launches).toEqual([])
+  })
+
 const nothingBeyondQ = (harness: Harness) =>
   Effect.gen(function* () {
     yield* opened(harness)
@@ -125,6 +143,15 @@ const nothingBeyondQ = (harness: Harness) =>
     expect(harness.trace).toMatchObject([logBatch("HoldCreated")])
     expect(harness.trace).toHaveLength(1)
   })
+
+describe("a refused --waive with Codex's waiver armed", () => {
+  it.effect("under a Claude quota hold, expires only that waiver", () =>
+    withHarness({ allowing: false }, otherWaiverExpiredOnly),
+  )
+  it.effect("with no Claude hold, writes batch Q, then expires that waiver", () =>
+    withHarness({ allowing: false }, otherWaiverOnlyBatchQ),
+  )
+})
 
 describe("refusals with no armed waiver", () => {
   it.effect("write nothing beyond batch Q", () => withHarness({ allowing: false }, nothingBeyondQ))
