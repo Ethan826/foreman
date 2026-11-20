@@ -9,6 +9,7 @@ import {
   FileFound,
   FileKinds,
   FileUnreadable,
+  noAttributeAllowance,
   TreeListed,
   TreeNotListed,
   TreeEntryTypes,
@@ -42,6 +43,9 @@ const reading = (parts: {
   attributesFile: parts.attributesFile ?? unset,
   conditionalIncludes: parts.conditionalIncludes ?? unset,
 })
+
+/** The check with the empty allowance: option A as B11c landed it. */
+const checkWithNoAllowance = (each: AttributeReading) => checkAttributeSources(each, noAttributeAllowance)
 
 const refusal = (
   source: AttributeRefusal["source"],
@@ -79,7 +83,7 @@ describe("isRegularBlob", () => {
 
 describe("checkAttributeSources", () => {
   it("passes with no attribute source", () => {
-    expect(checkAttributeSources(reading({}))).toEqual(Result.succeed(revision))
+    expect(checkWithNoAllowance(reading({}))).toEqual(Result.succeed(revision))
   })
 
   it("passes .gitattributes holding only comments and blank lines, with LF or CRLF endings", () => {
@@ -88,17 +92,17 @@ describe("checkAttributeSources", () => {
       blobFile("sub/.gitattributes", "# a comment\r\n\r\n \t\r\n"),
       blobFile("empty/.gitattributes", ""),
     ]
-    expect(checkAttributeSources(reading({ tree: new TreeListed({ files }) }))).toEqual(Result.succeed(revision))
+    expect(checkWithNoAllowance(reading({ tree: new TreeListed({ files }) }))).toEqual(Result.succeed(revision))
   })
 
   it("passes an empty info/attributes", () => {
     const info = new FileFound({ kind: FileKinds.File, content: "" })
-    expect(checkAttributeSources(reading({ info }))).toEqual(Result.succeed(revision))
+    expect(checkWithNoAllowance(reading({ info }))).toEqual(Result.succeed(revision))
   })
 
   it("refuses every line that is not blank or a comment, with its path and line number", () => {
     const files = [blobFile(".gitattributes", "# ok\nfuture/*.bin filter=mark\n"), blobFile("a/.gitattributes", "a.txt text\na.txt !text\n")]
-    expect(checkAttributeSources(reading({ tree: new TreeListed({ files }) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ tree: new TreeListed({ files }) }))).toEqual(
       refused(
         treeContent(".gitattributes", 2, "future/*.bin filter=mark"),
         treeContent("a/.gitattributes", 1, "a.txt text"),
@@ -109,7 +113,7 @@ describe("checkAttributeSources", () => {
 
   it("refuses a comment marker after leading whitespace, a CR before the end and a BOM", () => {
     const files = [blobFile(".gitattributes", " # indented\n\r* -text\n﻿# bom\n")]
-    expect(checkAttributeSources(reading({ tree: new TreeListed({ files }) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ tree: new TreeListed({ files }) }))).toEqual(
       refused(
         treeContent(".gitattributes", 1, " # indented"),
         treeContent(".gitattributes", 2, "\r* -text"),
@@ -126,7 +130,7 @@ describe("checkAttributeSources", () => {
     ]
     const notRegular = (path: string, detail: string) =>
       refusal(AttributeSources.Tree, AttributeRefusalReasons.NotRegular, Option.some(path), Option.none(), detail)
-    expect(checkAttributeSources(reading({ tree: new TreeListed({ files }) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ tree: new TreeListed({ files }) }))).toEqual(
       refused(
         notRegular(".gitattributes", `120000 ${TreeEntryTypes.Blob}`),
         notRegular("a/.gitattributes", `040000 ${TreeEntryTypes.Tree}`),
@@ -142,7 +146,7 @@ describe("checkAttributeSources", () => {
     ]
     const failed = (path: string, detail: string) =>
       refusal(AttributeSources.Tree, AttributeRefusalReasons.ReadFailed, Option.some(path), Option.none(), detail)
-    expect(checkAttributeSources(reading({ tree: new TreeListed({ files }) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ tree: new TreeListed({ files }) }))).toEqual(
       refused(failed(".gitattributes", "exit 128: fatal: bad object\n"), failed("a/.gitattributes", "not read")),
     )
   })
@@ -150,10 +154,10 @@ describe("checkAttributeSources", () => {
   it("refuses a tree that was not listed or did not decode", () => {
     const failed = (detail: string) =>
       refusal(AttributeSources.Tree, AttributeRefusalReasons.ReadFailed, Option.none(), Option.none(), detail)
-    expect(checkAttributeSources(reading({ tree: new TreeNotListed({ exitCode: 128, stderr: "fatal: x\n" }) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ tree: new TreeNotListed({ exitCode: 128, stderr: "fatal: x\n" }) }))).toEqual(
       refused(failed("exit 128: fatal: x\n")),
     )
-    expect(checkAttributeSources(reading({ tree: new TreeUndecodable({ reason: "bad record" }) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ tree: new TreeUndecodable({ reason: "bad record" }) }))).toEqual(
       refused(failed("bad record")),
     )
   })
@@ -169,20 +173,20 @@ describe("checkAttributeSources", () => {
       [new FileUnreadable({ reason: "EACCES" }), info("EACCES", AttributeRefusalReasons.ReadFailed)],
     ]
     cases.forEach(([found, expected]) => {
-      expect(checkAttributeSources(reading({ info: found }))).toEqual(refused(expected))
+      expect(checkWithNoAllowance(reading({ info: found }))).toEqual(refused(expected))
     })
   })
 
   it("refuses a configured core.attributesFile, and any config exit other than 0 or 1", () => {
     const setting = (reason: AttributeRefusal["reason"], detail: string) =>
       refusal(AttributeSources.AttributesFile, reason, Option.none(), Option.none(), detail)
-    expect(checkAttributeSources(reading({ attributesFile: exited(0, "/x/attributes\n") }))).toEqual(
+    expect(checkWithNoAllowance(reading({ attributesFile: exited(0, "/x/attributes\n") }))).toEqual(
       refused(setting(AttributeRefusalReasons.Configured, "/x/attributes\n")),
     )
-    expect(checkAttributeSources(reading({ attributesFile: exited(128, "", "fatal: bad config\n") }))).toEqual(
+    expect(checkWithNoAllowance(reading({ attributesFile: exited(128, "", "fatal: bad config\n") }))).toEqual(
       refused(setting(AttributeRefusalReasons.ReadFailed, "exit 128: fatal: bad config\n")),
     )
-    expect(checkAttributeSources(reading({ attributesFile: exited(2) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ attributesFile: exited(2) }))).toEqual(
       refused(setting(AttributeRefusalReasons.ReadFailed, "exit 2: ")),
     )
   })
@@ -191,13 +195,13 @@ describe("checkAttributeSources", () => {
     const listing = (reason: AttributeRefusal["reason"], detail: string) =>
       refusal(AttributeSources.ConditionalInclude, reason, Option.none(), Option.none(), detail)
     const listed = "includeif.onbranch:foreman/**.path /x/selected\n"
-    expect(checkAttributeSources(reading({ conditionalIncludes: exited(0, listed) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ conditionalIncludes: exited(0, listed) }))).toEqual(
       refused(listing(AttributeRefusalReasons.Configured, listed)),
     )
-    expect(checkAttributeSources(reading({ conditionalIncludes: exited(128, "", "fatal: bad config\n") }))).toEqual(
+    expect(checkWithNoAllowance(reading({ conditionalIncludes: exited(128, "", "fatal: bad config\n") }))).toEqual(
       refused(listing(AttributeRefusalReasons.ReadFailed, "exit 128: fatal: bad config\n")),
     )
-    expect(checkAttributeSources(reading({ conditionalIncludes: exited(2) }))).toEqual(
+    expect(checkWithNoAllowance(reading({ conditionalIncludes: exited(2) }))).toEqual(
       refused(listing(AttributeRefusalReasons.ReadFailed, "exit 2: ")),
     )
   })
@@ -206,7 +210,7 @@ describe("checkAttributeSources", () => {
     const tree = new TreeListed({ files: [blobFile(".gitattributes", "* -text\n")] })
     const info = new FileFound({ kind: FileKinds.File, content: "x" })
     const conditionalIncludes = exited(0, "includeif.gitdir:/z.path /w\n")
-    const result = checkAttributeSources(reading({ tree, info, attributesFile: exited(0, "/y\n"), conditionalIncludes }))
+    const result = checkWithNoAllowance(reading({ tree, info, attributesFile: exited(0, "/y\n"), conditionalIncludes }))
     expect(Result.map(Result.flip(result), (failure) => failure.refusals.map((each) => each.source))).toEqual(
       Result.succeed([
         AttributeSources.Tree,

@@ -10,7 +10,12 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { chmodSync, mkdirSync, symlinkSync, writeFileSync } from "node:fs"
-import { AttributeRefusalReasons as Reasons, AttributeSources as Sources, FileKinds } from "../../src/domain/attributes.ts"
+import {
+  AttributeRefusalReasons as Reasons,
+  AttributeSources as Sources,
+  FileKinds,
+  noAttributeAllowance,
+} from "../../src/domain/attributes.ts"
 import { WorktreeCreated } from "../../src/domain/events.ts"
 import { Revision } from "../../src/domain/ids.ts"
 import { worktreeProgramWith } from "../../src/program/worktree.ts"
@@ -73,7 +78,7 @@ const refusedWhenExiting =
     withRepo((dir, owner) =>
       Effect.gen(function* () {
         yield* commitAttributes(owner, ".gitattributes", "# only a comment\n")
-        const program = worktreeProgramWith(exitingFor(verb, exitCode))(emptyHome)
+        const program = worktreeProgramWith(exitingFor(verb, exitCode), noAttributeAllowance)(emptyHome)
         const refusals = yield* refusalsOf(program.createWorktree(request(owner, dir)))
         expect(refusals.map((each) => [each.source, each.reason, each.detail])).toEqual(expected)
         yield* leftNothing(dir, owner)

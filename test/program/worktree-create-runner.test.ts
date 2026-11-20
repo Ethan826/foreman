@@ -6,6 +6,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Option, Schema } from "effect"
 import { existsSync, mkdirSync, realpathSync } from "node:fs"
+import { noAttributeAllowance } from "../../src/domain/attributes.ts"
 import { GitCommandFailed, PathUnreadable, WorktreeNotAsCreated, WorktreePathNotAbsolute } from "../../src/domain/worktree.ts"
 import { createWorktreeWith } from "../../src/program/worktree.ts"
 import type { GitOutput, RunGit } from "../../src/runtime/git.ts"
@@ -47,7 +48,7 @@ const racingBranch =
 const refusesOtherToplevel = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const path = `${dir}/worktree`
-    const create = createWorktreeWith(overriding(revParseArgs.toplevel, `${dir}\n`))
+    const create = createWorktreeWith(overriding(revParseArgs.toplevel, `${dir}\n`), noAttributeAllowance)
     const refused = yield* Effect.flip(create(request(owner, path)))
     expect(refused).toEqual(
       new WorktreeNotAsCreated({
@@ -63,7 +64,7 @@ const refusesOtherToplevel = (dir: string, owner: string) =>
 const refusesOtherHead = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const path = `${dir}/worktree`
-    const create = createWorktreeWith(overriding(revParseArgs.headRef, "refs/heads/main\n"))
+    const create = createWorktreeWith(overriding(revParseArgs.headRef, "refs/heads/main\n"), noAttributeAllowance)
     const refused = yield* Effect.flip(create(request(owner, path)))
     expect(refused).toEqual(
       new WorktreeNotAsCreated({
@@ -79,7 +80,7 @@ const raceKeepsGitDetails = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const path = `${dir}/worktree`
     const added: Array<{ readonly args: ReadonlyArray<string>; readonly output: GitOutput }> = []
-    const refused = yield* Effect.flip(createWorktreeWith(racingBranch(owner, added))(request(owner, path)))
+    const refused = yield* Effect.flip(createWorktreeWith(racingBranch(owner, added), noAttributeAllowance)(request(owner, path)))
     expect(added.length).toBe(1)
     const ran = Option.fromNullishOr(added[0])
     const failed = Schema.is(GitCommandFailed)(refused) ? Option.some(refused) : Option.none()
@@ -118,7 +119,7 @@ const unreadablePathRefused = (dir: string, owner: string) =>
     mkdirSync(`${dir}/locked`)
     const path = `${dir}/locked/worktree`
     const calls: Array<ReadonlyArray<string>> = []
-    const create = createWorktreeWith(recording(calls))
+    const create = createWorktreeWith(recording(calls), noAttributeAllowance)
     const refused = yield* withUnsearchable(`${dir}/locked`, Effect.flip(create(request(owner, path))))
     expect(Option.map(unreadable(refused), (failure) => failure.path)).toEqual(Option.some(path))
     expect(Option.map(unreadable(refused), (failure) => failure.reason)).toEqual(
@@ -131,7 +132,7 @@ const unreadablePathRefused = (dir: string, owner: string) =>
 const notAbsoluteRefused = (path: string) => (_dir: string, owner: string) =>
   Effect.gen(function* () {
     const calls: Array<ReadonlyArray<string>> = []
-    const refused = yield* Effect.flip(createWorktreeWith(recording(calls))(request(owner, path)))
+    const refused = yield* Effect.flip(createWorktreeWith(recording(calls), noAttributeAllowance)(request(owner, path)))
     expect(refused).toEqual(new WorktreePathNotAbsolute({ path }))
     expect(calls).toEqual([])
     expect(existsSync(`${owner}/${path}`)).toBe(false)
@@ -142,7 +143,7 @@ const createdWithDashSegment = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const path = `${dir}/-worktree`
     const calls: Array<ReadonlyArray<string>> = []
-    const created = yield* createWorktreeWith(recording(calls))(request(owner, path))
+    const created = yield* createWorktreeWith(recording(calls), noAttributeAllowance)(request(owner, path))
     expect(created.path).toBe(realpathSync(path))
     expect(yield* git(path, "symbolic-ref", "HEAD")).toBe("refs/heads/foreman/t")
     const added = calls.filter(isAdd)

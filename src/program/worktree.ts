@@ -7,9 +7,12 @@
 // runs Features checks and Runtime imports only Domain. The production
 // entry points, `worktreeProgram`, run every git command through the clean
 // runner (plan B11b), and the startup attribute check through the runner
-// pinned to the recorded worktree (plan B11d).
+// pinned to the recorded worktree (plan B11d), with the empty root
+// `.gitattributes` allowance until configuration supplies one (decision
+// M09, option a).
 import { Effect, Option, Result } from "effect"
 import { WorktreeCreated } from "../domain/events.ts"
+import { noAttributeAllowance, type AttributeAllowance } from "../domain/attributes.ts"
 import type { Revision } from "../domain/ids.ts"
 import type { WorktreeDirectory } from "../domain/worktree.ts"
 import { GitOutputUndecodable, supervisorBranch } from "../domain/worktree.ts"
@@ -90,7 +93,8 @@ export interface WorktreeProgram {
 type OutputDecoder<Value> = (text: string) => Result.Result<Value, { readonly message: string }>
 
 /**
- * {@link WorktreeProgram.createWorktree} over an injected git runner. Requires an absolute
+ * {@link WorktreeProgram.createWorktree} over an injected git runner and
+ * root `.gitattributes` allowance (decision M09). Requires an absolute
  * path before anything runs (Features), resolves the base (Runtime reads,
  * Format decodes), runs the attribute check on the base and the owner's
  * repository (plan B11c), runs the branch and path prechecks (Runtime reads,
@@ -100,13 +104,13 @@ type OutputDecoder<Value> = (text: string) => Result.Result<Value, { readonly me
  * (Features). The recorded `path` is git's top level, the form `git
  * worktree list` prints.
  */
-export const createWorktreeWith = (run: RunGit) =>
+export const createWorktreeWith = (run: RunGit, allowance: AttributeAllowance) =>
   Effect.fn("createWorktree")(function* (request: WorktreeRequest) {
     const path = yield* Effect.fromResult(requireAbsolute(request.path))
     const branch = supervisorBranch(request.name)
     const base = yield* baseOf(run, request)
     const commonDir = yield* ownerCommonDir(run, request.ownerCheckout)
-    yield* checkAttributeSourcesWith(run)({ cwd: request.ownerCheckout, commonDir }, base)
+    yield* checkAttributeSourcesWith(run, allowance)({ cwd: request.ownerCheckout, commonDir }, base)
     const probe = yield* probeBranchWith(run)(request.ownerCheckout, branch)
     yield* Effect.fromResult(refuseExistingBranch(branch, probe))
     yield* Effect.fromResult(refuseExistingPath(path, yield* statOf(path)))
@@ -123,7 +127,8 @@ export const createWorktreeWith = (run: RunGit) =>
 
 /**
  * {@link WorktreeProgram.identifyWorktree} over an injected clean runner
- * `run` and pinned runner builder `pinTo`. Lists the worktrees from the
+ * `run`, pinned runner builder `pinTo` and root `.gitattributes`
+ * `allowance` (decision M09). Lists the worktrees from the
  * recorded common directory through `run`, so the check runs even when
  * the worktree's own path is gone, and reads the recorded path's
  * directory, its identity reads included, through `run` too, so a moved
@@ -133,7 +138,7 @@ export const createWorktreeWith = (run: RunGit) =>
  * `commonDir` (plan B11d) and runs in the supervisor worktree, so its
  * `config.worktree` applies, against the recorded base.
  */
-export const identifyWorktreeWith = (run: RunGit, pinTo: PinGit) =>
+export const identifyWorktreeWith = (run: RunGit, pinTo: PinGit, allowance: AttributeAllowance) =>
   Effect.fn("identifyWorktree")(function* (worktree: WorktreeCreated) {
     const text = yield* listWorktreesWith(run)(worktree.commonDir)
     const entries = yield* Effect.fromResult(
@@ -143,31 +148,38 @@ export const identifyWorktreeWith = (run: RunGit, pinTo: PinGit) =>
     const directory = yield* directoryOf(reading)
     const entry = yield* Effect.fromResult(checkWorktree(worktree, entries, directory))
     const site = { cwd: worktree.path, commonDir: worktree.commonDir }
-    yield* checkAttributeSourcesWith(pinTo(worktree))(site, worktree.base)
+    yield* checkAttributeSourcesWith(pinTo(worktree), allowance)(site, worktree.base)
     return entry
   })
 
 /**
- * The worktree entry points over one process call and one `home`.
- * Creation and the startup check's listing, `stat` and identity reads run
- * through `cleanGitWith(start)(home)`; the startup attribute check runs
- * through `pinnedGitWith(start)(home)` for the recorded worktree (plan
- * B11d). `home` is an empty directory the caller creates and owns;
- * nothing here checks it.
+ * The worktree entry points over one process call, one root
+ * `.gitattributes` allowance and one `home`. Creation and the startup
+ * check's listing, `stat` and identity reads run through
+ * `cleanGitWith(start)(home)`; the startup attribute check runs through
+ * `pinnedGitWith(start)(home)` for the recorded worktree (plan B11d). Both
+ * attribute checks judge the root `.gitattributes` under `allowance`
+ * (decision M09, option a). `home` is an empty directory the caller
+ * creates and owns; nothing here checks it.
  */
 export const worktreeProgramWith =
-  (start: StartGit) =>
+  (start: StartGit, allowance: AttributeAllowance) =>
   (home: string): WorktreeProgram => {
     const run = cleanGitWith(start)(home)
     const pinTo = pinnedGitWith(start)(home)
-    return { createWorktree: createWorktreeWith(run), identifyWorktree: identifyWorktreeWith(run, pinTo) }
+    return {
+      createWorktree: createWorktreeWith(run, allowance),
+      identifyWorktree: identifyWorktreeWith(run, pinTo, allowance),
+    }
   }
 
 /**
  * The production entry points: {@link worktreeProgramWith} over the real
- * process call, `startGit` (plan B11b).
+ * process call, `startGit` (plan B11b), and the empty allowance, so
+ * option A holds unchanged until configuration supplies a target's lines
+ * (decision M09, option a).
  */
-export const worktreeProgram = worktreeProgramWith(startGit)
+export const worktreeProgram = worktreeProgramWith(startGit, noAttributeAllowance)
 
 /** The start revision, or the owner's `rev-parse HEAD` read and decoded. */
 const baseOf = (run: RunGit, request: WorktreeRequest) =>

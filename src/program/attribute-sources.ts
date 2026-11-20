@@ -8,9 +8,11 @@
 // worktree against the recorded revision, so that worktree's
 // `config.worktree` applies. `worktreeProgramWith` passes creation the
 // clean runner and the startup check the runner pinned to the recorded
-// worktree (plan B11d); the check runs whichever `RunGit` it is given.
+// worktree (plan B11d); the check runs whichever `RunGit` it is given,
+// with whichever root `.gitattributes` allowance it is given (decision
+// M09, option a).
 import { Array as Arr, Effect, Match, Option } from "effect"
-import type { AttributesEntryRead, TreeEntry, TreeReading } from "../domain/attributes.ts"
+import type { AttributeAllowance, AttributesEntryRead, TreeEntry, TreeReading } from "../domain/attributes.ts"
 import { TreeListed } from "../domain/attributes.ts"
 import type { Revision } from "../domain/ids.ts"
 import { checkAttributeSources, isAttributesEntry, isRegularBlob } from "../features/attribute-sources.ts"
@@ -38,8 +40,9 @@ export interface AttributeCheckSite {
 }
 
 /**
- * The attribute check over an injected git runner: succeeds with
- * `revision` when Features passes the reading, and fails with
+ * The attribute check over an injected git runner and root
+ * `.gitattributes` allowance: succeeds with
+ * `revision` when Features passes the reading under `allowance`, and fails with
  * `AttributeSourcesRefused` listing every refusal otherwise. A git run's
  * non-zero exit and an undecodable listing are refusals; it fails with
  * `GitCommandFailed` only when git could not start.
@@ -52,7 +55,7 @@ export interface AttributeCheckSite {
  * A caller that passes a `HOME` holding that file lets its attributes
  * apply, whatever this check finds.
  */
-export const checkAttributeSourcesWith = (run: RunGit) =>
+export const checkAttributeSourcesWith = (run: RunGit, allowance: AttributeAllowance) =>
   Effect.fn("checkAttributeSources")(function* (site: AttributeCheckSite, revision: Revision) {
     const tree = yield* treeReadingOf(run, site.cwd, revision)
     const path = infoAttributesPath(site.commonDir)
@@ -60,7 +63,10 @@ export const checkAttributeSourcesWith = (run: RunGit) =>
     const attributesFile = yield* readAttributesFileSettingWith(run)(site.cwd)
     const conditionalIncludes = yield* readConditionalIncludesWith(run)(site.cwd)
     return yield* Effect.fromResult(
-      checkAttributeSources({ revision, tree, infoAttributes: { path, reading }, attributesFile, conditionalIncludes }),
+      checkAttributeSources(
+        { revision, tree, infoAttributes: { path, reading }, attributesFile, conditionalIncludes },
+        allowance,
+      ),
     )
   })
 

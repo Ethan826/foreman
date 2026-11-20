@@ -7,7 +7,8 @@
 // blank and comment lines, `<commonDir>/info/attributes` must be absent or
 // empty, the repository may not set `core.attributesFile`, and its config
 // may hold no conditional include (option R of 2026-11-19). A read
-// failure is a refusal (ruling 4).
+// failure is a refusal (ruling 4). A per-target allowance may permit exact
+// lines in the root `.gitattributes` only (owner decision M09, option a).
 import { Record, Schema } from "effect"
 import { Revision } from "./ids.ts"
 import { GitText } from "./worktree.ts"
@@ -145,6 +146,28 @@ export const AttributeReading = Schema.Struct({
 })
 /** The attribute check's raw reading; see {@link AttributeReading}. */
 export type AttributeReading = typeof AttributeReading.Type
+
+/**
+ * One line an allowance permits: any text holding neither `\n` nor `\r`,
+ * since a line is compared after its terminator is removed and a line
+ * that held either could never match.
+ */
+export const AllowedAttributeLine = Schema.String.check(Schema.isPattern(/^[^\r\n]*$/))
+
+/**
+ * Exact lines a target may keep in the revision's root `.gitattributes`
+ * (owner decision M09, option a), supplied per target by configuration.
+ * A root line passes when it equals one of `rootLines` byte for byte
+ * after its terminator (`\n`, or `\r\n`) is removed. The allowance never
+ * applies to a nested `.gitattributes`, `info/attributes`, the setting or
+ * a conditional include.
+ */
+export const AttributeAllowance = Schema.Struct({ rootLines: Schema.Array(AllowedAttributeLine) })
+/** Exact lines allowed in the root `.gitattributes`; see {@link AttributeAllowance}. */
+export type AttributeAllowance = typeof AttributeAllowance.Type
+
+/** The allowance that permits no line: option A unchanged. Production uses it until configuration supplies one. */
+export const noAttributeAllowance: AttributeAllowance = { rootLines: [] }
 
 /**
  * The attribute sources the check reads (plan B11c, contract). A

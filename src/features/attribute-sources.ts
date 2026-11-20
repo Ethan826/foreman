@@ -6,9 +6,13 @@
 // absent or empty, `core.attributesFile` only when unset, and the config
 // only when it lists no conditional include (option R). Every other
 // reading, including a failed read, is a refusal and never a pass (ruling
-// 4). Pure and total; Program reads the sources through Runtime.
+// 4). The one exception is the per-target allowance of owner decision
+// M09 (option a): a line of the root `.gitattributes` passes when it equals
+// an allowed line once its terminator is removed. Pure and total; Program
+// reads the sources through Runtime.
 import { Array as Arr, Match, Option, Result, String } from "effect"
 import type {
+  AttributeAllowance,
   AttributeReading,
   AttributeRefusal,
   AttributeRefusalReason,
@@ -43,6 +47,9 @@ const commentMark = "#"
 /** A blank line: only spaces and tabs, then at most one CR at its end. */
 const blankLine = /^[ \t]*\r?$/
 
+/** The CR of a `\r\n` terminator, left at the end of a line split at `\n`. */
+const terminatorCarriageReturn = /\r$/
+
 /** The modes of a regular blob: a file, and an executable file. */
 const regularBlobModes: ReadonlyArray<string> = ["100644", "100755"]
 
@@ -75,51 +82,70 @@ export const isRegularBlob = (entry: TreeEntry): boolean =>
  * fails with every refusal, in source order. A blank
  * line holds only spaces and tabs and at most a final CR; a comment line
  * begins with `#` at its first character, so an indented `#` is refused.
+ * A line of the root `.gitattributes` (path exactly `.gitattributes`)
+ * also passes when it equals one of `allowance.rootLines` after its
+ * terminator is removed: the `\n`, and one CR before it. A last line with
+ * no `\n` has no terminator, so its CR stays (decision M09, option a).
  */
 export const checkAttributeSources = (
   reading: AttributeReading,
+  allowance: AttributeAllowance,
 ): Result.Result<Revision, AttributeSourcesRefused> =>
-  Arr.match(refusalsOf(reading), {
+  Arr.match(refusalsOf(reading, allowance), {
     onEmpty: () => Result.succeed(reading.revision),
     onNonEmpty: (refusals) =>
       Result.fail(new AttributeSourcesRefused({ revision: reading.revision, refusals })),
   })
 
 /** Every refusal of the reading: tree, `info/attributes`, the setting, then conditional includes. */
-const refusalsOf = (reading: AttributeReading): ReadonlyArray<AttributeRefusal> =>
+const refusalsOf = (reading: AttributeReading, allowance: AttributeAllowance): ReadonlyArray<AttributeRefusal> =>
   Arr.flatten([
-    treeRefusals(reading.tree),
+    treeRefusals(reading.tree, allowance),
     infoRefusals(reading.infoAttributes.path, reading.infoAttributes.reading),
     configRefusals(AttributeSources.AttributesFile, reading.attributesFile),
     configRefusals(AttributeSources.ConditionalInclude, reading.conditionalIncludes),
   ])
 
 /** The tree's refusals: each entry's, or one read failure for the whole tree. */
-const treeRefusals = (tree: TreeReading): ReadonlyArray<AttributeRefusal> =>
+const treeRefusals = (tree: TreeReading, allowance: AttributeAllowance): ReadonlyArray<AttributeRefusal> =>
   Match.valueTags(tree, {
-    TreeListed: (listed) => Arr.flatMap(listed.files, entryRefusals),
+    TreeListed: (listed) => Arr.flatMap(listed.files, entryRefusals(allowance)),
     TreeNotListed: (failed) => [treeFailure(exitDetail(failed))],
     TreeUndecodable: (failed) => [treeFailure(failed.reason)],
   })
 
 /** One `.gitattributes` entry's refusals: its kind, its read, or its lines. */
-const entryRefusals = (file: AttributesEntryRead): ReadonlyArray<AttributeRefusal> =>
+const entryRefusals = (allowance: AttributeAllowance) => (file: AttributesEntryRead): ReadonlyArray<AttributeRefusal> =>
   isRegularBlob(file.entry)
     ? Option.match(file.blob, {
         onNone: () => [entryFailure(file.entry, AttributeRefusalReasons.ReadFailed, notRead)],
-        onSome: blobRefusals(file.entry),
+        onSome: blobRefusals(file.entry, allowedIn(file.entry, allowance)),
       })
     : [entryFailure(file.entry, AttributeRefusalReasons.NotRegular, `${file.entry.mode} ${file.entry.type}`)]
 
-/** A read blob's refusals: a failed `cat-file`, or each line with content. */
-const blobRefusals = (entry: TreeEntry) => (blob: GitResult): ReadonlyArray<AttributeRefusal> =>
+/** The lines an entry may hold besides blank and comment lines: the allowance's in the root file, none elsewhere. */
+const allowedIn = (entry: TreeEntry, allowance: AttributeAllowance): ReadonlyArray<string> =>
+  entry.path === attributesFileName ? allowance.rootLines : []
+
+/** A read blob's refusals: a failed `cat-file`, or each line with content that is not allowed. */
+const blobRefusals = (entry: TreeEntry, allowed: ReadonlyArray<string>) => (blob: GitResult): ReadonlyArray<AttributeRefusal> =>
   blob.exitCode === blobPrinted
-    ? Arr.flatMap(String.split(blob.stdout, lineSeparator), lineRefusals(entry.path))
+    ? linesRefusals(entry.path, allowed, String.split(blob.stdout, lineSeparator))
     : [entryFailure(entry, AttributeRefusalReasons.ReadFailed, exitDetail(blob))]
 
-/** A line's refusal unless it is blank or a comment; `index` counts from 0. */
-const lineRefusals = (path: string) => (line: string, index: number): ReadonlyArray<AttributeRefusal> =>
-  isInert(line) ? [] : [refusal(AttributeSources.Tree, AttributeRefusalReasons.Content, Option.some(path), Option.some(index + 1), line)]
+/** The refusals of a blob's lines, split at `\n`: every line but the last ended with a `\n`. */
+const linesRefusals = (path: string, allowed: ReadonlyArray<string>, lines: ReadonlyArray<string>) => {
+  const lastIndex = Arr.length(lines) - 1
+  const lineRefusals = (line: string, index: number): ReadonlyArray<AttributeRefusal> =>
+    isInert(line) || Arr.contains(allowed, withoutTerminator(line, index < lastIndex))
+      ? []
+      : [refusal(AttributeSources.Tree, AttributeRefusalReasons.Content, Option.some(path), Option.some(index + 1), line)]
+  return Arr.flatMap(lines, lineRefusals)
+}
+
+/** A line split at `\n` without its terminator: a terminated line loses one final CR, a last line nothing. */
+const withoutTerminator = (line: string, terminated: boolean): string =>
+  terminated ? String.replace(terminatorCarriageReturn, "")(line) : line
 
 /** Whether a line declares nothing under option A: blank, or a comment from its first character. */
 const isInert = (line: string): boolean => blankLine.test(line) || String.startsWith(commentMark)(line)
