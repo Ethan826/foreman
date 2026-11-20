@@ -6,7 +6,9 @@
 //
 // State directory layout: `log.sqlite`, `ledger.sqlite`, `lock.sqlite`,
 // the session's published files, and `git-home`, the empty HOME every git
-// command runs with (plan B11b); a missing `git-home` reads as empty.
+// command runs with (plan B11b); a missing `git-home` reads as empty. A
+// handoff's git work runs through the runner pinned to the session's
+// recorded worktree, with the configured attribute allowance.
 import { Clock, Console, Effect, Formatter, Option, Random, Record } from "effect"
 import type { Scope } from "effect"
 import type { WorktreeCreated } from "../domain/events.ts"
@@ -27,6 +29,7 @@ import { startClientWith } from "../runtime/spawn.ts"
 import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
 import { utf8Text } from "./client-output.ts"
+import { handoffGitWith } from "./handoff-git.ts"
 import { type SessionContext, WorktreeUnready } from "./session-context.ts"
 import { worktreeProgramWith, type WorktreeProgram } from "./worktree.ts"
 
@@ -74,6 +77,7 @@ export const production = (
         readClientVersion: readClientVersionWith({ cwd: stateDir, env: clientEnvironment(parentEnvironment) }),
         stateFiles,
         checkWorktree: (recorded) => checkedHead(worktree, home, recorded),
+        handoffGit: handoffGitWith(startGit, config.attributeAllowance)(home, stateDir),
         newId,
         nowMono: Effect.succeed(Option.none()),
         show: Console.log,

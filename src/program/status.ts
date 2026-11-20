@@ -17,8 +17,8 @@ import { processEvidence } from "../features/process-evidence.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
 import { decodePs } from "../format/ps.ts"
-import { sha256Of } from "../runtime/state-files.ts"
 import { holdsNow, pinReading, readLog, worktreeReading } from "./command-start.ts"
+import { fileIntact } from "./recorded-files.ts"
 import type { SessionContext } from "./session-context.ts"
 
 /** What `status` says about process evidence every time it shows some (plan "Process evidence"). */
@@ -136,13 +136,6 @@ const decodedRows = (text: string) => Result.mapError(decodePs(text), (failed) =
 const integrityOf = (context: SessionContext, report: ReportRecorded) =>
   Effect.all({
     opId: Effect.succeed(report.opId),
-    rawIntact: intact(context, report.rawPath, report.rawSha256),
-    handoffIntact: intact(context, report.handoffPath, report.handoffSha256),
-  })
-
-/** Whether the file at `path` reads with SHA-256 `sha256`; an unreadable file is not intact. */
-const intact = (context: SessionContext, path: string, sha256: string) =>
-  Effect.match(context.capabilities.stateFiles.read(path), {
-    onFailure: () => false,
-    onSuccess: (bytes) => sha256Of(bytes) === sha256,
+    rawIntact: fileIntact(context, report.rawPath, report.rawSha256),
+    handoffIntact: fileIntact(context, report.handoffPath, report.handoffSha256),
   })

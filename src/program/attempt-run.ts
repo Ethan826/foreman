@@ -2,7 +2,8 @@
 // client with its fixed profile in the supervisor worktree and the
 // parent's environment minus every `GIT_*` variable (decision P2), append
 // batch L, show and keep its output, publish the raw file and the handoff
-// file once the leader exits, classify the outcome in Features, and
+// file once the leader exits, publish what the plan derives from the
+// handoff (a review's findings draft), classify the outcome in Features, and
 // append batch F, `Finished` with its `ReportRecorded`, in one batch. The
 // raw output streams into `<raw>.streaming`; the published raw file is a
 // copy made atomically once the leader is done.
@@ -13,6 +14,7 @@ import type { OpenSession } from "../domain/session-state.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { classifyAttempt } from "../features/step-outcome.ts"
 import type { LaunchPlan } from "./attempt.ts"
+import { utf8Text } from "./client-output.ts"
 import type { SessionContext } from "./session-context.ts"
 
 /** The files of one attempt, all in the state directory. */
@@ -69,7 +71,9 @@ export const runClient = <E>(context: SessionContext, plan: LaunchPlan<E>, state
     )
     const handoff = yield* plan.handoff(files, lines)
     const handoffSha256 = yield* capabilities.stateFiles.publish(files.handoff, handoff)
-    const outcome = classifyAttempt(plan.role, exit, plan.decode(lines, handoff))
+    const handoffText = yield* utf8Text(handoff)
+    yield* plan.afterHandoff(state.session, handoffText)
+    const outcome = classifyAttempt(plan.role, exit, plan.decode(lines, handoffText))
     const finished = new Finished({ opId, outcome, endedAt: yield* Clock.currentTimeMillis })
     const report = new ReportRecorded({
       sessionId: state.session.opened.sessionId,

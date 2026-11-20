@@ -10,6 +10,7 @@ import { Array as Arr, Clock, Effect, Option, Record, Result } from "effect"
 import { Approved, SessionClosed, SessionOpened, StepEndedByOwner, WaiverExpired } from "../domain/events.ts"
 import type { GrantId, OpId, TrancheId } from "../domain/ids.ts"
 import { type CloseKind, SessionClose, SessionId, SessionOpen, StepEnded } from "../domain/session.ts"
+import type { SessionFold } from "../domain/session-state.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
 import { applySettle } from "./admission.ts"
@@ -25,7 +26,7 @@ export interface OpenOptions {
 
 /** The owner's options for `session close`. */
 export interface CloseOptions {
-  /** `abandoned` or `interrupted`; A1 offers no `finished` close. */
+  /** `abandoned` or `interrupted`; `finished` is `closeFinished` in handoff.ts. */
   readonly how: CloseKind
   readonly note: string
 }
@@ -112,8 +113,11 @@ export const closeSession = (context: SessionContext, options: CloseOptions) =>
         note: options.note,
         attests: Option.none(),
       })
-      const expired = Arr.map(Arr.getSomes(Record.values(fold.armedWaivers)), (waiverId) => new WaiverExpired({ waiverId }))
-      yield* capabilities.log.append(read.position, [closed, ...expired])
+      yield* capabilities.log.append(read.position, [closed, ...waiverExpiries(fold)])
       return closed
     }),
   )
+
+/** A `WaiverExpired` for every armed waiver, which every close appends (plan "Close rules"). */
+export const waiverExpiries = (fold: SessionFold): ReadonlyArray<WaiverExpired> =>
+  Arr.map(Arr.getSomes(Record.values(fold.armedWaivers)), (waiverId) => new WaiverExpired({ waiverId }))

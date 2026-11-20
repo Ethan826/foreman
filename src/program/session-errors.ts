@@ -54,3 +54,26 @@ export class NoWorktreeRecorded extends Schema.TaggedError<NoWorktreeRecorded>()
   "NoWorktreeRecorded",
   {},
 ) {}
+
+/**
+ * A file the log records, at `path`, is missing or its hash no longer
+ * matches the record; the session is close-only.
+ */
+export class RecordedFileChanged extends Schema.TaggedError<RecordedFileChanged>()("RecordedFileChanged", {
+  path: Schema.String,
+}) {}
+
+/** The owner's findings file at `path` could not be read; nothing was recorded. */
+export class FindingsFileUnreadable extends Schema.TaggedError<FindingsFileUnreadable>()("FindingsFileUnreadable", {
+  path: Schema.String,
+  reason: Schema.String,
+}) {}
+
+/**
+ * `git diff-tree` for the review brief's changed paths exited non-zero
+ * or printed what does not decode; `reason` says which. The snapshot's
+ * objects may be staged; nothing was recorded.
+ */
+export class ChangedPathsUnread extends Schema.TaggedError<ChangedPathsUnread>()("ChangedPathsUnread", {
+  reason: Schema.String,
+}) {}

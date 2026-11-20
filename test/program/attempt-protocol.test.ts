@@ -13,6 +13,7 @@ import { Grant } from "../../src/domain/ledger.ts"
 import { Success } from "../../src/domain/outcomes.ts"
 import { claudeEditingArgv } from "../../src/domain/profiles.ts"
 import { Roles } from "../../src/domain/roles.ts"
+import { implementBrief } from "../../src/format/brief.ts"
 import { implement } from "../../src/program/implement.ts"
 import { CommandRefused, QuotaHeld, WaiverRefused } from "../../src/program/session-errors.ts"
 import { sha256Of } from "../../src/runtime/state-files.ts"
@@ -65,7 +66,7 @@ const launchesWithProfile = (harness: Harness) =>
     yield* implement(harness.context, { waive: false })
     const [launch] = harness.client.launches
     const settingsFile = `${harness.dir}/claude-settings.json`
-    expect(launch?.argv).toEqual(claudeEditingArgv({ brief: "Add a greeting.\n", settingsFile }))
+    expect(launch?.argv).toEqual(claudeEditingArgv({ brief: implementBrief({ task: "Add a greeting.\n" }), settingsFile }))
     expect(launch?.cwd).toBe(harness.worktree.path)
     expect(launch?.env).toEqual({ PATH: "/usr/bin", HOME: "/home/owner" })
     expect(harness.shown).toEqual(claudeSuccess.lines)

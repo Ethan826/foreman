@@ -1,55 +1,53 @@
 // Test harness for the assisted-session Program tests: a real project
 // log, ledger and lock in a temporary directory, real state files, a fake
-// client, and wrappers that record every write in one ordered trace and
-// can inject a failure at a chosen write. A recorded supervisor worktree
-// and a task file are in place; nothing runs git or a real client.
-import { expect } from "@effect/vitest"
+// client, and wrappers (session-tracing.ts) that record every write in
+// one ordered trace and can inject a failure at a chosen write. A
+// recorded supervisor worktree and a task file are in place. The
+// worktree is made up unless a test asks for a real one; the handoff's
+// git work runs real git through a traced process call.
 import { Array as Arr, Effect, Option } from "effect"
 import type { Scope } from "effect"
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
+import { noAttributeAllowance } from "../../src/domain/attributes.ts"
 import { Clients } from "../../src/domain/clients.ts"
 import { BootId } from "../../src/domain/clock.ts"
-import {
-  LogPosition,
-  type PositionMoved,
-  type ProjectEvent,
-  type ProjectLog,
-  ProjectLogError,
-  WorktreeCreated,
-} from "../../src/domain/events.ts"
-import { ProjectId, Revision } from "../../src/domain/ids.ts"
-import { LedgerError, type LedgerRow, type LedgerStore, ReadingRow } from "../../src/domain/ledger.ts"
+import { LogPosition, type WorktreeCreated } from "../../src/domain/events.ts"
+import { ProjectId, type Revision } from "../../src/domain/ids.ts"
+import { type LedgerRow, type LedgerStore, ReadingRow } from "../../src/domain/ledger.ts"
 import { ClientStartFailed } from "../../src/domain/process.ts"
 import { defaultPolicy } from "../../src/domain/policy.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { allocationsInFallback } from "../../src/features/admission.ts"
 import { ownerOnly } from "../../src/features/counting.ts"
+import { handoffGitWith } from "../../src/program/handoff-git.ts"
 import { type SessionContext, WorktreeUnready } from "../../src/program/session-context.ts"
+import type { GitInvocation } from "../../src/runtime/git.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
 import { tryLock } from "../../src/runtime/project-lock.ts"
-import { type StateFiles, StateFileFailed, stateFiles } from "../../src/runtime/state-files.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { type ClientScript, type FakeClient, fakeClient } from "../fixtures/clients/fake-client.ts"
+import { emptyHome } from "../runtime/git-repo.ts"
+import {
+  type Injections,
+  noInjections,
+  type TraceEntry,
+  tracedFiles,
+  tracedGit,
+  tracedLedger,
+  tracedLog,
+} from "./session-tracing.ts"
+import { madeUpHead, madeUpWorktree, realWorktree } from "./session-worktree.ts"
 
 export const project = ProjectId.make("alpha")
-export const head = Revision.make("e".repeat(40))
+export const head = madeUpHead
 export const pins = { [Clients.Claude]: "2.1.328 (Claude Code)", [Clients.Codex]: "codex-cli 0.170.0" }
 const busyMillis = 50
 const boot = BootId.make("boot-a")
 const minuteMicros = 60_000_000
 export const nowMono = { bootId: boot, micros: 30 * minuteMicros }
-
-/** Failures a test injects; each fires on the first write it matches, once. */
-export interface Injections {
-  appendFails: Option.Option<(events: ReadonlyArray<ProjectEvent>) => Option.Option<PositionMoved | ProjectLogError>>
-  /** Fails the transaction whose append matches, so nothing of it is written. */
-  ledgerAppendFails: Option.Option<(rows: ReadonlyArray<LedgerRow>) => boolean>
-  publishFails: Option.Option<(path: string) => boolean>
-  startFails: boolean
-}
 
 export interface Harness {
   readonly context: SessionContext
@@ -60,6 +58,10 @@ export interface Harness {
   readonly client: FakeClient
   readonly inject: Injections
   readonly worktree: WorktreeCreated
+  /** The worktree's HEAD the check reports, which a session opens at. */
+  readonly base: Revision
+  /** Every git command the handoff ran, in order. */
+  readonly gitCalls: Array<GitInvocation>
   /** The ledger without tracing or injection, for the tests' own reads. */
   readonly rawLedger: LedgerStore
 }
@@ -70,6 +72,8 @@ export interface HarnessOptions {
   readonly allowing: boolean
   readonly worktreePasses: boolean
   readonly installed: string
+  /** Record a real supervisor worktree of a disposable repository instead of a made-up one. */
+  readonly repository: boolean
 }
 
 export const defaults: HarnessOptions = {
@@ -77,69 +81,10 @@ export const defaults: HarnessOptions = {
   allowing: true,
   worktreePasses: true,
   installed: pins[Clients.Claude],
+  repository: false,
 }
 
-/** One recorded write or launch, in the order they happened. */
-export interface TraceEntry {
-  readonly kind: "log" | "ledger" | "publish" | "start"
-  readonly items: ReadonlyArray<unknown>
-}
-
-/** The expected trace entry for a log batch of these event tags. */
-export const logBatch = (...tags: ReadonlyArray<string>) => ({ kind: "log", items: tags.map((tag) => ({ _tag: tag })) })
-/** The expected trace entry for ledger rows of these tags, written in one append. */
-export const ledgerRows = (...tags: ReadonlyArray<string>) => ({
-  kind: "ledger",
-  items: tags.map((tag) => ({ _tag: tag })),
-})
-/** The expected trace entry for publishing a file whose name ends with `suffix`. */
-export const published = (suffix: string) => ({ kind: "publish", items: [expect.stringMatching(new RegExp(`${suffix}$`))] })
-/** The expected trace entry for a client start. */
-export const started = { kind: "start", items: [] }
-
-const tracedLog = (log: ProjectLog, trace: Array<TraceEntry>, inject: Injections): ProjectLog => ({
-  readFrom: log.readFrom,
-  append: (expected, events) => {
-    const failure = Option.flatMap(inject.appendFails, (match) => match(events))
-    if (Option.isSome(failure)) {
-      inject.appendFails = Option.none()
-      return Effect.fail(failure.value)
-    }
-    return Effect.tap(log.append(expected, events), () => Effect.sync(() => trace.push({ kind: "log", items: events })))
-  },
-})
-
-const tracedLedger = (store: LedgerStore, trace: Array<TraceEntry>, inject: Injections): LedgerStore => {
-  return {
-    transact: (body) =>
-      store.transact((tx) =>
-        body({
-          read: tx.read,
-          append: (rows) => {
-            if (Option.exists(inject.ledgerAppendFails, (match) => match(rows))) {
-              inject.ledgerAppendFails = Option.none()
-              return Effect.fail(new LedgerError({ reason: "injected" }))
-            }
-            return Effect.tap(tx.append(rows), () =>
-              Effect.sync(() => {
-                if (rows.length > 0) trace.push({ kind: "ledger", items: rows })
-              }),
-            )
-          },
-        }),
-      ),
-  }
-}
-
-const tracedFiles = (trace: Array<TraceEntry>, inject: Injections): StateFiles => ({
-  read: stateFiles.read,
-  publish: (path, bytes) =>
-    Option.exists(inject.publishFails, (match) => match(path))
-      ? Effect.fail(new StateFileFailed({ path, reason: "injected" }))
-      : Effect.tap(stateFiles.publish(path, bytes), () =>
-          Effect.sync(() => trace.push({ kind: "publish", items: [path] })),
-        ),
-})
+export { type Injections, type TraceEntry, ledgerRows, logBatch, published, started } from "./session-tracing.ts"
 
 /** A fresh Claude reading at 10 percent with an hour left. */
 export const reading = (window: (typeof Windows)[keyof typeof Windows]) =>
@@ -157,21 +102,11 @@ const build = (dir: string, options: HarnessOptions) =>
   Effect.gen(function* () {
     const trace: Array<TraceEntry> = []
     const shown: Array<string> = []
-    const inject: Injections = {
-      appendFails: Option.none(),
-      ledgerAppendFails: Option.none(),
-      publishFails: Option.none(),
-      startFails: false,
-    }
+    const inject = noInjections()
+    const gitCalls: Array<GitInvocation> = []
     const log = yield* openProjectLog(`${dir}/log.sqlite`, busyMillis)
     const ledger = yield* openLedger(`${dir}/ledger.sqlite`, busyMillis)
-    const worktree = new WorktreeCreated({
-      path: `${dir}/worktree`,
-      branch: "foreman/t",
-      gitDir: `${dir}/repo/.git/worktrees/worktree`,
-      commonDir: `${dir}/repo/.git`,
-      base: head,
-    })
+    const { worktree, base } = options.repository ? yield* realWorktree(dir) : madeUpWorktree(dir)
     yield* log.append(LogPosition.make(0), [worktree])
     if (options.allowing) yield* ledger.transact((tx) => tx.append([reading(Windows.FiveHour), reading(Windows.Weekly)]))
     const taskFile = `${dir}/task.md`
@@ -196,7 +131,8 @@ const build = (dir: string, options: HarnessOptions) =>
           }),
         stateFiles: tracedFiles(trace, inject),
         checkWorktree: () =>
-          options.worktreePasses ? Effect.succeed(head) : Effect.fail(new WorktreeUnready({ reason: "not locked" })),
+          options.worktreePasses ? Effect.succeed(base) : Effect.fail(new WorktreeUnready({ reason: "not locked" })),
+        handoffGit: handoffGitWith(tracedGit(gitCalls, inject), noAttributeAllowance)(emptyHome, dir),
         newId: Effect.sync(() => {
           ids += 1
           return `id-${String(ids)}`
@@ -214,7 +150,9 @@ const build = (dir: string, options: HarnessOptions) =>
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
       },
     }
-    return { context, dir, taskFile, trace, shown, client, inject, worktree, rawLedger: ledger } satisfies Harness
+    return {
+      context, dir, taskFile, trace, shown, client, inject, worktree, base, gitCalls, rawLedger: ledger,
+    } satisfies Harness
   })
 
 /** Runs `use` over a fresh harness and removes its directory afterwards. */

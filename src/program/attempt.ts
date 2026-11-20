@@ -1,10 +1,15 @@
 // The launch protocol of `implement`, `review` and `correct` (plan "Write
-// protocol", steps 1 and 3 to 8; step 2 belongs to a plan's `observe`).
-// Every log write is one atomic batch through `ProjectLog.append`, at the
-// position this command last wrote or read, and files are published
-// before the record that names them:
+// protocol", steps 1 to 8). Every log write is one atomic batch through
+// `ProjectLog.append`, at the position this command last wrote or read,
+// and files are published before the record that names them:
 //
-// 1. Take the lock, read the log, settle, fold, check the prerequisites.
+// 1. Take the lock, read the log, settle, fold, and check every
+//    prerequisite with the plan's snapshot presumed to pass (for
+//    `correct`, presumed equal to the reviewed tree). A refusal here
+//    stops the command before git stages anything.
+// 2. Only then the plan's snapshot step: the attribute-source check
+//    again and the snapshot (review and correct). The prerequisites are
+//    checked again with the real snapshot.
 // 3. Admission and the waiver step (attempt-admission.ts): batches Q, W.
 // 4. Batch I: the plan's consent events, then `Intended`. A
 //    `PositionMoved` cancels the grant as a lost race.
@@ -23,8 +28,8 @@ import { GrantId, OpId } from "../domain/ids.ts"
 import { StepOutcome } from "../domain/outcomes.ts"
 import type { Role } from "../domain/roles.ts"
 import type { Correct, Implement, Review } from "../domain/session.ts"
-import type { OpenSession, SessionFold } from "../domain/session-state.ts"
-import type { SnapshotCheck } from "../features/command-rules.ts"
+import type { OpenSession, SessionFold, SessionState } from "../domain/session-state.ts"
+import type { CommandChecks, SnapshotCheck } from "../features/command-rules.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
 import type { DecodedAttempt } from "../features/step-outcome.ts"
@@ -32,14 +37,25 @@ import type { StateFileFailed } from "../runtime/state-files.ts"
 import { applySettle, cancelLostRace } from "./admission.ts"
 import { admitStep, type Grant } from "./attempt-admission.ts"
 import { type AttemptFiles, runClient } from "./attempt-run.ts"
-import { holdsNow, pinReading, readLog, requireAllowed, worktreeReading } from "./command-start.ts"
+import { holdsNow, type LogRead, pinReading, readLog, requireAllowed, worktreeReading } from "./command-start.ts"
 import type { SessionContext } from "./session-context.ts"
 import { LostRace } from "./session-errors.ts"
 
-/** The facts a handoff command observes before the rules (A2): none for `implement`. */
+/**
+ * The facts a handoff command observes before the rules, without staging
+ * anything: the owner's `--attest`, whether the recorded reports are
+ * intact, and the snapshot presumed to pass (none for `implement`).
+ */
 export interface HandoffFacts {
   readonly attested: boolean
   readonly reportsIntact: boolean
+  readonly snapshot: Option.Option<SnapshotCheck>
+}
+
+/** What a plan prepares from: the open session, its state and the snapshot taken, if any. */
+export interface PrepareInput {
+  readonly session: OpenSession
+  readonly state: SessionState
   readonly snapshot: Option.Option<SnapshotCheck>
 }
 
@@ -63,16 +79,20 @@ export interface LaunchPlan<E> {
   readonly role: Role
   readonly provider: Client
   readonly waive: boolean
-  /** Step 2 and the handoff facts (A2); runs after the settle step. */
+  /** The handoff facts before the rules; runs after the settle step and stages nothing. */
   readonly observe: (fold: SessionFold) => Effect.Effect<HandoffFacts, E>
+  /** Step 2, once every prerequisite passed: the snapshot taken, none when the plan takes none. */
+  readonly snapshot: (session: OpenSession) => Effect.Effect<Option.Option<SnapshotCheck>, E>
   /** The brief, round and consent events, from recorded files only. */
-  readonly prepare: (session: OpenSession) => Effect.Effect<Prepared, E>
+  readonly prepare: (input: PrepareInput) => Effect.Effect<Prepared, E>
   /** The client's argv from the brief and the attempt's files (a fixed profile). */
   readonly argv: (brief: string, files: AttemptFiles) => readonly [string, ...Array<string>]
   /** The handoff bytes once the leader exited, from its files or its output lines; empty when the client gave none. */
   readonly handoff: (files: AttemptFiles, lines: ReadonlyArray<string>) => Effect.Effect<Uint8Array, E | StateFileFailed>
-  /** The decoded output classification reads. */
-  readonly decode: (lines: ReadonlyArray<string>, handoff: Uint8Array) => DecodedAttempt
+  /** The decoded output classification reads, from the lines and the handoff's text. */
+  readonly decode: (lines: ReadonlyArray<string>, handoff: string) => DecodedAttempt
+  /** Publishes what follows from the handoff's text, before batch F (a review's findings draft). */
+  readonly afterHandoff: (session: OpenSession, handoff: string) => Effect.Effect<void, E | StateFileFailed>
 }
 
 /** The facts of a command with no handoff: `implement`. */
@@ -100,18 +120,8 @@ export const runAttempt = <E>(context: SessionContext, plan: LaunchPlan<E>) =>
       const read = yield* readLog(capabilities.log)
       yield* applySettle(capabilities.ledger, read.events, settings.project)
       const fold = foldSession(read.events)
-      const facts = yield* plan.observe(fold)
-      const holds = yield* holdsNow(context, read)
-      const allowedNow = yield* requireAllowed(plan.command, fold.state, {
-        lockHeld: true,
-        worktreeCheckPassed: Result.isSuccess(yield* worktreeReading(context, read.events)),
-        provider: plan.provider,
-        pinMatches: yield* pinReading(context, plan.provider),
-        holds,
-        ...facts,
-      })
-      const session = yield* Effect.fromOption(openSessionOf(fold.state))
-      const prepared = yield* plan.prepare(session)
+      const { allowedNow, holds, session, snapshot } = yield* checkedLaunch(context, plan, read, fold)
+      const prepared = yield* plan.prepare({ session, state: fold.state, snapshot })
       const grant = yield* admitStep(context, plan, { read, fold, holds, waiverStep: allowedNow.waiverStep })
       const intent = intentOf(plan, session, prepared, grant)
       const position = yield* appendIntent(context, grant, [...prepared.consent, intent])
@@ -120,6 +130,31 @@ export const runAttempt = <E>(context: SessionContext, plan: LaunchPlan<E>) =>
       return new AttemptRecorded({ opId: intent.opId, grantId: intent.grantId, outcome })
     }),
   )
+
+/**
+ * Steps 1 and 2: the prerequisites with the presumed snapshot, then the
+ * plan's snapshot step, then the prerequisites again with the snapshot
+ * taken. Nothing is staged unless the first check passes.
+ */
+const checkedLaunch = <E>(context: SessionContext, plan: LaunchPlan<E>, read: LogRead, fold: SessionFold) =>
+  Effect.gen(function* () {
+    const facts = yield* plan.observe(fold)
+    const holds = yield* holdsNow(context, read)
+    const checks: CommandChecks = {
+      lockHeld: true,
+      worktreeCheckPassed: Result.isSuccess(yield* worktreeReading(context, read.events)),
+      provider: plan.provider,
+      pinMatches: yield* pinReading(context, plan.provider),
+      holds,
+      ...facts,
+    }
+    yield* requireAllowed(plan.command, fold.state, checks)
+    const session = yield* Effect.fromOption(openSessionOf(fold.state))
+    const snapshot = yield* plan.snapshot(session)
+    const taken = { ...checks, snapshot: Option.orElse(snapshot, () => checks.snapshot) }
+    const allowedNow = yield* requireAllowed(plan.command, fold.state, taken)
+    return { allowedNow, holds, session, snapshot }
+  })
 
 /** The attempt's `Intended`: the session's tranche and base, the grant and any waiver. */
 const intentOf = <E>(plan: LaunchPlan<E>, session: OpenSession, prepared: Prepared, grant: Grant) =>

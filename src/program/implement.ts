@@ -1,7 +1,8 @@
 // `implement [--waive]` (plan "Slice A1"): the session's first attempt.
 // The launch protocol is attempt.ts; this file is only the implementer's
-// plan: no handoff facts and no consent events, the brief is the
-// session's recorded task file (checked against its hash), the profile is
+// plan: no handoff facts, no snapshot and no consent events, the brief is
+// Format's implementer brief of the session's recorded task file (checked
+// against its hash), the profile is
 // Claude's editing profile, and classification reads Claude's
 // stream-json. The handoff is the final message of Claude's last
 // `result` event, empty when it gave none (plan "Events",
@@ -11,9 +12,10 @@ import { claudeEditingArgv } from "../domain/profiles.ts"
 import { defaultRoleClients, Roles } from "../domain/roles.ts"
 import { Implement } from "../domain/session.ts"
 import type { OpenSession } from "../domain/session-state.ts"
-import { sha256Of } from "../runtime/state-files.ts"
+import { implementBrief } from "../format/brief.ts"
 import { type LaunchPlan, noHandoffFacts, runAttempt } from "./attempt.ts"
-import { claudeDecoded, claudeHandoff, utf8Text } from "./client-output.ts"
+import { claudeDecoded, claudeHandoff } from "./client-output.ts"
+import { recordedText } from "./recorded-files.ts"
 import type { SessionContext } from "./session-context.ts"
 import { TaskFileChanged } from "./session-errors.ts"
 
@@ -34,10 +36,13 @@ const implementPlan = (context: SessionContext, options: ImplementOptions): Laun
   provider: defaultRoleClients[Roles.Implementer],
   waive: options.waive,
   observe: () => Effect.succeed(noHandoffFacts),
-  prepare: (session) => Effect.map(recordedTask(context, session), (brief) => ({ brief, round: 0, consent: [] })),
+  snapshot: () => Effect.succeed(Option.none()),
+  prepare: ({ session }) =>
+    Effect.map(recordedTask(context, session), (task) => ({ brief: implementBrief({ task }), round: 0, consent: [] })),
   argv: (brief) => claudeEditingArgv({ brief, settingsFile: context.settings.claudeSettings }),
   handoff: (_files, lines) => claudeHandoff(lines),
   decode: (lines) => ({ client: claudeDecoded(lines), findings: Option.none() }),
+  afterHandoff: () => Effect.void,
 })
 
 /**
@@ -45,10 +50,8 @@ const implementPlan = (context: SessionContext, options: ImplementOptions): Laun
  * with {@link TaskFileChanged} when it is missing or its hash differs
  * from the record, which leaves the session close-only.
  */
-const recordedTask = (context: SessionContext, session: OpenSession) =>
-  Effect.gen(function* () {
-    const path = session.opened.taskPath
-    const bytes = yield* Effect.mapError(context.capabilities.stateFiles.read(path), () => new TaskFileChanged({ path }))
-    if (sha256Of(bytes) !== session.opened.taskSha256) return yield* new TaskFileChanged({ path })
-    return yield* utf8Text(bytes)
-  })
+export const recordedTask = (context: SessionContext, session: OpenSession) =>
+  Effect.mapError(
+    recordedText(context, session.opened.taskPath, session.opened.taskSha256),
+    () => new TaskFileChanged({ path: session.opened.taskPath }),
+  )

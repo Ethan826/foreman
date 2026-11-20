@@ -30,6 +30,14 @@ export const snapshotArgs = {
   writeTree: ["write-tree"],
   /** Lists every blob and gitlink of `tree`. */
   listTree: (tree: Revision): ReadonlyArray<string> => ["ls-tree", "--full-tree", "-r", "-z", tree],
+  /**
+   * The paths that differ between `base` and `tree`, for the review brief
+   * (plan "Profiles, environment and briefs"): recursive, NUL-terminated,
+   * each with its status.
+   */
+  changedPaths: (base: Revision, tree: Revision): ReadonlyArray<string> => [
+    "diff-tree", "-r", "-z", "--name-status", base, tree,
+  ],
 } as const
 
 /**
