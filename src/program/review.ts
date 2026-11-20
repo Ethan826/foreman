@@ -23,6 +23,7 @@ import { decodeNameStatus } from "../format/name-status.ts"
 import { type LaunchPlan, type PrepareInput, runAttempt } from "./attempt.ts"
 import type { AttemptFiles } from "./attempt-run.ts"
 import { codexDecoded, utf8Bytes } from "./client-output.ts"
+import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedPassing, handoffTextOf, takeSnapshot } from "./handoff-facts.ts"
 import { recordedTask } from "./implement.ts"
 import type { HandoffGitFailure, SessionContext } from "./session-context.ts"
@@ -64,7 +65,10 @@ const reviewPlan = (context: SessionContext, options: ReviewOptions): LaunchPlan
   role: Roles.Reviewer,
   provider: defaultRoleClients[Roles.Reviewer],
   waive: options.waive,
-  observe: (fold) => handoffFacts(context, fold.state, options.attest, presumedPassing(fold.state)),
+  observe: (fold) =>
+    withBriefsIntact(context, fold.state)(
+      handoffFacts(context, fold.state, options.attest, presumedPassing(fold.state)),
+    ),
   snapshot: (session) => Effect.map(takeSnapshot(context, session), Option.some),
   prepare: (input) => prepared(context, input),
   argv: (brief, files) => codexReviewArgv({ brief, lastMessageFile: files.lastMessage }),

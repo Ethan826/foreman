@@ -11,8 +11,9 @@
 //    again and the snapshot (review and correct). The prerequisites are
 //    checked again with the real snapshot.
 // 3. Admission and the waiver step (attempt-admission.ts): batches Q, W.
-// 4. Batch I: the plan's consent events, then `Intended`, then a
-//    `WaiverExpired` for every other armed waiver. A `PositionMoved`
+// 4. The brief's exact bytes are published (review item B14). Batch I:
+//    the plan's consent events, `Intended`, the `BriefRecorded` naming
+//    the brief, then a `WaiverExpired` for every other armed waiver. A `PositionMoved`
 //    cancels the grant as a lost race. A refused attempt expires every
 //    armed waiver after its refusal (waiver-expiry.ts).
 // 5-7. Start the client, batch L, publish the files, batch F
@@ -25,7 +26,7 @@
 // for the rules, its consent events, its brief, its handoff and decoding.
 import { Effect, Option, Result, Schema } from "effect"
 import type { Client } from "../domain/clients.ts"
-import { Intended, type ProjectEvent } from "../domain/events.ts"
+import { BriefRecorded, Intended, type ProjectEvent } from "../domain/events.ts"
 import { GrantId, OpId } from "../domain/ids.ts"
 import { StepOutcome } from "../domain/outcomes.ts"
 import type { Role } from "../domain/roles.ts"
@@ -38,7 +39,8 @@ import type { DecodedAttempt } from "../features/step-outcome.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
 import { applySettle, cancelLostRace } from "./admission.ts"
 import { admitStep, type Grant } from "./attempt-admission.ts"
-import { type AttemptFiles, runClient } from "./attempt-run.ts"
+import { type AttemptFiles, attemptFiles, runClient } from "./attempt-run.ts"
+import { utf8Bytes, utf8Text } from "./client-output.ts"
 import { holdsNow, type LogRead, pinReading, readLog, requireAllowed, worktreeReading } from "./command-start.ts"
 import type { SessionContext } from "./session-context.ts"
 import { LostRace } from "./session-errors.ts"
@@ -134,9 +136,10 @@ const launched = <E>(context: SessionContext, plan: LaunchPlan<E>) =>
     const prepared = yield* plan.prepare({ session, state: fold.state, snapshot })
     const grant = yield* admitStep(context, plan, { read, fold, holds, waiverStep: allowedNow.waiverStep })
     const intent = intentOf(plan, session, prepared, grant)
+    const { recorded, text } = yield* publishedBrief(context, session, grant.opId, prepared.brief)
     const expiries = expiriesBeside(fold.armedWaivers, grant.waiverId)
-    const position = yield* appendIntent(context, grant, [...prepared.consent, intent, ...expiries])
-    const outcome = yield* runClient(context, plan, { session, intent, brief: prepared.brief, position })
+    const position = yield* appendIntent(context, grant, [...prepared.consent, intent, recorded, ...expiries])
+    const outcome = yield* runClient(context, plan, { session, intent, brief: text, position })
     yield* settleNow(context)
     return new AttemptRecorded({ opId: intent.opId, grantId: intent.grantId, outcome })
   })
@@ -176,6 +179,25 @@ const intentOf = <E>(plan: LaunchPlan<E>, session: OpenSession, prepared: Prepar
     grantId: grant.grantId,
     client: plan.provider,
     waiverId: grant.waiverId,
+  })
+
+/**
+ * Publishes the brief's exact bytes before batch I (review item B14) and
+ * returns the `BriefRecorded` that names them, with the text decoded from
+ * those bytes, which the argv carries. A failed publication stops the
+ * command before batch I, leaving the grant an orphan for the next
+ * settle step.
+ */
+const publishedBrief = (context: SessionContext, session: OpenSession, opId: OpId, brief: string) =>
+  Effect.gen(function* () {
+    const bytes = yield* utf8Bytes(brief)
+    const briefPath = attemptFiles(context.settings.stateDir, session, opId).brief
+    const briefSha256 = yield* context.capabilities.stateFiles.publish(briefPath, bytes)
+    const { sessionId } = session.opened
+    return {
+      recorded: new BriefRecorded({ sessionId, opId, briefPath, briefSha256 }),
+      text: yield* utf8Text(bytes),
+    }
   })
 
 /** Appends batch I; a moved log cancels the grant as a lost race (step 4). */

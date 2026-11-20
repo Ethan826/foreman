@@ -23,7 +23,7 @@ import { CloseKinds } from "../../src/domain/session.ts"
 import { implement } from "../../src/program/implement.ts"
 import { closeSession, openSession, stepEnded } from "../../src/program/session.ts"
 import { CommandRefused, LostRace } from "../../src/program/session-errors.ts"
-import { eventsOf, type Harness, ledgerRows, logBatch, rowsOf, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, ledgerRows, logBatch, published, rowsOf, withHarness } from "./session-harness.ts"
 
 const tranche = TrancheId.make("t-1")
 
@@ -78,7 +78,12 @@ const afterBatchQ = (harness: Harness) =>
     expect(harness.trace).toMatchObject([logBatch("HoldCreated")])
     harness.trace.length = 0
     yield* implement(harness.context, { waive: true })
-    expect(harness.trace.slice(0, 3)).toMatchObject([logBatch("Waived"), ledgerRows("Grant"), logBatch("Intended")])
+    expect(harness.trace.slice(0, 4)).toMatchObject([
+      logBatch("Waived"),
+      ledgerRows("Grant"),
+      published("brief.md"),
+      logBatch("Intended", "BriefRecorded"),
+    ])
     expect(count(yield* eventsOf(harness), Schema.is(HoldCreated))).toBe(1)
     expect(harness.client.launches.length).toBe(1)
   })
@@ -100,7 +105,7 @@ const afterBatchW = (waive: boolean) => (harness: Harness) =>
     expect(harness.trace).toMatchObject([logBatch("HoldCreated"), logBatch("Waived")])
     harness.trace.length = 0
     yield* implement(harness.context, { waive })
-    expect(harness.trace.slice(0, 2)).toMatchObject([ledgerRows("Grant"), logBatch("Intended")])
+    expect(harness.trace.slice(0, 3)).toMatchObject([ledgerRows("Grant"), published("brief.md"), logBatch("Intended", "BriefRecorded")])
     expect(count(yield* eventsOf(harness), Schema.is(Waived))).toBe(1)
     expect(harness.client.launches.length).toBe(1)
   })
@@ -110,10 +115,15 @@ const afterGrant = (harness: Harness) =>
     yield* opened(harness)
     failLogWhen(harness, Schema.is(Intended))
     failed(yield* Effect.exit(implement(harness.context, { waive: false })))
-    expect(harness.trace).toMatchObject([ledgerRows("Grant")])
+    expect(harness.trace).toMatchObject([ledgerRows("Grant"), published("brief.md")])
     harness.trace.length = 0
     yield* implement(harness.context, { waive: false })
-    expect(harness.trace.slice(0, 3)).toMatchObject([ledgerRows("GrantCanceled"), ledgerRows("Grant"), logBatch("Intended")])
+    expect(harness.trace.slice(0, 4)).toMatchObject([
+      ledgerRows("GrantCanceled"),
+      ledgerRows("Grant"),
+      published("brief.md"),
+      logBatch("Intended", "BriefRecorded"),
+    ])
     const canceled = Arr.filter(yield* rowsOf(harness), Schema.is(GrantCanceled))
     expect(canceled.map((row) => row.cause)).toEqual(["orphan"])
     expect(harness.client.launches.length).toBe(1)
@@ -124,7 +134,7 @@ const afterBatchI = (harness: Harness) =>
     yield* opened(harness)
     harness.inject.startFails = true
     failed(yield* Effect.exit(implement(harness.context, { waive: false })))
-    expect(harness.trace).toMatchObject([ledgerRows("Grant"), logBatch("Intended")])
+    expect(harness.trace).toMatchObject([ledgerRows("Grant"), published("brief.md"), logBatch("Intended", "BriefRecorded")])
     harness.inject.startFails = false
     yield* refusedRetry(harness)
     expect(harness.client.launches).toEqual([])
@@ -193,7 +203,7 @@ const movedOnBatchI = (harness: Harness) =>
     failLogWhen(harness, Schema.is(Intended), moved)
     const exit = yield* Effect.exit(implement(harness.context, { waive: false }))
     expect(Exit.isFailure(exit) && Option.exists(Exit.findErrorOption(exit), Schema.is(LostRace))).toBe(true)
-    expect(harness.trace).toMatchObject([ledgerRows("Grant"), ledgerRows("GrantCanceled")])
+    expect(harness.trace).toMatchObject([ledgerRows("Grant"), published("brief.md"), ledgerRows("GrantCanceled")])
     const canceled = Arr.filter(yield* rowsOf(harness), Schema.is(GrantCanceled))
     expect(canceled.map((row) => row.cause)).toEqual(["lostRace"])
     expect(count(yield* eventsOf(harness), Schema.is(Intended))).toBe(0)

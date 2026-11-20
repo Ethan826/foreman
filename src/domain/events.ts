@@ -21,6 +21,7 @@ import {
   WaiverExpired,
 } from "./owner-events.ts"
 import {
+  BriefRecorded,
   HandoffApproved,
   HandoffRejected,
   ReportRecorded,
@@ -87,6 +88,7 @@ export {
 /** The assisted session's events; see session-events.ts. */
 export {
   SessionOpened,
+  BriefRecorded,
   ReportRecorded,
   SnapshotTaken,
   HandoffApproved,
@@ -130,6 +132,7 @@ export const ProjectEvent = Schema.Union([
   ReviewChecked,
   StepEndedByOwner,
   SessionClosed,
+  BriefRecorded,
 ])
 /** Any project log event; see {@link ProjectEvent}. */
 export type ProjectEvent = typeof ProjectEvent.Type

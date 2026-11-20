@@ -18,6 +18,7 @@ import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
 import { decodePs } from "../format/ps.ts"
 import { holdsNow, pinReading, readLog, worktreeReading } from "./command-start.ts"
+import { attemptBriefIntact } from "./brief-files.ts"
 import { fileIntact } from "./recorded-files.ts"
 import type { SessionContext } from "./session-context.ts"
 
@@ -54,6 +55,15 @@ export const ReportIntegrity = Schema.Struct({
 /** One report's integrity; see {@link ReportIntegrity}. */
 export type ReportIntegrity = typeof ReportIntegrity.Type
 
+/**
+ * Whether one attempt's brief is recorded with its file present at the
+ * recorded hash (review item B14); an attempt with no brief recorded is
+ * not intact.
+ */
+export const BriefIntegrity = Schema.Struct({ opId: OpId, briefIntact: Schema.Boolean })
+/** One brief's integrity; see {@link BriefIntegrity}. */
+export type BriefIntegrity = typeof BriefIntegrity.Type
+
 /** The startup worktree check: whether it passed, and the HEAD or the reason. */
 export const WorktreeStatus = Schema.Struct({ passed: Schema.Boolean, detail: Schema.String })
 
@@ -66,6 +76,7 @@ export const StatusReport = Schema.Struct({
   pinsMatch: Schema.Record(Client, Schema.Boolean),
   worktree: WorktreeStatus,
   reports: Schema.Array(ReportIntegrity),
+  briefs: Schema.Array(BriefIntegrity),
   evidenceCaveat: Schema.String,
 })
 /** A status report; see {@link StatusReport}. */
@@ -92,6 +103,7 @@ export const status = (context: SessionContext) =>
         onFailure: (reason) => ({ passed: false, detail: reason }),
       }),
       reports: yield* Effect.forEach(reportsOf(fold.state), (report) => integrityOf(context, report)),
+      briefs: yield* Effect.forEach(attemptsOf(fold.state), (attempt) => briefIntegrityOf(context, attempt)),
       evidenceCaveat,
     } satisfies StatusReport
   })
@@ -131,6 +143,17 @@ const evidenceFor = (launch: Launched, listing: Result.Result<string, { readonly
 
 /** The listing's rows, or why it does not decode. */
 const decodedRows = (text: string) => Result.mapError(decodePs(text), (failed) => failed.reason)
+
+/** The open session's attempts. */
+const attemptsOf = (state: SessionState): ReadonlyArray<SessionAttempt> =>
+  Option.match(openSessionOf(state), { onNone: () => [], onSome: (session) => session.attempts })
+
+/** Whether an attempt's brief is recorded and present with its recorded hash. */
+const briefIntegrityOf = (context: SessionContext, attempt: SessionAttempt) =>
+  Effect.map(
+    attemptBriefIntact(context, attempt),
+    (briefIntact): BriefIntegrity => ({ opId: attempt.intent.opId, briefIntact }),
+  )
 
 /** Whether a report's two files are present with their recorded hashes. */
 const integrityOf = (context: SessionContext, report: ReportRecorded) =>

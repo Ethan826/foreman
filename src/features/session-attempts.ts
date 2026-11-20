@@ -1,9 +1,11 @@
 // One attempt of an assisted session as the session fold records it
-// (plan "Write protocol"): its intent, then the first `Launched`, the
-// first `Finished` and the owner's first attestation that it ended.
+// (plan "Write protocol"): its intent, then its first recorded brief, the
+// first `Launched`, the first `Finished` and the owner's first
+// attestation that it ended.
 // Later duplicates change nothing, so replaying a log gives one answer.
 import { Option } from "effect"
 import type {
+  BriefRecorded,
   Finished,
   Intended,
   Launched,
@@ -14,10 +16,19 @@ import type { SessionAttempt } from "../domain/session-state.ts"
 /** An attempt with only its intent recorded. */
 export const newAttempt = (intent: Intended): SessionAttempt => ({
   intent,
+  brief: Option.none(),
   launched: Option.none(),
   finished: Option.none(),
   endedByOwner: Option.none(),
 })
+
+/** Records the first `BriefRecorded` of an attempt. */
+export const briefBy =
+  (brief: BriefRecorded) =>
+  (attempt: SessionAttempt): SessionAttempt => ({
+    ...attempt,
+    brief: Option.orElse(attempt.brief, () => Option.some(brief)),
+  })
 
 /** Records the first `Launched` of an attempt. */
 export const launchedBy =

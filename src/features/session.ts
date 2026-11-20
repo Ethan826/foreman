@@ -31,6 +31,7 @@ import {
 } from "../domain/session-state.ts"
 import {
   attestedBy,
+  briefBy,
   finishedBy,
   isIncomplete,
   launchedBy,
@@ -114,6 +115,9 @@ const inOpen = (
 const openStep = (open: OpenRunning, event: ProjectEvent): OpenRunning =>
   Match.value(event).pipe(
     Match.tag("Intended", (intent) => withAttempt(open, intent)),
+    Match.tag("BriefRecorded", (brief) =>
+      inSession(open, brief.sessionId, (current) => updateAttempt(current, brief.opId, briefBy(brief))),
+    ),
     Match.tag("Launched", (launch) => updateAttempt(open, launch.opId, launchedBy(launch))),
     Match.tag("Finished", (finish) => updateAttempt(open, finish.opId, finishedBy(finish))),
     Match.tag("StepEndedByOwner", (ended) => updateAttempt(open, ended.opId, attestedBy(ended))),

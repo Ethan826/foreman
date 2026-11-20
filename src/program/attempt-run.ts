@@ -19,6 +19,8 @@ import type { SessionContext } from "./session-context.ts"
 
 /** The files of one attempt, all in the state directory. */
 export interface AttemptFiles {
+  /** The exact brief the client receives, named by `BriefRecorded.briefPath`. */
+  readonly brief: string
   /** The published raw output, named by `ReportRecorded.rawPath`. */
   readonly raw: string
   /** Where the raw output streams while the client runs. */
@@ -33,6 +35,7 @@ export interface AttemptFiles {
 export interface LaunchState {
   readonly session: OpenSession
   readonly intent: Intended
+  /** The brief as text, decoded from the bytes `BriefRecorded` names, so the argv carries exactly them. */
   readonly brief: string
   /** The log position after batch I. */
   readonly position: LogPosition
@@ -42,6 +45,7 @@ export interface LaunchState {
 export const attemptFiles = (stateDir: string, session: OpenSession, opId: string): AttemptFiles => {
   const stem = `${stateDir}/${session.opened.sessionId}.${opId}`
   return {
+    brief: `${stem}.brief.md`,
     raw: `${stem}.raw.jsonl`,
     streaming: `${stem}.raw.jsonl.streaming`,
     handoff: `${stem}.handoff.md`,

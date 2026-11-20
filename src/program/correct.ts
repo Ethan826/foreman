@@ -20,6 +20,7 @@ import type { OpenSession } from "../domain/session-state.ts"
 import { correctBrief } from "../format/brief.ts"
 import { type LaunchPlan, type PrepareInput, runAttempt } from "./attempt.ts"
 import { claudeDecoded, claudeHandoff, utf8Text } from "./client-output.ts"
+import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedOnReviewedTree, handoffTextOf, lastEdit, takeSnapshot } from "./handoff-facts.ts"
 import { recordedTask } from "./implement.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
@@ -55,7 +56,10 @@ const correctPlan = (context: SessionContext, options: CorrectOptions): LaunchPl
   role: Roles.Corrector,
   provider: defaultRoleClients[Roles.Corrector],
   waive: options.waive,
-  observe: (fold) => handoffFacts(context, fold.state, options.attest, presumedOnReviewedTree(fold.state)),
+  observe: (fold) =>
+    withBriefsIntact(context, fold.state)(
+      handoffFacts(context, fold.state, options.attest, presumedOnReviewedTree(fold.state)),
+    ),
   snapshot: (session) => Effect.map(takeSnapshot(context, session), Option.some),
   prepare: (input) => prepared(context, options, input),
   argv: (brief) => claudeEditingArgv({ brief, settingsFile: context.settings.claudeSettings }),

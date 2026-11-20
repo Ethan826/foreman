@@ -1,5 +1,5 @@
 // The assisted session's events in the project log (plan "Events"): a
-// session's opening and close, each attempt's recorded report, the
+// session's opening and close, each attempt's recorded brief and report, the
 // snapshots and handoffs between attempts, the review check, and the
 // owner's attestation that a step ended. Re-exported by events.ts, which
 // holds the union.
@@ -49,6 +49,22 @@ export class ReportRecorded extends Schema.TaggedClass<ReportRecorded>()(
     rawSha256: Sha256,
     handoffPath: pathText,
     handoffSha256: Sha256,
+  },
+) {}
+
+/**
+ * The exact brief attempt `opId` was launched with (review item B14):
+ * its bytes, published at `briefPath` before this record, and their
+ * SHA-256. Appended in batch I, right after the attempt's `Intended`, so
+ * an attempt that may have started always has its brief on record.
+ */
+export class BriefRecorded extends Schema.TaggedClass<BriefRecorded>()(
+  "BriefRecorded",
+  {
+    sessionId: SessionId,
+    opId: OpId,
+    briefPath: pathText,
+    briefSha256: Sha256,
   },
 ) {}
 

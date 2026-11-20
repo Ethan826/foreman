@@ -9,6 +9,7 @@ import { StepOutcome } from "./outcomes.ts"
 import { Role } from "./roles.ts"
 import { CloseKind, SessionId } from "./session.ts"
 import {
+  BriefRecorded,
   ReportRecorded,
   SessionOpened,
   StepEndedByOwner,
@@ -16,12 +17,13 @@ import {
 import { Finished, Intended, Launched } from "./step-events.ts"
 
 /**
- * One attempt of the session: its `Intended`, and the `Launched`,
+ * One attempt of the session: its `Intended`, and the brief, `Launched`,
  * `Finished` and owner attestation recorded for it so far. An attempt
  * with no `Finished` is incomplete.
  */
 export const SessionAttempt = Schema.Struct({
   intent: Intended,
+  brief: Schema.Option(BriefRecorded),
   launched: Schema.Option(Launched),
   finished: Schema.Option(Finished),
   endedByOwner: Schema.Option(StepEndedByOwner),

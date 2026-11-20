@@ -39,7 +39,7 @@ const admittedExpiresOther = (harness: Harness) =>
   Effect.gen(function* () {
     yield* withCodexWaiver(harness)
     yield* implement(harness.context, { waive: false })
-    expect(harness.trace[1]).toMatchObject(logBatch("Intended", "WaiverExpired"))
+    expect(harness.trace[2]).toMatchObject(logBatch("Intended", "BriefRecorded", "WaiverExpired"))
     expect(Arr.filter(yield* eventsOf(harness), Schema.is(WaiverExpired))).toEqual([
       new WaiverExpired({ waiverId: codexWaiver }),
     ])

@@ -208,5 +208,12 @@
     "how": "finished",
     "note": "",
     "attests": "quiescence-and-inspection"
+  },
+  {
+    "_tag": "BriefRecorded",
+    "sessionId": "s-1",
+    "opId": "op-1",
+    "briefPath": "/state/s-1.op-1.brief.md",
+    "briefSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
   }
 ]

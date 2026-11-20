@@ -41,7 +41,8 @@ const exactSequence = (harness: Harness) =>
     expect(recorded.outcome).toEqual(new Success())
     expect(harness.trace).toMatchObject([
       ledgerRows("Grant"),
-      logBatch("Intended"),
+      published("brief.md"),
+      logBatch("Intended", "BriefRecorded"),
       started,
       logBatch("Launched"),
       published("raw.jsonl"),
@@ -95,7 +96,8 @@ const freshWaive = (harness: Harness) =>
       logBatch("HoldCreated"),
       logBatch("Waived"),
       ledgerRows("Grant"),
-      logBatch("Intended"),
+      published("brief.md"),
+      logBatch("Intended", "BriefRecorded"),
       started,
       logBatch("Launched"),
       published("raw.jsonl"),
@@ -131,7 +133,12 @@ const retryWaiveAfterQ = (harness: Harness) =>
     yield* Effect.exit(implement(harness.context, { waive: false }))
     harness.trace.length = 0
     yield* implement(harness.context, { waive: true })
-    expect(harness.trace.slice(0, 3)).toMatchObject([logBatch("Waived"), ledgerRows("Grant"), logBatch("Intended")])
+    expect(harness.trace.slice(0, 4)).toMatchObject([
+      logBatch("Waived"),
+      ledgerRows("Grant"),
+      published("brief.md"),
+      logBatch("Intended", "BriefRecorded"),
+    ])
     expect(Arr.filter(yield* eventsOf(harness), Schema.is(HoldCreated)).length).toBe(1)
   })
 
@@ -140,7 +147,7 @@ const retryAfterW = (waive: boolean) => (harness: Harness) =>
     yield* opened(harness)
     yield* append(harness, [quotaHold(Clients.Claude), new Waived({ provider: Clients.Claude, waiverId: WaiverId.make("w-armed") })])
     yield* implement(harness.context, { waive })
-    expect(harness.trace.slice(0, 2)).toMatchObject([ledgerRows("Grant"), logBatch("Intended")])
+    expect(harness.trace.slice(0, 3)).toMatchObject([ledgerRows("Grant"), published("brief.md"), logBatch("Intended", "BriefRecorded")])
     expect((yield* waivedOf(harness)).length).toBe(1)
     const [intent] = yield* intendedOf(harness)
     expect(intent?.waiverId).toEqual(Option.some(WaiverId.make("w-armed")))
@@ -195,7 +202,7 @@ const releasedByReadings = (harness: Harness) =>
     yield* harness.rawLedger.transact((tx) => tx.append([reading(Windows.FiveHour), reading(Windows.Weekly)]))
     const recorded = yield* implement(harness.context, { waive: false })
     expect(recorded.outcome).toEqual(new Success())
-    expect(harness.trace.slice(0, 2)).toMatchObject([ledgerRows("Grant"), logBatch("Intended")])
+    expect(harness.trace.slice(0, 3)).toMatchObject([ledgerRows("Grant"), published("brief.md"), logBatch("Intended", "BriefRecorded")])
     expect((yield* waivedOf(harness)).length).toBe(0)
   })
 
