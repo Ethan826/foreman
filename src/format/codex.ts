@@ -8,7 +8,8 @@
 // other field is optional because the evidence does not document it; all
 // of it is unverified until live test L2. Unknown extra fields are
 // ignored; other event types fail to decode.
-import { Schema } from "effect"
+import { Array as Arr, Schema } from "effect"
+import { streamLineWith } from "./stream-line.ts"
 
 /** The wire tags of the Codex events decoded here. */
 export const CodexEventTypes = {
@@ -92,3 +93,29 @@ export const decodeCodexEvent = Schema.decodeUnknownResult(CodexEvent)
 export const decodeCodexRateLimitsResponse = Schema.decodeUnknownResult(
   CodexRateLimitsResponse,
 )
+
+/** The event types that bear a run's outcome: a completed or failed turn, and an error. */
+const outcomeTypes: ReadonlyArray<string> = [
+  CodexEventTypes.TurnCompleted,
+  CodexEventTypes.TurnFailed,
+  CodexEventTypes.Error,
+]
+
+/** The event types that report a failed run. */
+const failureTypes: ReadonlyArray<string> = [CodexEventTypes.TurnFailed, CodexEventTypes.Error]
+
+/**
+ * Reads one `--json` line for classification (review item B13): a
+ * `turn.completed`, `turn.failed` or `error` event must decode; any
+ * other event object is passed over; anything else is malformed.
+ */
+export const codexStreamLine = streamLineWith(outcomeTypes, decodeCodexEvent)
+
+/**
+ * Whether an event reports a completed turn. Classification receives
+ * this answer, not the wire tag (review item M05).
+ */
+export const reportsCompletedTurn = (event: CodexEvent): boolean => event.type === CodexEventTypes.TurnCompleted
+
+/** Whether an event reports a failed run: `turn.failed` or `error`. */
+export const reportsFailure = (event: CodexEvent): boolean => Arr.contains(failureTypes, event.type)

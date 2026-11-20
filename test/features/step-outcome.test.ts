@@ -16,13 +16,10 @@ import {
 } from "../../src/domain/outcomes.ts"
 import { type Role, Roles } from "../../src/domain/roles.ts"
 import type { ClaudeResult } from "../../src/format/claude.ts"
-import { type CodexEvent, CodexEventTypes } from "../../src/format/codex.ts"
 import {
   ClaudeDecoded,
   classifyAttempt,
   CodexDecoded,
-  codexFailureTypes,
-  codexTurnCompleted,
   type DecodedAttempt,
   usable,
 } from "../../src/features/step-outcome.ts"
@@ -31,11 +28,11 @@ const exitedWith = (code: number) => ({ code: Option.some(code), signal: Option.
 const killedBy = (signal: string) => ({ code: Option.none<number>(), signal: Option.some(signal) })
 
 const claudeResult = (fields: { subtype?: string; is_error?: boolean }) =>
-  new ClaudeDecoded({ result: Option.some({ type: "result" as const, ...fields }) })
+  new ClaudeDecoded({ result: Option.some({ type: "result" as const, ...fields }), malformed: [] })
 const claudeSuccess = claudeResult({ subtype: "success", is_error: false })
-const codexClean = new CodexDecoded({
-  events: [{ type: CodexEventTypes.ThreadStarted }, { type: CodexEventTypes.TurnCompleted }],
-})
+const codex = (turnCompleted: boolean, failureReported: boolean, malformed: ReadonlyArray<string> = []) =>
+  new CodexDecoded({ turnCompleted, failureReported, malformed })
+const codexClean = codex(true, false)
 
 const finding = { id: "F1", severity: "high", file: Option.none(), summary: "Broken." }
 const attempt = (
@@ -65,7 +62,7 @@ describe("classifyAttempt: implementer and corrector", () => {
   })
 
   it("no result event is Unclassified, even with exit 0", () => {
-    const decoded = attempt(new ClaudeDecoded({ result: Option.none() }))
+    const decoded = attempt(new ClaudeDecoded({ result: Option.none(), malformed: [] }))
     expect(classifyAttempt(Roles.Implementer, exitedWith(0), decoded)).toEqual(new Unclassified())
   })
 
@@ -125,15 +122,13 @@ describe("classifyAttempt: reviewer", () => {
     expect(classifyAttempt(Roles.Reviewer, exitedWith(0), review(Option.none()))).toEqual(new Unclassified())
   })
 
-  it.each([CodexEventTypes.TurnFailed, CodexEventTypes.Error])("a %s event is Unclassified", (type) => {
-    const client = new CodexDecoded({ events: [{ type: CodexEventTypes.TurnCompleted }, { type }] })
-    const decoded = attempt(client, Option.some(Result.succeed([])))
+  it("a reported failure after a completed turn is Unclassified", () => {
+    const decoded = attempt(codex(true, true), Option.some(Result.succeed([])))
     expect(classifyAttempt(Roles.Reviewer, exitedWith(0), decoded)).toEqual(new Unclassified())
   })
 
   it("a run with no completed turn is Unclassified", () => {
-    const client = new CodexDecoded({ events: [{ type: CodexEventTypes.ThreadStarted }] })
-    const decoded = attempt(client, Option.some(Result.succeed([])))
+    const decoded = attempt(codex(false, false), Option.some(Result.succeed([])))
     expect(classifyAttempt(Roles.Reviewer, exitedWith(0), decoded)).toEqual(new Unclassified())
   })
 
@@ -149,17 +144,29 @@ describe("classifyAttempt: reviewer", () => {
   })
 })
 
-describe("decoded input shapes", () => {
-  it("mirror the Codex decoder's wire tags", () => {
-    expect(codexFailureTypes).toEqual([CodexEventTypes.TurnFailed, CodexEventTypes.Error])
-    expect(codexTurnCompleted).toBe(CodexEventTypes.TurnCompleted)
+describe("malformed stream lines", () => {
+  it("make a clean Claude success Unclassified", () => {
+    const client = new ClaudeDecoded({ result: claudeSuccess.result, malformed: ["not JSON: {"] })
+    expect(classifyAttempt(Roles.Implementer, exitedWith(0), attempt(client))).toEqual(new Unclassified())
   })
 
-  it("accept the Format decoders' types as they are", () => {
-    const fromClaude = (result: ClaudeResult) => new ClaudeDecoded({ result: Option.some(result) })
-    const fromCodex = (events: ReadonlyArray<CodexEvent>) => new CodexDecoded({ events })
+  it("make a clean Codex review Unclassified", () => {
+    const decoded = attempt(codex(true, false, ["malformed error event"]), Option.some(Result.succeed([])))
+    expect(classifyAttempt(Roles.Reviewer, exitedWith(0), decoded)).toEqual(new Unclassified())
+  })
+
+  it("leave a signal Crashed", () => {
+    const client = new ClaudeDecoded({ result: claudeSuccess.result, malformed: ["not JSON: {"] })
+    expect(classifyAttempt(Roles.Implementer, killedBy("SIGKILL"), attempt(client))).toEqual(
+      new Crashed({ signal: "SIGKILL" }),
+    )
+  })
+})
+
+describe("decoded input shapes", () => {
+  it("accept the Format decoder's Claude result as it is", () => {
+    const fromClaude = (result: ClaudeResult) => new ClaudeDecoded({ result: Option.some(result), malformed: [] })
     expect(fromClaude({ type: "result" }).result).toEqual(Option.some({ type: "result" }))
-    expect(fromCodex([]).events).toEqual([])
   })
 })
 

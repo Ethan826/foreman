@@ -5,10 +5,13 @@
 // reviewer's verdict comes from its decoded findings block (decision P8).
 //
 // Features may not import Format, so the decoded input is named here by
-// the fields classification reads. The Format decoders' types have these
-// shapes (format/claude.ts `ClaudeResult`, format/codex.ts `CodexEvent`),
-// so Program passes their results as they are; the step-outcome test
-// checks both that and that the Codex tags below equal the decoder's.
+// the fields classification reads. Claude's result has the shape of
+// format/claude.ts `ClaudeResult`, which Program passes as it is. For
+// Codex, Format answers whether the events report a completed turn or a
+// failure, so no Codex wire tag is written here (review item M05). Every
+// stream line that Format found malformed is carried here too: not JSON,
+// not an event object, or an outcome-bearing event that did not decode
+// (review item B13). One such line makes the attempt `Unclassified`.
 //
 // Guess to confirm: no recorded evidence yet shows how either client
 // reports a rate limit, a failed login or a denied permission in these
@@ -38,15 +41,6 @@ const claudeSuccessSubtype = "success"
 const claudeMaxTurnsSubtype = "error_max_turns"
 
 /**
- * The Codex event types that report a failed run: `turn.failed` and
- * `error`, as format/codex.ts's `CodexEventTypes` spells them.
- */
-export const codexFailureTypes: ReadonlyArray<string> = ["turn.failed", "error"]
-
-/** The Codex event type of a completed turn, `turn.completed`. */
-export const codexTurnCompleted = "turn.completed"
-
-/**
  * How the leader process ended: its exit code, or the signal that ended
  * it. Both are absent when the runtime could read neither.
  */
@@ -61,22 +55,25 @@ export interface ClaudeResultFields {
   readonly is_error?: boolean
 }
 
-/** The field of a Codex `--json` event that classification reads. */
-export interface CodexEventFields {
-  readonly type: string
-}
-
 /**
  * A Claude attempt's decoded stream-json output: its last `result`
- * event, absent when the stream held none.
+ * event, absent when the stream held none, and why each malformed line
+ * is malformed.
  */
 export class ClaudeDecoded extends Data.TaggedClass("ClaudeDecoded")<{
   readonly result: Option.Option<ClaudeResultFields>
+  readonly malformed: ReadonlyArray<string>
 }> {}
 
-/** A Codex attempt's decoded `--json` events, in order. */
+/**
+ * A Codex attempt's decoded `--json` output: whether any event reports a
+ * completed turn, whether any reports a failure (`turn.failed` or
+ * `error`), and why each malformed line is malformed.
+ */
 export class CodexDecoded extends Data.TaggedClass("CodexDecoded")<{
-  readonly events: ReadonlyArray<CodexEventFields>
+  readonly turnCompleted: boolean
+  readonly failureReported: boolean
+  readonly malformed: ReadonlyArray<string>
 }> {}
 
 /** The findings block decoded from a final message, or why it did not decode. */
@@ -107,7 +104,8 @@ const endedWith = (outcome: StepOutcome): ClientVerdict => Option.some(outcome)
 /**
  * Classifies one attempt of `role`. A leader ended by a signal is
  * `Crashed` with that signal (an empty signal name is `Unclassified`).
- * Otherwise the client's events decide: Claude's `error_max_turns` result
+ * Otherwise a malformed stream line makes it `Unclassified`, and then
+ * the client's events decide: Claude's `error_max_turns` result
  * is `MaxTurns`; a run is clean only with exit code 0 and, for Claude, a
  * `success` result with `is_error` false, or for Codex, a completed turn
  * and no `turn.failed` or `error` event; anything else is `Unclassified`.
@@ -143,16 +141,18 @@ export const usable = (role: Role, outcome: StepOutcome): boolean =>
 const crashedBy = (signal: string): StepOutcome =>
   String.isEmpty(signal) ? new Unclassified() : new Crashed({ signal })
 
-/** The client's verdict from its decoded events and the exit code. */
+/** The client's verdict from its decoded events and the exit code; any malformed line is unclassified. */
 const clientVerdict = (
   client: ClaudeDecoded | CodexDecoded,
   exit: AttemptExit,
 ): ClientVerdict =>
-  Match.value(client).pipe(
-    Match.tag("ClaudeDecoded", (claude) => claudeVerdict(claude, exit)),
-    Match.tag("CodexDecoded", (codex) => codexVerdict(codex, exit)),
-    Match.exhaustive,
-  )
+  Arr.isReadonlyArrayNonEmpty(client.malformed)
+    ? endedWith(new Unclassified())
+    : Match.value(client).pipe(
+        Match.tag("ClaudeDecoded", (claude) => claudeVerdict(claude, exit)),
+        Match.tag("CodexDecoded", (codex) => codexVerdict(codex, exit)),
+        Match.exhaustive,
+      )
 
 /** Claude: max turns, then a clean success result with exit 0, else unclassified. */
 const claudeVerdict = (claude: ClaudeDecoded, exit: AttemptExit): ClientVerdict =>
@@ -166,11 +166,7 @@ const claudeVerdict = (claude: ClaudeDecoded, exit: AttemptExit): ClientVerdict 
 
 /** Codex: a completed turn, no failure event and exit 0, else unclassified. */
 const codexVerdict = (codex: CodexDecoded, exit: AttemptExit): ClientVerdict =>
-  cleanIf(
-    Arr.some(codex.events, isTurnCompleted) &&
-      !Arr.some(codex.events, isCodexFailure) &&
-      exitedZero(exit),
-  )
+  cleanIf(codex.turnCompleted && !codex.failureReported && exitedZero(exit))
 
 /** Clean when `ranCleanly`, otherwise `Unclassified`. */
 const cleanIf = (ranCleanly: boolean): ClientVerdict =>
@@ -182,14 +178,6 @@ const isClaudeSuccess = (result: ClaudeResultFields): boolean =>
 
 /** Whether the leader exited with code 0. */
 const exitedZero = (exit: AttemptExit): boolean => Option.contains(exit.code, 0)
-
-/** Whether a Codex event is a completed turn. */
-const isTurnCompleted = (event: CodexEventFields): boolean =>
-  event.type === codexTurnCompleted
-
-/** Whether a Codex event reports a failure. */
-const isCodexFailure = (event: CodexEventFields): boolean =>
-  Arr.contains(codexFailureTypes, event.type)
 
 /** A clean run's outcome: the reviewer's findings decide; others succeed. */
 const roleVerdict = (

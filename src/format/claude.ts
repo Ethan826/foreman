@@ -12,6 +12,7 @@
 // to decode; the shell decides what an undecodable line means.
 import { Array as Arr, Duration, Option, pipe, Record, Schema } from "effect"
 import { type Window, Windows } from "../domain/window.ts"
+import { streamLineWith } from "./stream-line.ts"
 
 /** The wire tags of the Claude events decoded here. */
 export const ClaudeEventTypes = {
@@ -131,6 +132,13 @@ export const decodeClaudeRateLimitEvent =
 export const decodeClaudeApiRetry = Schema.decodeUnknownResult(ClaudeApiRetry)
 /** Decodes an unknown value as any {@link ClaudeEvent}; other event types fail. */
 export const decodeClaudeEvent = Schema.decodeUnknownResult(ClaudeEvent)
+
+/**
+ * Reads one stream-json line for classification (review item B13): a
+ * `result` event must decode as a {@link ClaudeResult}; any other event
+ * object is passed over; anything else is malformed.
+ */
+export const claudeStreamLine = streamLineWith([ClaudeEventTypes.Result], decodeClaudeResult)
 
 
 const decodeUnifiedWindow = Schema.decodeUnknownOption(ClaudeUnifiedWindow)
