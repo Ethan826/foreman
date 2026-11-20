@@ -165,7 +165,16 @@ const otherWaiverOnlyBatchQ = (harness: Harness) =>
     yield* opened(harness)
     yield* append(harness, [new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-codex") })])
     failsWith(yield* Effect.exit(implement(harness.context, { waive: true })), Schema.is(WaiverRefused))
-    expect(harness.trace).toMatchObject([logBatch("HoldCreated")])
+    expect(harness.trace).toMatchObject([logBatch("HoldCreated"), logBatch("WaiverExpired")])
+    expect(harness.client.launches).toEqual([])
+  })
+
+const otherWaiverExpiredOnly = (harness: Harness) =>
+  Effect.gen(function* () {
+    yield* opened(harness)
+    yield* append(harness, [new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-codex") }), quotaHold(Clients.Claude)])
+    failsWith(yield* Effect.exit(implement(harness.context, { waive: true })), Schema.is(WaiverRefused))
+    expect(harness.trace).toMatchObject([logBatch("WaiverExpired")])
     expect(harness.client.launches).toEqual([])
   })
 
@@ -228,16 +237,10 @@ describe("implement: the waiver step under refusing pacing", () => {
   it.effect("a non-quota hold refuses and appends nothing", () =>
     withHarness({ allowing: false }, refusedNothingAppended([failureHold], Schema.is(CommandRefused))),
   )
-  it.effect("a Claude quota hold with Codex's armed waiver refuses --waive and appends nothing", () =>
-    withHarness(
-      { allowing: false },
-      refusedNothingAppended(
-        [new Waived({ provider: Clients.Codex, waiverId: WaiverId.make("w-codex") }), quotaHold(Clients.Claude)],
-        Schema.is(WaiverRefused),
-      ),
-    ),
+  it.effect("a Claude quota hold with Codex's armed waiver refuses --waive and only expires that waiver", () =>
+    withHarness({ allowing: false }, otherWaiverExpiredOnly),
   )
-  it.effect("Codex's armed waiver with no Claude hold writes batch Q only, then refuses --waive", () =>
+  it.effect("Codex's armed waiver with no Claude hold writes batch Q, refuses --waive, then expires it", () =>
     withHarness({ allowing: false }, otherWaiverOnlyBatchQ),
   )
   it.effect("a quota hold released by post-hold readings is treated as absent", () =>

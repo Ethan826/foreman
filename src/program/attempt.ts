@@ -11,8 +11,10 @@
 //    again and the snapshot (review and correct). The prerequisites are
 //    checked again with the real snapshot.
 // 3. Admission and the waiver step (attempt-admission.ts): batches Q, W.
-// 4. Batch I: the plan's consent events, then `Intended`. A
-//    `PositionMoved` cancels the grant as a lost race.
+// 4. Batch I: the plan's consent events, then `Intended`, then a
+//    `WaiverExpired` for every other armed waiver. A `PositionMoved`
+//    cancels the grant as a lost race. A refused attempt expires every
+//    armed waiver after its refusal (waiver-expiry.ts).
 // 5-7. Start the client, batch L, publish the files, batch F
 //    (attempt-run.ts).
 // 8. Settle again, so the grant is charged at its estimate.
@@ -40,6 +42,7 @@ import { type AttemptFiles, runClient } from "./attempt-run.ts"
 import { holdsNow, type LogRead, pinReading, readLog, requireAllowed, worktreeReading } from "./command-start.ts"
 import type { SessionContext } from "./session-context.ts"
 import { LostRace } from "./session-errors.ts"
+import { expiriesBeside, expiringOnRefusal } from "./waiver-expiry.ts"
 
 /**
  * The facts a handoff command observes before the rules, without staging
@@ -115,21 +118,28 @@ export class AttemptRecorded extends Schema.TaggedClass<AttemptRecorded>()("Atte
 export const runAttempt = <E>(context: SessionContext, plan: LaunchPlan<E>) =>
   Effect.scoped(
     Effect.gen(function* () {
-      const { capabilities, settings } = context
-      yield* capabilities.lock
-      const read = yield* readLog(capabilities.log)
-      yield* applySettle(capabilities.ledger, read.events, settings.project)
-      const fold = foldSession(read.events)
-      const { allowedNow, holds, session, snapshot } = yield* checkedLaunch(context, plan, read, fold)
-      const prepared = yield* plan.prepare({ session, state: fold.state, snapshot })
-      const grant = yield* admitStep(context, plan, { read, fold, holds, waiverStep: allowedNow.waiverStep })
-      const intent = intentOf(plan, session, prepared, grant)
-      const position = yield* appendIntent(context, grant, [...prepared.consent, intent])
-      const outcome = yield* runClient(context, plan, { session, intent, brief: prepared.brief, position })
-      yield* settleNow(context)
-      return new AttemptRecorded({ opId: intent.opId, grantId: intent.grantId, outcome })
+      yield* context.capabilities.lock
+      return yield* expiringOnRefusal(context, launched(context, plan))
     }),
   )
+
+/** The protocol under the lock, from reading the log to the settle step after batch F. */
+const launched = <E>(context: SessionContext, plan: LaunchPlan<E>) =>
+  Effect.gen(function* () {
+    const { capabilities, settings } = context
+    const read = yield* readLog(capabilities.log)
+    yield* applySettle(capabilities.ledger, read.events, settings.project)
+    const fold = foldSession(read.events)
+    const { allowedNow, holds, session, snapshot } = yield* checkedLaunch(context, plan, read, fold)
+    const prepared = yield* plan.prepare({ session, state: fold.state, snapshot })
+    const grant = yield* admitStep(context, plan, { read, fold, holds, waiverStep: allowedNow.waiverStep })
+    const intent = intentOf(plan, session, prepared, grant)
+    const expiries = expiriesBeside(fold.armedWaivers, grant.waiverId)
+    const position = yield* appendIntent(context, grant, [...prepared.consent, intent, ...expiries])
+    const outcome = yield* runClient(context, plan, { session, intent, brief: prepared.brief, position })
+    yield* settleNow(context)
+    return new AttemptRecorded({ opId: intent.opId, grantId: intent.grantId, outcome })
+  })
 
 /**
  * Steps 1 and 2: the prerequisites with the presumed snapshot, then the

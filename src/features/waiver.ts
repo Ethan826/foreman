@@ -2,12 +2,14 @@
 // while a quota hold for that provider exists and no waiver is armed. The
 // waiver is armed from its `Waived` record until the next launch attempt:
 // an `Intended` naming it uses it, and an attempt that does not launch a
-// step of the waived provider expires it (`WaiverExpired`). A restart does
-// not expire it. A waived launch skips pacing but still takes its grant at
-// its estimate.
+// step of the waived provider expires it (`WaiverExpired`), whether the
+// attempt launches another provider or is refused (review item B15). A
+// restart does not expire it. A waived launch skips pacing but still takes
+// its grant at its estimate.
 import { Array as Arr, Option, Record, Schema } from "effect"
 import { type Client, Clients } from "../domain/clients.ts"
 import { Intended, type ProjectEvent, Waived, WaiverExpired } from "../domain/events.ts"
+import type { ArmedWaivers } from "../domain/session-state.ts"
 import { type Hold, Quota } from "../domain/holds.ts"
 import type { WaiverId } from "../domain/ids.ts"
 
@@ -46,3 +48,11 @@ export const waiveAccepted = (
 ): boolean =>
   Arr.some(holds, (hold) => Schema.is(Quota)(hold) && hold.provider === provider) &&
   Arr.every(Record.values(Clients), (client) => Option.isNone(armedWaiver(events, client)))
+
+/**
+ * The armed waivers an attempt expires (design "Waivers"; review item
+ * B15): every waiver in `armed` except `used`, the one the attempt's
+ * `Intended` names. A refused attempt uses none, so it expires them all.
+ */
+export const unusedWaivers = (armed: ArmedWaivers, used: Option.Option<WaiverId>): ReadonlyArray<WaiverId> =>
+  Arr.filter(Arr.getSomes(Record.values(armed)), (waiverId) => !Option.contains(used, waiverId))

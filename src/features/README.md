@@ -110,7 +110,7 @@ Part B's first milestone adds these pure modules. Each folds the project log or 
 - [`settle.ts`](settle.ts): the settle step, which cancels orphan grants and charges finished steps at their estimate, and `ownerSettle` for `ledger settle`. A step that has no `Finished` but has the owner's `StepEndedByOwner` for that step and grant is charged at its estimate too, at the attestation's time, whether it launched or not (`ChargeFromOwnerEnded`). Such a step is no longer in flight.
 - [`binding.ts`](binding.ts): the ledger binding check at startup.
 - [`holds.ts`](holds.ts): the holds left by the log and their release rules, and `quotaReleased` for readings.
-- [`waiver.ts`](waiver.ts) and [`spend-down.ts`](spend-down.ts): armed waivers, the active spend-down and the cap it sets.
+- [`waiver.ts`](waiver.ts) and [`spend-down.ts`](spend-down.ts): armed waivers, the active spend-down and the cap it sets. `unusedWaivers` names the armed waivers an attempt expires: every one its `Intended` does not name, so all of them for a refused attempt.
 - [`review-queue.ts`](review-queue.ts): the review queue, its bound and unwinding.
 - [`backlog.ts`](backlog.ts): pre-approvals and the approval each tranche starts under.
 - [`schedule.ts`](schedule.ts): the next step, ordered by provider reset time (an invented heuristic, flagged in the design).
