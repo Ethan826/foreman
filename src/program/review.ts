@@ -115,9 +115,13 @@ const changedPaths = (context: SessionContext, session: OpenSession, tree: Revis
     )
   })
 
-/** Codex's final message, from the file it was told to write; empty when it wrote none. */
+/**
+ * Codex's final message, from the file it was told to write; empty only
+ * when no file is there (review item M02). A file present but unreadable
+ * fails the command before batch F.
+ */
 const lastMessage = (context: SessionContext, files: AttemptFiles) =>
-  Effect.orElseSucceed(context.capabilities.stateFiles.read(files.lastMessage), () => new Uint8Array())
+  Effect.map(context.capabilities.stateFiles.readIfPresent(files.lastMessage), Option.getOrElse(() => new Uint8Array()))
 
 /** The findings block of a final message; none when there was no message to read. */
 const findingsOf = (handoff: string) =>

@@ -6,7 +6,7 @@
 // step within a file system). A stale `<path>.tmp` from an interrupted
 // publish is overwritten. The hash is of the bytes given, which are the
 // bytes written.
-import { Effect, Predicate, Schema } from "effect"
+import { Effect, Option, Predicate, Schema } from "effect"
 import { createHash } from "node:crypto"
 import { closeSync, fsyncSync, openSync, readFileSync, renameSync, writeSync } from "node:fs"
 import { dirname } from "node:path"
@@ -33,6 +33,12 @@ export interface StateFiles {
   readonly publish: (path: string, bytes: Uint8Array) => Effect.Effect<Sha256, StateFileFailed>
   /** Reads the whole file at `path` as bytes. */
   readonly read: (path: string) => Effect.Effect<Uint8Array, StateFileFailed>
+  /**
+   * Reads the whole file at `path`, or none when no file is there (review
+   * item M02). Only a missing file is none; a file that is present but
+   * cannot be read, such as a directory or one without permission, fails.
+   */
+  readonly readIfPresent: (path: string) => Effect.Effect<Option.Option<Uint8Array>, StateFileFailed>
 }
 
 /** The suffix of the temporary file a publish writes before renaming it. */
@@ -57,9 +63,7 @@ const publish = (path: string, bytes: Uint8Array): Effect.Effect<Sha256, StateFi
     yield* attempt(path, () => {
       renameSync(temporary, path)
     })
-    yield* attempt(path, () => {
-      flushDirectory(dirname(path))
-    })
+    yield* flushDirectoryWith(localDirectory)(path, dirname(path))
     return yield* digestOf(path, bytes)
   })
 
@@ -76,8 +80,28 @@ const digestOf = (path: string, bytes: Uint8Array) =>
 /** Reads the file at `path`. */
 const read = (path: string): Effect.Effect<Uint8Array, StateFileFailed> => attempt(path, () => readFileSync(path))
 
+/** The error code of a path that does not exist. */
+const missingCode = "ENOENT"
+
+/** Whether a thrown value is the file system's "no such file" error. */
+const isMissing = (cause: unknown): boolean =>
+  Predicate.hasProperty(cause, "code") && cause.code === missingCode
+
+/** Reads the file at `path`, none when it does not exist. */
+const readIfPresent = (path: string): Effect.Effect<Option.Option<Uint8Array>, StateFileFailed> =>
+  Effect.try({
+    try: () => Option.some<Uint8Array>(readFileSync(path)),
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.catch((cause) =>
+      isMissing(cause)
+        ? Effect.succeed(Option.none<Uint8Array>())
+        : Effect.fail(new StateFileFailed({ path, reason: reasonOf(cause) })),
+    ),
+  )
+
 /** The production state files over the local file system. */
-export const stateFiles: StateFiles = { publish, read }
+export const stateFiles: StateFiles = { publish, read, readIfPresent }
 
 /**
  * Writes `bytes` to `temporary`, creating or truncating it, and flushes
@@ -112,12 +136,46 @@ const writeAll = (descriptor: number, bytes: Uint8Array, offset: number): number
     ? offset
     : writeAll(descriptor, bytes, offset + writeSync(descriptor, bytes, offset, bytes.byteLength - offset))
 
-/** Flushes a directory's entries, so a rename inside it is stored. */
-const flushDirectory = (directory: string): void => {
-  const descriptor = openSync(directory, "r")
-  fsyncSync(descriptor)
-  closeSync(descriptor)
+/** The calls a directory flush makes, each throwing on failure. */
+export interface DirectoryCalls {
+  /** Opens `path` for reading and returns the descriptor. */
+  readonly open: (path: string) => number
+  /** Flushes the descriptor's directory entries to storage. */
+  readonly fsync: (descriptor: number) => void
+  /** Closes the descriptor. */
+  readonly close: (descriptor: number) => void
 }
+
+/** The directory calls over the local file system. */
+const localDirectory: DirectoryCalls = {
+  open: (path) => openSync(path, "r"),
+  fsync: fsyncSync,
+  close: closeSync,
+}
+
+/**
+ * Flushes `directory`'s entries, so a rename inside it is stored; a
+ * failure is reported for the published `path`. The descriptor is closed
+ * in a finalizer on every path (review item M03); a failed close is
+ * logged and ignored, so a failed fsync stays the failure reported.
+ */
+export const flushDirectoryWith =
+  (calls: DirectoryCalls) =>
+  (path: string, directory: string): Effect.Effect<void, StateFileFailed> =>
+    Effect.acquireUseRelease(
+      attempt(path, () => calls.open(directory)),
+      (descriptor) =>
+        attempt(path, () => {
+          calls.fsync(descriptor)
+        }),
+      (descriptor) =>
+        Effect.ignore(
+          attempt(path, () => {
+            calls.close(descriptor)
+          }),
+          { log: true },
+        ),
+    )
 
 /** Runs a file call, turning what it throws into {@link StateFileFailed}. */
 const attempt = <A>(path: string, call: () => A): Effect.Effect<A, StateFileFailed> =>

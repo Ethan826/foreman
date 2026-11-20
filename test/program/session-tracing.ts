@@ -82,6 +82,7 @@ export const tracedLedger = (store: LedgerStore, trace: Array<TraceEntry>, injec
 
 export const tracedFiles = (trace: Array<TraceEntry>, inject: Injections): StateFiles => ({
   read: stateFiles.read,
+  readIfPresent: stateFiles.readIfPresent,
   publish: (path, bytes) => {
     if (Option.exists(inject.publishFails, (match) => match(path))) {
       inject.publishFails = Option.none()
