@@ -5,7 +5,7 @@
 // non-empty, linked, foreign or wider-than-0700 home is refused, and
 // nothing at the path is cleared, moved or changed.
 import { Effect, Result, Schema } from "effect"
-import { HomeAbsent } from "../domain/git-home.ts"
+import { type GitHomeRefused, HomeAbsent } from "../domain/git-home.ts"
 import { judgeGitHome } from "../features/git-home.ts"
 import { createHome, readHome } from "../runtime/git-home.ts"
 
@@ -33,3 +33,12 @@ const createdHome = (path: string) =>
     const after = yield* readHome(path)
     return Schema.is(HomeAbsent)(after) && Result.isFailure(created) ? created.failure : after
   })
+
+/**
+ * Judges what is at git's HOME `path` without creating or changing
+ * anything: the reading that `preparedGitHome` judges, for `status`,
+ * which never makes the HOME (review item B11). Absent is refused like
+ * any other unusable reading. Never fails.
+ */
+export const judgedGitHome = (path: string): Effect.Effect<Result.Result<void, GitHomeRefused>> =>
+  Effect.map(readHome(path), (reading) => judgeGitHome(path, reading))

@@ -6,8 +6,8 @@
 // answers at once while another process holds the ledger's write lock.
 // PATH names no directory, so no client binary runs for the pin check.
 import { describe, expect, it } from "@effect/vitest"
-import { Array as Arr, Clock, Effect } from "effect"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
+import { Array as Arr, Clock, Effect, Schema } from "effect"
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { Clients } from "../../src/domain/clients.ts"
 import { HoldCreated, LogPosition } from "../../src/domain/events.ts"
@@ -16,7 +16,7 @@ import { OpId } from "../../src/domain/ids.ts"
 import { Unclassified } from "../../src/domain/outcomes.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { main } from "../../src/facade/cli.ts"
-import { productionStatus, StateMissing } from "../../src/program/production-status.ts"
+import { ProductionStatusReport, productionStatus, StateMissing } from "../../src/program/production-status.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
 import { reading } from "../program/session-harness.ts"
@@ -130,9 +130,38 @@ const answersUnderWriteLock = (dir: string) =>
     expect(yield* awaitExit(child)).toBe(0)
   })
 
+const sharedLedgerRead = (dir: string) =>
+  Effect.gen(function* () {
+    const stateDir = `${dir}/state`
+    yield* existingState(dir)
+    const config = configIn(dir, stateDir)
+    const before = filesOf(`${dir}/ledger`)
+    const outcome = yield* Effect.scoped(productionStatus(config, noClients))
+    expect(Schema.is(ProductionStatusReport)(outcome) && outcome.report.ledgerFound).toBe(true)
+    expect(existsSync(`${stateDir}/ledger.sqlite`)).toBe(false)
+    expect(filesOf(`${dir}/ledger`)).toEqual(before)
+  })
+
+const missingSharedLedgerEmpty = (dir: string) =>
+  Effect.gen(function* () {
+    const stateDir = `${dir}/state`
+    yield* existingState(dir)
+    for (const name of readdirSync(`${dir}/ledger`)) rmSync(`${dir}/ledger/${name}`, { recursive: false, force: false })
+    const config = configIn(dir, stateDir)
+    const before = filesOf(dir)
+    const outcome = yield* Effect.scoped(productionStatus(config, noClients))
+    expect(Schema.is(ProductionStatusReport)(outcome) && !outcome.report.ledgerFound).toBe(true)
+    expect(readdirSync(`${dir}/ledger`)).toEqual([])
+    expect(filesOf(dir)).toEqual(before)
+  })
+
 describe("foreman status", () => {
   it.live("creates no file for a missing state", () => withDirectory(missingStateCreatesNothing))
   it.live("leaves an existing state's files as they were", () => withDirectory(existingStateUnchanged))
+  it.live("reads the shared ledger in the ledger directory, and leaves it as it was", () =>
+    withDirectory(sharedLedgerRead),
+  )
+  it.live("reads a missing shared ledger as empty and creates none", () => withDirectory(missingSharedLedgerEmpty))
   it.live("answers while another process holds the ledger's write lock", () =>
     Effect.scoped(withDirectory(answersUnderWriteLock)),
   )

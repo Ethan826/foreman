@@ -43,8 +43,11 @@ export const requireBound: TargetPolicy = (stateDir, configured) =>
 export const recordedOrConfigured: TargetPolicy = (stateDir, configured) =>
   Effect.map(recordedTarget(stateDir), Option.getOrElse(() => configured))
 
-/** The recorded binding, if any. */
-const recordedTarget = (stateDir: string) =>
+/**
+ * The binding recorded in `stateDir`, if any; reads only. Fails with
+ * `TargetBindingUnreadable` when the file cannot be read or decoded.
+ */
+export const recordedTarget = (stateDir: string) =>
   Effect.gen(function* () {
     const path = bindingPath(stateDir)
     const bytes = yield* Effect.mapError(readIfPresent(path), fileFailed(path))

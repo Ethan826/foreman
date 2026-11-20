@@ -24,22 +24,18 @@ export interface SettledTarget {
 const ledgerSuffix = `/${ledgerFileName}`
 
 /**
- * Reads the configuration at `configPath` and settles the target under
- * `policy`; `environment` supplies `HOME` for the default ledger
- * directory. Fails with `ConfigUndecodable`, `LayoutRefused`,
- * `TargetMismatch` or `TargetBindingUnreadable`, among others.
+ * Reads the configuration at `configPath`, settles the ledger's directory
+ * (`environment` supplies `HOME` for the default) and checks the
+ * configured layout. Returns the configuration and the configured target,
+ * canonical. Reads only. Fails with `ConfigUndecodable` or
+ * `LayoutRefused`, among others.
  */
-export const settledTarget = (
-  policy: TargetPolicy,
-  configPath: string,
-  environment: Readonly<Record<string, string | undefined>>,
-) =>
+export const configuredTarget = (configPath: string, environment: Readonly<Record<string, string | undefined>>) =>
   Effect.gen(function* () {
     const config = yield* Effect.fromResult(decodeForemanConfig(yield* utf8Text(yield* stateFiles.read(configPath))))
-    const { stateDir } = config
     const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
     const canonical = yield* checkedLayout({
-      stateDir,
+      stateDir: config.stateDir,
       ownerCheckout: config.ownerCheckout,
       supervisor: config.supervisor.path,
       ledgerDir,
@@ -51,12 +47,36 @@ export const settledTarget = (
       ledger: `${canonical.ledgerDir}${ledgerSuffix}`,
       attributeAllowance: config.attributeAllowance,
     }
-    const target = yield* policy(stateDir, configured)
-    yield* checkedLayout({
-      stateDir,
-      ownerCheckout: target.ownerCheckout,
-      supervisor: target.supervisor.path,
-      ledgerDir: String.slice(0, String.length(target.ledger) - String.length(ledgerSuffix))(target.ledger),
-    })
+    return { config, configured }
+  })
+
+/**
+ * The layout of `target`, the target in force, checked with the state
+ * directory `stateDir`: a reachable command may run on a recorded target
+ * that differs from the configured one. Fails with `LayoutRefused`.
+ */
+export const checkedTargetLayout = (stateDir: string, target: TargetBinding) =>
+  checkedLayout({
+    stateDir,
+    ownerCheckout: target.ownerCheckout,
+    supervisor: target.supervisor.path,
+    ledgerDir: String.slice(0, String.length(target.ledger) - String.length(ledgerSuffix))(target.ledger),
+  })
+
+/**
+ * Reads the configuration at `configPath` and settles the target under
+ * `policy`; `environment` supplies `HOME` for the default ledger
+ * directory. Fails with `ConfigUndecodable`, `LayoutRefused`,
+ * `TargetMismatch` or `TargetBindingUnreadable`, among others.
+ */
+export const settledTarget = (
+  policy: TargetPolicy,
+  configPath: string,
+  environment: Readonly<Record<string, string | undefined>>,
+) =>
+  Effect.gen(function* () {
+    const { config, configured } = yield* configuredTarget(configPath, environment)
+    const target = yield* policy(config.stateDir, configured)
+    yield* checkedTargetLayout(config.stateDir, target)
     return { config, target } satisfies SettledTarget
   })
