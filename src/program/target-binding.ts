@@ -10,6 +10,7 @@ import { type TargetBinding, TargetBindingUnreadable } from "../domain/target.ts
 import { compareTarget } from "../features/target-binding.ts"
 import { decodeTargetBinding, encodeTargetBinding } from "../format/target-binding.ts"
 import { createExclusive, readIfPresent } from "../runtime/binding-file.ts"
+import type { StateFileFailed } from "../runtime/state-files.ts"
 import { utf8Bytes, utf8Text } from "./client-output.ts"
 
 /** How a command settles its target from the recorded and the configured binding. */
@@ -46,10 +47,10 @@ export const recordedOrConfigured: TargetPolicy = (stateDir, configured) =>
 const recordedTarget = (stateDir: string) =>
   Effect.gen(function* () {
     const path = bindingPath(stateDir)
-    const bytes = yield* Effect.mapError(readIfPresent(path), unreadable(path))
+    const bytes = yield* Effect.mapError(readIfPresent(path), fileFailed(path))
     if (Option.isNone(bytes)) return Option.none<TargetBinding>()
     const text = yield* utf8Text(bytes.value)
-    return Option.some(yield* Effect.mapError(Effect.fromResult(decodeTargetBinding(text)), unreadable(path)))
+    return Option.some(yield* Effect.mapError(Effect.fromResult(decodeTargetBinding(text)), undecodable(path)))
   })
 
 /**
@@ -61,11 +62,14 @@ const recordedOnce = (stateDir: string, configured: TargetBinding) =>
     const path = bindingPath(stateDir)
     const nonce = yield* Random.nextIntBetween(0, nonceBound)
     const bytes = yield* utf8Bytes(encodeTargetBinding(configured))
-    const created = yield* Effect.mapError(createExclusive(path, `${path}.${String(nonce)}.tmp`, bytes), unreadable(path))
+    const created = yield* Effect.mapError(createExclusive(path, `${path}.${String(nonce)}.tmp`, bytes), fileFailed(path))
     if (created) return configured
     return yield* Effect.flatMap(recordedTarget(stateDir), Effect.fromOption)
   })
 
-/** A read or decode failure of the binding at `path`. */
-const unreadable = (path: string) => (failure: { readonly message: string } | string) =>
-  new TargetBindingUnreadable({ binding: path, reason: typeof failure === "string" ? failure : failure.message })
+/** A read or write failure of the binding at `path`. */
+const fileFailed = (path: string) => (failure: StateFileFailed) =>
+  new TargetBindingUnreadable({ binding: path, reason: failure.reason })
+
+/** A binding at `path` that does not decode; `reason` is the decoder's message. */
+const undecodable = (path: string) => (reason: string) => new TargetBindingUnreadable({ binding: path, reason })

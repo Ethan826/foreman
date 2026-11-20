@@ -8,7 +8,7 @@
 // the recorded target.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
-import { existsSync, mkdirSync, readFileSync, symlinkSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { git, makeRepo } from "../runtime/git-repo.ts"
 import {
   cli,
@@ -111,6 +111,18 @@ const samePathsThroughLinks = () =>
     }),
   )
 
+const damagedBindingKept = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      writeFileSync(`${layout.state}/target-binding.json`, "{}")
+      const run = yield* cli(layout, ["implement", "--waive"])
+      expect([run.status, failureTag(run)]).toEqual([1, "TargetBindingUnreadable"])
+      expect(readFileSync(`${layout.state}/target-binding.json`, "utf8")).toBe("{}")
+      expect(recorded(layout, "claude-launches")).toBeUndefined()
+    }),
+  )
+
 describe("the target binding in production", () => {
   it.effect("is recorded, canonical, at first use", recordedAtFirstUse, endToEndMillis)
   it.effect("a copied config with another owner's checkout is refused", refusedAfterChange(otherTarget), endToEndMillis)
@@ -121,4 +133,5 @@ describe("the target binding in production", () => {
   it.effect("a copied config with another ledger is refused, and that ledger is never opened", refusedAfterChange(otherLedger), endToEndMillis)
   it.effect("the other owner's repository is left alone", otherTargetUntouched, endToEndMillis)
   it.effect("the same paths named through links are the same target", samePathsThroughLinks, endToEndMillis)
+  it.effect("a damaged binding is refused and kept as it is", damagedBindingKept, endToEndMillis)
 })
