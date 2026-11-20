@@ -33,6 +33,14 @@ import {
   WaiverExpired,
   WorktreeCreated,
   WorktreeIntended,
+  SessionOpened,
+  ReportRecorded,
+  SnapshotTaken,
+  HandoffApproved,
+  HandoffRejected,
+  ReviewChecked,
+  StepEndedByOwner,
+  SessionClosed,
 } from "../../src/domain/events.ts"
 import { Approval, Drift, Failure, Protected, Quota, Uncertain } from "../../src/domain/holds.ts"
 import { LedgerSeq, OpId, Revision, TrancheId, WaiverId } from "../../src/domain/ids.ts"
@@ -153,6 +161,8 @@ const neutralKinds = [
   Intended, Launched, Finished, CommitRecorded, PreApproved, WaiverExpired,
   ReviewQueued, Unwound, TrancheEnded, LedgerBound, WorktreeIntended,
   WorktreeCreated, Rebased, BaseRequested, UnwindRequested, RestoreRequested,
+  SessionOpened, ReportRecorded, SnapshotTaken, HandoffApproved, HandoffRejected,
+  ReviewChecked, StepEndedByOwner, SessionClosed,
 ] as const
 const releaseKinds = [Approved, Waived, Released, Adopted, Reconciled, RequestCompleted, ProtectedReleased] as const
 const NeutralEvent = Schema.Union(neutralKinds)

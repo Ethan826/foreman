@@ -123,7 +123,7 @@ describe("settleActions property", () => {
 
 describe("ownerSettle", () => {
   it("lists in-flight steps with their recorded pgid and settles the rest", () => {
-    const launched = new Launched({ opId: OpId.make("op-2"), pgid: 4242 })
+    const launched = new Launched({ opId: OpId.make("op-2"), pgid: 4242, leaderStartedAt: Option.none() })
     const result = ownerSettle([intended(1), finished(1), intended(2), launched, intended(3)], snapshotOf([grant(1), grant(2), grant(3), grant(4)]), alpha)
     expect(result.actions).toEqual([
       new ChargeFromFinished({ grantId: GrantId.make("g-1"), endedAt: 500, points: estimate }),

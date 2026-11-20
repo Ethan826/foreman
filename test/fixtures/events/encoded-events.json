@@ -144,5 +144,69 @@
   {
     "_tag": "WaiverExpired",
     "waiverId": "w-1"
+  },
+  {
+    "_tag": "SessionOpened",
+    "sessionId": "s-1",
+    "tranche": "t-1",
+    "taskPath": "/state/s-1/task.md",
+    "taskSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "baseRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "worktree": {
+      "path": "/w",
+      "gitDir": "/g",
+      "commonDir": "/c"
+    }
+  },
+  {
+    "_tag": "ReportRecorded",
+    "sessionId": "s-1",
+    "opId": "op-1",
+    "role": "implementer",
+    "rawPath": "/state/s-1/op-1.jsonl",
+    "rawSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "handoffPath": "/state/s-1/op-1.handoff.md",
+    "handoffSha256": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+  },
+  {
+    "_tag": "SnapshotTaken",
+    "sessionId": "s-1",
+    "forOpId": "op-1",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "_tag": "HandoffApproved",
+    "sessionId": "s-1",
+    "fromOpId": "op-2",
+    "toRole": "corrector",
+    "tree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "findingsSha256": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "attests": "quiescence-and-inspection"
+  },
+  {
+    "_tag": "HandoffRejected",
+    "sessionId": "s-1",
+    "fromOpId": "op-1",
+    "note": "wrong approach"
+  },
+  {
+    "_tag": "ReviewChecked",
+    "sessionId": "s-1",
+    "reviewOpId": "op-2",
+    "reviewedTree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "currentTree": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+  },
+  {
+    "_tag": "StepEndedByOwner",
+    "opId": "op-1",
+    "grantId": "g-1",
+    "endedAt": 9500
+  },
+  {
+    "_tag": "SessionClosed",
+    "sessionId": "s-1",
+    "how": "finished",
+    "note": "",
+    "attests": "quiescence-and-inspection"
   }
 ]

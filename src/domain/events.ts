@@ -4,10 +4,10 @@
 // append-only log; holds, the review queue, the backlog and recovery are
 // folds of it. A step's outcome and a commit's outcome reuse Domain's
 // outcome types, and a hold's creation carries the hold itself.
-// The members live in step-events.ts, owner-events.ts and
-// worktree-events.ts; this module holds the union, positions, errors and
-// the log capability, and re-exports every member so importers see one
-// module.
+// The members live in step-events.ts, owner-events.ts,
+// worktree-events.ts and session-events.ts; this module holds the union,
+// positions, errors and the log capability, and re-exports every member
+// so importers see one module.
 import { Schema } from "effect"
 import type { Effect } from "effect"
 import {
@@ -20,6 +20,16 @@ import {
   Waived,
   WaiverExpired,
 } from "./owner-events.ts"
+import {
+  HandoffApproved,
+  HandoffRejected,
+  ReportRecorded,
+  ReviewChecked,
+  SessionClosed,
+  SessionOpened,
+  SnapshotTaken,
+  StepEndedByOwner,
+} from "./session-events.ts"
 import { CommitRecorded, Finished, Intended, Launched } from "./step-events.ts"
 import {
   BaseRequested,
@@ -74,6 +84,18 @@ export {
   HoldCreated,
 } from "./worktree-events.ts"
 
+/** The assisted session's events; see session-events.ts. */
+export {
+  SessionOpened,
+  ReportRecorded,
+  SnapshotTaken,
+  HandoffApproved,
+  HandoffRejected,
+  ReviewChecked,
+  StepEndedByOwner,
+  SessionClosed,
+} from "./session-events.ts"
+
 /** Any project log event. */
 export const ProjectEvent = Schema.Union([
   Intended,
@@ -100,6 +122,14 @@ export const ProjectEvent = Schema.Union([
   HoldCreated,
   ProtectedReleased,
   WaiverExpired,
+  SessionOpened,
+  ReportRecorded,
+  SnapshotTaken,
+  HandoffApproved,
+  HandoffRejected,
+  ReviewChecked,
+  StepEndedByOwner,
+  SessionClosed,
 ])
 /** Any project log event; see {@link ProjectEvent}. */
 export type ProjectEvent = typeof ProjectEvent.Type

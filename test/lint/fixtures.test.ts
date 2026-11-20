@@ -8,6 +8,7 @@ import { ESLint } from "eslint"
 import { AttributeRefusalReasons, AttributeSources, FileKinds, TreeEntryTypes } from "../../src/domain/attributes.ts"
 import { Clients } from "../../src/domain/clients.ts"
 import { Roles } from "../../src/domain/roles.ts"
+import { Attestations, CloseKinds } from "../../src/domain/session.ts"
 import { WorktreeConditions } from "../../src/domain/worktree.ts"
 
 interface Expected {
@@ -29,7 +30,10 @@ const restricted = (
 
 // R7: each closed name, from Domain apart from eslint.rules.js, has its own
 // fixture line and report there, so dropping one from `closedNames` fails.
-const closedNames = [Clients, Roles, WorktreeConditions, TreeEntryTypes, FileKinds, AttributeSources, AttributeRefusalReasons]
+const closedNames = [
+  Clients, Roles, WorktreeConditions, TreeEntryTypes, FileKinds, AttributeSources, AttributeRefusalReasons,
+  CloseKinds, Attestations,
+]
   .flatMap((vocabulary): ReadonlyArray<string> => Object.values(vocabulary))
 const bareNamesText = Object.values(
   import.meta.glob<string>("../../lint-fixtures/src/features/bare-names.ts", { query: "?raw", import: "default", eager: true }),
@@ -214,7 +218,7 @@ const dirtyIn = (linted: Linted): ReadonlyArray<string> =>
 layer(lintedFixtures, { timeout: 120_000 })("lint fixtures", (it) => {
   it("each closed vocabulary name has its own line in the bare-names fixture", () => {
     const lines = closedNames.map(nameLine)
-    expect({ unlisted: lines.filter((line) => line === 0), distinct: new Set(lines).size }).toEqual({ unlisted: [], distinct: 25 })
+    expect({ unlisted: lines.filter((line) => line === 0), distinct: new Set(lines).size }).toEqual({ unlisted: [], distinct: 29 })
   })
   it.effect("every fixture is a listed must-fail or a listed clean control", () =>
     Effect.gen(function* () {

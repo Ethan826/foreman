@@ -70,7 +70,7 @@ const seed = (files: Files) =>
       intended(1),
       new Finished({ opId: OpId.make("op-1"), outcome: new Success(), endedAt: 900 }),
       intended(2),
-      new Launched({ opId: OpId.make("op-2"), pgid: 777 }),
+      new Launched({ opId: OpId.make("op-2"), pgid: 777, leaderStartedAt: Option.none() }),
     ])
   })
 const rowsOf = (store: LedgerStore) =>

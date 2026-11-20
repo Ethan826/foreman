@@ -25,10 +25,16 @@ export class Intended extends Schema.TaggedClass<Intended>()("Intended", {
   waiverId: Schema.OptionFromOptionalKey(WaiverId),
 }) {}
 
-/** The step's process started as the leader of process group `pgid`. */
+/**
+ * The step's process started as the leader of process group `pgid`.
+ * `leaderStartedAt` is the leader's start time as `ps` printed it, read
+ * once right after spawn; absent when it could not be read. It is
+ * advisory evidence only (plan "Process evidence").
+ */
 export class Launched extends Schema.TaggedClass<Launched>()("Launched", {
   opId: OpId,
   pgid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(1)),
+  leaderStartedAt: Schema.OptionFromOptionalKey(Schema.String.check(Schema.isNonEmpty())),
 }) {}
 
 /** The step's process ended at `endedAt` (wall clock) with `outcome`. */

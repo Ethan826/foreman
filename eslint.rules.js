@@ -184,14 +184,16 @@ const closedNames = [
   "regular-file", "directory-kind", "symbolic-link", "other-kind",
   "revision-gitattributes", "info-attributes", "core-attributes-file", "conditional-include",
   "has-content", "not-regular", "is-configured", "read-failed",
+  "finished", "abandoned", "interrupted", "quiescence-and-inspection",
 ]
 const canonicalModules = [
   "src/domain/clients.ts", "src/domain/roles.ts", "src/domain/worktree.ts", "src/domain/attributes.ts",
+  "src/domain/session.ts",
 ]
 const bareNames = [
   message(
     `Literal[value=/^(${closedNames.join("|")})$/]`,
-    "Bare closed vocabulary string: refer to the named constant (Clients, Roles, WorktreeConditions, TreeEntryTypes, FileKinds, AttributeSources, AttributeRefusalReasons) from src/domain/clients.ts, roles.ts, worktree.ts or attributes.ts.",
+    "Bare closed vocabulary string: refer to the named constant (Clients, Roles, WorktreeConditions, TreeEntryTypes, FileKinds, AttributeSources, AttributeRefusalReasons, CloseKinds, Attestations) from src/domain/clients.ts, roles.ts, worktree.ts, attributes.ts or session.ts.",
   ),
 ]
 
