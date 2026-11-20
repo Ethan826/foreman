@@ -18,6 +18,7 @@ import {
   succeeded,
   withLayout,
   writeConfig,
+  endToEndMillis,
 } from "./production-harness.ts"
 
 /** The protected names the profile denies writing at the worktree's top level and below. */
@@ -137,12 +138,13 @@ const refusedPublishesNothing = () =>
   )
 
 describe("Claude's editing profile in production", () => {
-  it.effect("the configuration cannot name a settings file", settingsPathRefused)
-  it.effect("implement launches with the generated profile, replacing an empty planted file", launchedWithProfile("{}"))
+  it.effect("the configuration cannot name a settings file", settingsPathRefused, endToEndMillis)
+  it.effect("implement launches with the generated profile, replacing an empty planted file", launchedWithProfile("{}"), endToEndMillis)
   it.effect(
     "implement launches with the generated profile, replacing a planted file with the sandbox off",
     launchedWithProfile('{"sandbox": {"enabled": false}, "permissions": {"allow": ["Edit(//elsewhere/**)"]}}'),
+    endToEndMillis,
   )
-  it.effect("correct launches with the generated profile too", correctionUsesProfile)
-  it.effect("a command the rules refuse publishes no profile", refusedPublishesNothing)
+  it.effect("correct launches with the generated profile too", correctionUsesProfile, endToEndMillis)
+  it.effect("a command the rules refuse publishes no profile", refusedPublishesNothing, endToEndMillis)
 })

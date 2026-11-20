@@ -1,11 +1,10 @@
 // The configuration file decoder (plan "Slice A1", Format
 // `foreman-config.ts`; decisions P4 and P5): strict JSON, every path
-// absolute, both client pins present, unknown keys refused, and the
-// per-role grant estimate defaulting to the policy's initialEstimate.
+// absolute, both client pins present, unknown keys refused, and no
+// per-role grant estimate (decision P5, batch review B10).
 import { describe, expect, it } from "@effect/vitest"
 import { Result } from "effect"
 import { Clients } from "../../src/domain/clients.ts"
-import { defaultPolicy } from "../../src/domain/policy.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { ConfigUndecodable, decodeForemanConfig } from "../../src/format/foreman-config.ts"
 
@@ -35,7 +34,7 @@ const refused = (value: unknown) => {
 }
 
 describe("decodeForemanConfig", () => {
-  it("decodes every field and defaults each role's estimate to initialEstimate", () => {
+  it("decodes every field", () => {
     const config = Result.getOrUndefined(decoded(file()))
     expect(config).toEqual({
       projectId: "foreman",
@@ -44,17 +43,12 @@ describe("decodeForemanConfig", () => {
       supervisor: { path: "/state/worktree", name: "assisted" },
       attributeAllowance: { rootLines: ["* text=auto"] },
       pins,
-      estimates: {
-        [Roles.Implementer]: defaultPolicy.initialEstimate,
-        [Roles.Reviewer]: defaultPolicy.initialEstimate,
-        [Roles.Corrector]: defaultPolicy.initialEstimate,
-      },
     })
   })
 
-  it("keeps given estimates", () => {
-    const estimates = { [Roles.Implementer]: 20, [Roles.Reviewer]: 5, [Roles.Corrector]: 10 }
-    expect(Result.getOrUndefined(decoded(file({ estimates })))?.estimates).toEqual(estimates)
+  it("refuses estimates: every role reserves the policy's initialEstimate (P5, B10)", () => {
+    refused(file({ estimates: { [Roles.Implementer]: 15, [Roles.Reviewer]: 15, [Roles.Corrector]: 15 } }))
+    refused(file({ estimates: { [Roles.Implementer]: 0, [Roles.Reviewer]: 0, [Roles.Corrector]: 0 } }))
   })
 
   it("refuses text that is not JSON", () => {
@@ -88,11 +82,6 @@ describe("decodeForemanConfig", () => {
 
   it("refuses an allowance line holding a newline", () => {
     refused(file({ attributeAllowance: { rootLines: ["a\nb"] } }))
-  })
-
-  it("refuses an estimate above 100 points or a missing role", () => {
-    refused(file({ estimates: { [Roles.Implementer]: 101, [Roles.Reviewer]: 5, [Roles.Corrector]: 5 } }))
-    refused(file({ estimates: { [Roles.Implementer]: 15 } }))
   })
 
   it("refuses a missing required key", () => {

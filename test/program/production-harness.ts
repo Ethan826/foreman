@@ -11,11 +11,20 @@ import { Console, Effect } from "effect"
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { Clients } from "../../src/domain/clients.ts"
+import type { LedgerSnapshot } from "../../src/domain/ledger.ts"
 import { main } from "../../src/facade/cli.ts"
+import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { codexCompletedLines } from "../fixtures/clients/codex-events.ts"
 import { cleanReviewMessage } from "../fixtures/clients/codex-review-clean.ts"
 import { makeRepo } from "../runtime/git-repo.ts"
+
+/**
+ * The time budget of one end-to-end test, in milliseconds. Each runs
+ * several CLI commands, each with git, SQLite and process starts, which
+ * take more than vitest's default 5 seconds on a loaded machine.
+ */
+export const endToEndMillis = 60_000
 
 /** The pins the fake clients print. */
 export const pins = { [Clients.Claude]: "2.1.328 (Claude Code)", [Clients.Codex]: "codex-cli 0.170.0" }
@@ -40,6 +49,9 @@ export interface CliRun {
   readonly out: ReadonlyArray<string>
   readonly err: ReadonlyArray<string>
 }
+
+/** How long a test's ledger read waits for a writer, in milliseconds. */
+const ledgerBusyMillis = 1_000
 
 /** Owner read, write and execute; group and others read and execute. */
 const executableMode = 0o755
@@ -181,3 +193,17 @@ export const failureTag = (run: CliRun): string => {
 /** What a fake client recorded under `name`, or undefined when it recorded nothing. */
 export const recorded = (layout: Layout, name: string): string | undefined =>
   existsSync(`${layout.record}/${name}`) ? readFileSync(`${layout.record}/${name}`, "utf8") : undefined
+
+/** The ledger file production opens for `layout`. */
+export const ledgerPath = (layout: Layout) => `${layout.state}/ledger.sqlite`
+
+/** The rows of a ledger snapshot, in seq order. */
+const rowsOf = (snapshot: LedgerSnapshot) => snapshot.entries.map((entry) => entry.row)
+
+/** Every row of the ledger at `path`, in seq order. */
+export const ledgerRowsAt = (path: string) =>
+  Effect.scoped(
+    Effect.flatMap(openLedger(path, ledgerBusyMillis), (ledger) =>
+      ledger.transact((tx) => Effect.map(tx.read, rowsOf)),
+    ),
+  )

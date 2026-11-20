@@ -24,6 +24,7 @@ import { openLedgerReader, openLogReader } from "../runtime/state-read.ts"
 import { stateFiles } from "../runtime/state-files.ts"
 import { readOwnerHeadWith } from "../runtime/worktree.ts"
 import { utf8Text } from "./client-output.ts"
+import { initialEstimates } from "./production.ts"
 import { WorktreeUnready } from "./session-context.ts"
 import { status, StatusReport } from "./status.ts"
 import type { StatusContext } from "./status-context.ts"
@@ -78,7 +79,7 @@ export const productionStatus = (
       },
       settings: {
         pins: config.pins,
-        estimates: config.estimates,
+        estimates: initialEstimates,
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
       },
     }

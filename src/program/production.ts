@@ -16,6 +16,7 @@ import { clientEnvironment } from "../features/client-environment.ts"
 import { allocationsInFallback } from "../features/admission.ts"
 import { ownerOnly } from "../features/counting.ts"
 import { defaultPolicy } from "../domain/policy.ts"
+import { type Role, Roles } from "../domain/roles.ts"
 import { decodeForemanConfig, type ForemanConfig } from "../format/foreman-config.ts"
 import { startTimeOf } from "../format/ps.ts"
 import { decodeRevParseRevision } from "../format/rev-parse.ts"
@@ -42,6 +43,16 @@ const idRadix = 36
 
 /** The random part of an id is below this bound (2^31). */
 const idRandomBound = 2_147_483_648
+
+/**
+ * Every role's grant estimate: the policy's `initialEstimate`, 15 points
+ * (decision P5, batch review B10). The configuration cannot change it.
+ */
+export const initialEstimates: Readonly<Record<Role, number>> = {
+  [Roles.Implementer]: defaultPolicy.initialEstimate,
+  [Roles.Reviewer]: defaultPolicy.initialEstimate,
+  [Roles.Corrector]: defaultPolicy.initialEstimate,
+}
 
 /** Everything a command runs with in production. */
 export interface Production {
@@ -89,7 +100,7 @@ export const production = (
         project: config.projectId,
         stateDir,
         pins: config.pins,
-        estimates: config.estimates,
+        estimates: initialEstimates,
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
       },
     }
