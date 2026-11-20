@@ -35,6 +35,8 @@ describe("claudeEditingArgv", () => {
       "--verbose",
       "--permission-mode",
       "dontAsk",
+      "--permission-prompts",
+      "none",
       "--settings",
       "/state/claude-settings.json",
     ])

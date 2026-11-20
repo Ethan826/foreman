@@ -26,10 +26,11 @@ export interface ReviewProfileInput {
 /**
  * Claude's editing profile, for the implementer and the corrector:
  * `claude -p <brief> --output-format stream-json --verbose
- * --permission-mode dontAsk --settings <settings-file>`. Anything that
- * would prompt is denied (`dontAsk`); the allow and deny lists and the
- * sandbox come from the settings file. No bypass flag, no `--resume`, no
- * `--continue`.
+ * --permission-mode dontAsk --permission-prompts none --settings
+ * <settings-file>`. Anything that would prompt is denied (`dontAsk`,
+ * and `--permission-prompts none`, so no one is asked); the allow and
+ * deny lists and the sandbox come from the settings file. No bypass
+ * flag, no `--resume`, no `--continue`.
  *
  * The exact flags are confirmed only by the L3 subset run
  * (research/live/l3-subset/plan.md), which has not run. A brief that
@@ -44,6 +45,8 @@ export const claudeEditingArgv = (input: EditingProfileInput): Arr.NonEmptyReado
   "--verbose",
   "--permission-mode",
   "dontAsk",
+  "--permission-prompts",
+  "none",
   "--settings",
   input.settingsFile,
 ]
