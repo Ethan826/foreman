@@ -1,10 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Result } from "effect"
+import { Option, Result } from "effect"
 import {
   decodeClaudeApiRetry,
   decodeClaudeEvent,
   decodeClaudeRateLimitEvent,
   decodeClaudeResult,
+  resultText,
 } from "../../src/format/claude.ts"
 
 // Fixtures are hand-written from the field names the design and decision
@@ -45,6 +46,19 @@ describe("Claude result object (--output-format json)", () => {
 
   it("rejects another event type", () => {
     expect(Result.isFailure(decodeClaudeResult(rateLimitFixture))).toBe(true)
+  })
+
+  it("decodes the final message in `result` as the handoff text", () => {
+    const decoded = decodeClaudeResult({ ...resultFixture, result: "Done.\nChanged greet.ts." })
+    expect(Result.map(decoded, resultText)).toEqual(Result.succeed(Option.some("Done.\nChanged greet.ts.")))
+  })
+
+  it("gives no handoff text for a result without `result`", () => {
+    expect(Result.map(decodeClaudeResult(resultFixture), resultText)).toEqual(Result.succeed(Option.none()))
+  })
+
+  it("rejects a result whose `result` is not a string", () => {
+    expect(Result.isFailure(decodeClaudeResult({ ...resultFixture, result: 3 }))).toBe(true)
   })
 })
 

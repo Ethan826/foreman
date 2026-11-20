@@ -25,17 +25,29 @@ export const ClaudeSystemSubtypes = { ApiRetry: "api_retry" } as const
 const opaqueObject = Schema.Record(Schema.String, Schema.Unknown)
 
 /**
- * The final `result` object. `subtype`, `is_error` and `session_id` are
- * optional.
+ * The final `result` object. `subtype`, `is_error`, `session_id` and
+ * `result`, the run's final message, are optional. The stream live test
+ * L1 kept (research/live/l1-2026-11-16) has no `result` field, so its
+ * name is unverified until a live run records it; a run without it gives
+ * an empty handoff.
  */
 export const ClaudeResult = Schema.Struct({
   type: Schema.Literal(ClaudeEventTypes.Result),
   subtype: Schema.optionalKey(Schema.String),
   is_error: Schema.optionalKey(Schema.Boolean),
   session_id: Schema.optionalKey(Schema.String),
+  result: Schema.optionalKey(Schema.String),
 })
 /** A decoded `result` object; see {@link ClaudeResult}. */
 export type ClaudeResult = typeof ClaudeResult.Type
+
+/**
+ * The final message of a `result` object, which an implementer's or
+ * corrector's handoff file holds (plan "Events", `ReportRecorded`);
+ * none when the object has no `result` field.
+ */
+export const resultText = (result: ClaudeResult): Option.Option<string> =>
+  Option.fromNullishOr(result.result)
 
 // The wire names of the windows foreman tracks, and the window each is.
 const ClaudeWireWindows = {

@@ -4,7 +4,7 @@
 // decoders do not know, is skipped; classification reads only the events
 // it names, and an absent result is itself `Unclassified`.
 import { Array as Arr, Option, Result, Schema, Stream } from "effect"
-import { ClaudeResult, decodeClaudeEvent } from "../format/claude.ts"
+import { ClaudeResult, decodeClaudeEvent, resultText } from "../format/claude.ts"
 import { decodeCodexEvent } from "../format/codex.ts"
 import { ClaudeDecoded, CodexDecoded } from "../features/step-outcome.ts"
 
@@ -12,7 +12,15 @@ const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unkno
 
 /** Claude's stream-json lines as classification reads them: the last `result` event. */
 export const claudeDecoded = (lines: ReadonlyArray<string>): ClaudeDecoded =>
-  new ClaudeDecoded({ result: Arr.last(Arr.filter(Arr.flatMap(lines, claudeEventOf), Schema.is(ClaudeResult))) })
+  new ClaudeDecoded({ result: lastClaudeResult(lines) })
+
+/**
+ * Claude's handoff (plan "Events", `ReportRecorded`): the final message
+ * of the last `result` event, as UTF-8 bytes; empty when the stream
+ * holds no result or the result no message.
+ */
+export const claudeHandoff = (lines: ReadonlyArray<string>) =>
+  utf8Bytes(Option.getOrElse(Option.flatMap(lastClaudeResult(lines), resultText), () => ""))
 
 /** Codex's `--json` lines as classification reads them: every decoded event, in order. */
 export const codexDecoded = (lines: ReadonlyArray<string>): CodexDecoded =>
@@ -24,6 +32,10 @@ export const utf8Bytes = (text: string) =>
 
 /** Bytes read as UTF-8 text. */
 export const utf8Text = (bytes: Uint8Array) => Stream.mkString(Stream.decodeText(Stream.make(bytes)))
+
+/** The last `result` event among Claude's lines. */
+const lastClaudeResult = (lines: ReadonlyArray<string>) =>
+  Arr.last(Arr.filter(Arr.flatMap(lines, claudeEventOf), Schema.is(ClaudeResult)))
 
 /** One line's Claude event, if it decodes. */
 const claudeEventOf = (line: string) =>

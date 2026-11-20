@@ -83,6 +83,7 @@ const recordsReportFiles = (harness: Harness) =>
     expect(sha256Of(readFileSync(report?.rawPath ?? ""))).toBe(report?.rawSha256)
     expect(sha256Of(readFileSync(report?.handoffPath ?? ""))).toBe(report?.handoffSha256)
     expect(readFileSync(report?.rawPath ?? "", "utf8")).toContain('"subtype": "success"')
+    expect(readFileSync(report?.handoffPath ?? "", "utf8")).toBe("Done.")
   })
 
 const freshWaive = (harness: Harness) =>

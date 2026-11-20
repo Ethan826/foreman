@@ -69,8 +69,8 @@ export interface LaunchPlan<E> {
   readonly prepare: (session: OpenSession) => Effect.Effect<Prepared, E>
   /** The client's argv from the brief and the attempt's files (a fixed profile). */
   readonly argv: (brief: string, files: AttemptFiles) => readonly [string, ...Array<string>]
-  /** The handoff bytes once the leader exited; empty when the client gave none. */
-  readonly handoff: (files: AttemptFiles) => Effect.Effect<Uint8Array, E | StateFileFailed>
+  /** The handoff bytes once the leader exited, from its files or its output lines; empty when the client gave none. */
+  readonly handoff: (files: AttemptFiles, lines: ReadonlyArray<string>) => Effect.Effect<Uint8Array, E | StateFileFailed>
   /** The decoded output classification reads. */
   readonly decode: (lines: ReadonlyArray<string>, handoff: Uint8Array) => DecodedAttempt
 }

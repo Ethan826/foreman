@@ -61,15 +61,15 @@ export const runClient = <E>(context: SessionContext, plan: LaunchPlan<E>, state
     })
     const launched = new Launched({ opId, pgid: running.pgid, leaderStartedAt: running.leaderStartedAt })
     const position = yield* capabilities.log.append(state.position, [launched])
-    const lines = yield* Stream.runCollect(Stream.tap(running.lines, capabilities.show))
+    const lines = Arr.fromIterable(yield* Stream.runCollect(Stream.tap(running.lines, capabilities.show)))
     const exit = yield* running.exit
     const rawSha256 = yield* capabilities.stateFiles.publish(
       files.raw,
       yield* capabilities.stateFiles.read(files.streaming),
     )
-    const handoff = yield* plan.handoff(files)
+    const handoff = yield* plan.handoff(files, lines)
     const handoffSha256 = yield* capabilities.stateFiles.publish(files.handoff, handoff)
-    const outcome = classifyAttempt(plan.role, exit, plan.decode(Arr.fromIterable(lines), handoff))
+    const outcome = classifyAttempt(plan.role, exit, plan.decode(lines, handoff))
     const finished = new Finished({ opId, outcome, endedAt: yield* Clock.currentTimeMillis })
     const report = new ReportRecorded({
       sessionId: state.session.opened.sessionId,

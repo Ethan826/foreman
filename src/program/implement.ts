@@ -3,8 +3,9 @@
 // plan: no handoff facts and no consent events, the brief is the
 // session's recorded task file (checked against its hash), the profile is
 // Claude's editing profile, and classification reads Claude's
-// stream-json. Claude gives no handoff file here, so the handoff is empty
-// (plan "Events", `ReportRecorded`).
+// stream-json. The handoff is the final message of Claude's last
+// `result` event, empty when it gave none (plan "Events",
+// `ReportRecorded`).
 import { Effect, Option } from "effect"
 import { claudeEditingArgv } from "../domain/profiles.ts"
 import { defaultRoleClients, Roles } from "../domain/roles.ts"
@@ -12,7 +13,7 @@ import { Implement } from "../domain/session.ts"
 import type { OpenSession } from "../domain/session-state.ts"
 import { sha256Of } from "../runtime/state-files.ts"
 import { type LaunchPlan, noHandoffFacts, runAttempt } from "./attempt.ts"
-import { claudeDecoded, utf8Text } from "./client-output.ts"
+import { claudeDecoded, claudeHandoff, utf8Text } from "./client-output.ts"
 import type { SessionContext } from "./session-context.ts"
 import { TaskFileChanged } from "./session-errors.ts"
 
@@ -35,7 +36,7 @@ const implementPlan = (context: SessionContext, options: ImplementOptions): Laun
   observe: () => Effect.succeed(noHandoffFacts),
   prepare: (session) => Effect.map(recordedTask(context, session), (brief) => ({ brief, round: 0, consent: [] })),
   argv: (brief) => claudeEditingArgv({ brief, settingsFile: context.settings.claudeSettings }),
-  handoff: () => Effect.succeed(new Uint8Array()),
+  handoff: (_files, lines) => claudeHandoff(lines),
   decode: (lines) => ({ client: claudeDecoded(lines), findings: Option.none() }),
 })
 
