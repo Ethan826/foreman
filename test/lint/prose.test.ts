@@ -7,6 +7,12 @@ import { spawnSync } from "node:child_process"
 const run = (...files: ReadonlyArray<string>) =>
   spawnSync("sh", ["tools/prose/check.sh", ...files], { encoding: "utf8" })
 
+// Owner ruling (2026-11-20, review finding R06): the whole-repository run
+// gets a named, provisional budget. Alone it takes about 1.5 s, but in the
+// full suite on a loaded machine it took 5.2 to 7.2 s, past Vitest's 5 s
+// default. Investigate if a run comes close to this limit.
+const wholeRepositoryMillis = 30_000
+
 describe("prose gate", () => {
   it("rejects a file with a known tell", () => {
     const result = run("lint-fixtures/prose/must-fail.md")
@@ -38,5 +44,5 @@ describe("prose gate", () => {
     expect(result.signal, diagnosis).toBeNull()
     expect(result.status, diagnosis).toBe(0)
     expect(result.stdout, diagnosis).toContain("prose: checked")
-  })
+  }, wholeRepositoryMillis)
 })

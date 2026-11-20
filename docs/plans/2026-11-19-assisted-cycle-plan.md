@@ -752,3 +752,28 @@ Coordinator's slip (2026-11-20): the M08 commit was first made with
 AGENTS.md status text), because the command chain did not stop on the
 failed check. The wording was fixed and the unpushed commit amended;
 check, docs and the full suite pass on the amended commit.
+
+## Correction re-review (2026-11-20)
+
+[The re-review](2026-11-20-assisted-correction-rereview.md) at 3013dec
+found R01 to R06 and asked for owner rulings. Owner rulings
+(2026-11-20):
+- R05: the exact `*.wxw linguist-language=Rust` root-line exception may
+  be enabled for whichever target binds it at first use; it stays one
+  fixed line and everything else stays refused. No Waxwing identity rule.
+- B11: "status writes nothing" means no application state, database or
+  WAL change; SQLite's own `-shm` coordination file may change. Tests
+  compare everything else byte for byte and name the `-shm` exception.
+- Red history: fold the missing TSDoc into the commit that introduced
+  it. Done: the unpushed `assisted` history was rewritten without
+  interaction from fcb1a41 on (aca1cf5, c43a284, 3be79cc, 23dc4b7). The
+  new head's tree is byte-identical to 3013dec. Each rewritten commit
+  passed docs (no warnings), check and the full suite (1,466, 1,467,
+  1,473, 1,473 tests).
+- R06: the whole-repository prose test gets a named, provisional 30 s
+  budget (`wholeRepositoryMillis`); assertions unchanged. Alone it takes
+  about 1.5 s. A 50 ms budget failed with "Test timed out in 50ms",
+  which shows the option reaches Vitest.
+
+Remaining for workers: R01 and R04 (`fix-r01-r04`), R02 and R03
+(`fix-r02-r03`).
