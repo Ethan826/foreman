@@ -44,7 +44,7 @@ import { utf8Bytes, utf8Text } from "./client-output.ts"
 import { holdsNow, type LogRead, pinReading, readLog, requireAllowed, worktreeReading } from "./command-start.ts"
 import type { SessionContext } from "./session-context.ts"
 import { LostRace } from "./session-errors.ts"
-import { expiriesBeside, expiringOnRefusal } from "./waiver-expiry.ts"
+import { type AttemptStop, expiriesBeside, expiringOnRefusal } from "./waiver-expiry.ts"
 
 /**
  * The facts a handoff command observes before the rules, without staging
@@ -115,9 +115,11 @@ export class AttemptRecorded extends Schema.TaggedClass<AttemptRecorded>()("Atte
  * project lock, and returns the attempt's outcome. Fails with
  * `CommandRefused`, `QuotaHeld`, `WaiverRefused` or `LostRace` as the
  * protocol says, and with any capability's failure, after which nothing
- * more is written.
+ * more is written beyond the expiries of a refusal. The plan's failures
+ * must be among the `AttemptStop` failures, each classified for the
+ * one-attempt waiver rule (waiver-expiry.ts).
  */
-export const runAttempt = <E>(context: SessionContext, plan: LaunchPlan<E>) =>
+export const runAttempt = <E extends AttemptStop>(context: SessionContext, plan: LaunchPlan<E>) =>
   Effect.scoped(
     Effect.gen(function* () {
       yield* context.capabilities.lock
