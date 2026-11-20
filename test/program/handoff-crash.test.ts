@@ -2,7 +2,9 @@
 // handoff-crash; "Write protocol", the crash table): a failure injected
 // after the snapshot's staging, batch W, the grant, batch I, batch L and
 // batch F leaves the state the table names, the next command the table
-// allows works, and no retry launches a client twice.
+// allows works, and no retry launches a client twice. A refused retry
+// stages nothing, and the settle step cancels an orphan grant before the
+// retry takes its own.
 import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Effect, Exit, Option, Schema } from "effect"
 import {
@@ -25,7 +27,7 @@ import { CommandRefused } from "../../src/program/session-errors.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { codexReviewFindings } from "../fixtures/clients/codex-review-findings.ts"
 import { afterImplement, commandOfCall, ownerFindings, reviewed } from "./handoff-steps.ts"
-import { eventsOf, type Harness, rowsOf, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, ledgerRows, rowsOf, withHarness } from "./session-harness.ts"
 import { append, quotaHold } from "./session-steps.ts"
 
 /** One handoff command under test: how to reach it, how to run it, and the failure right after staging. */
@@ -104,15 +106,17 @@ const failedRun = (harness: Harness, run: Effect.Effect<unknown, unknown>) =>
     failed(exit)
   })))
 
-/** A retry refused by the rules, appending nothing and launching nothing. */
+/** A retry refused by the rules, appending nothing, staging nothing and launching nothing. */
 const refusedRetry = (harness: Harness, testCase: Case) =>
   Effect.gen(function* () {
     const before = yield* eventsOf(harness)
     const launches = harness.client.launches.length
+    const gitCalls = harness.gitCalls.length
     const exit = yield* Effect.exit(testCase.run(harness, true))
     expect(Exit.isFailure(exit) && Option.exists(Exit.findErrorOption(exit), Schema.is(CommandRefused))).toBe(true)
     expect(yield* eventsOf(harness)).toEqual(before)
     expect(harness.client.launches.length).toBe(launches)
+    expect(harness.gitCalls.length).toBe(gitCalls)
   })
 
 /** The owner's way out of an incomplete attempt: step-ended, then close --interrupted. */
@@ -164,7 +168,9 @@ const afterGrant = (testCase: Case) => (harness: Harness) =>
     const appended = yield* failedRun(harness, testCase.run(harness, true))
     expect(count(appended, Schema.is(Intended))).toBe(0)
     expect(count(appended, Schema.is(SnapshotTaken))).toBe(0)
+    harness.trace.length = 0
     yield* testCase.run(harness, true)
+    expect(harness.trace[0]).toMatchObject(ledgerRows("GrantCanceled"))
     const canceled = Arr.filter(yield* rowsOf(harness), Schema.is(GrantCanceled))
     expect(canceled.map((row) => row.cause)).toEqual(["orphan"])
     expect(harness.client.launches.length).toBe(launches + 1)
