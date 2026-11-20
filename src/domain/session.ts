@@ -13,7 +13,8 @@ const slug = Schema.String.check(
   Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/),
 )
 
-const nonEmpty = Schema.String.check(Schema.isNonEmpty())
+/** An absolute path: text starting with `/`, so never empty. */
+const absolutePath = Schema.String.check(Schema.isStartingWith("/"))
 
 /** Identifies an assisted session. A slug of 1 to 64 characters. */
 export const SessionId = slug.pipe(Schema.brand("SessionId"))
@@ -69,14 +70,14 @@ export type Attestation = typeof Attestation.Type
 /**
  * The git identity recorded for the supervisor worktree (plan B11d): its
  * top level, its own git directory and the repository's common
- * directory, each a non-empty absolute path. The fields match Runtime's
+ * directory, each an absolute path (decoding refuses any other). The fields match Runtime's
  * `RecordedGitIdentity` and `WorktreeCreated`, so a record passes as it
  * is; Domain defines its own schema because it imports no Runtime.
  */
 export const RecordedGitIdentity = Schema.Struct({
-  path: nonEmpty,
-  gitDir: nonEmpty,
-  commonDir: nonEmpty,
+  path: absolutePath,
+  gitDir: absolutePath,
+  commonDir: absolutePath,
 })
 /** A recorded git identity; see {@link RecordedGitIdentity}. */
 export type RecordedGitIdentity = typeof RecordedGitIdentity.Type

@@ -37,6 +37,23 @@ describe("session events", () => {
     expect(Result.isFailure(decode(row))).toBe(true)
   })
 
+  it.each([
+    { path: "w", gitDir: "/g", commonDir: "/c" },
+    { path: "/w", gitDir: "g", commonDir: "/c" },
+    { path: "/w", gitDir: "/g", commonDir: "./c" },
+  ])("refuses a recorded worktree identity with a relative path: %j", (worktree) => {
+    const row = {
+      _tag: "SessionOpened",
+      sessionId: "s-1",
+      tranche: "t-1",
+      taskPath: "/task.md",
+      taskSha256: "a".repeat(64),
+      baseRevision: "a".repeat(40),
+      worktree,
+    }
+    expect(Result.isFailure(decode(row))).toBe(true)
+  })
+
   it("refuses a close kind outside the vocabulary", () => {
     const row = { _tag: "SessionClosed", sessionId: "s-1", how: "paused", note: "" }
     expect(Result.isFailure(decode(row))).toBe(true)

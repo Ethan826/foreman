@@ -217,7 +217,7 @@ classDiagram
 
 ## Assisted session
 
-[`session.ts`](session.ts) holds the session's identifiers (`SessionId`, `HandoffId`), the `Sha256` digest, the supervisor worktree's `RecordedGitIdentity`, and the owner's commands, one tagged class each, in the union `SessionCommand`. Its two closed vocabularies are `CloseKinds`, the ways a session closes, and `Attestations`. The one attestation, `quiescence-and-inspection`, is what the owner's `--attest` asserts: no process of an earlier attempt still runs, and the protected inputs were inspected since that attempt.
+[`session.ts`](session.ts) holds the session's identifiers (`SessionId`, `HandoffId`), the `Sha256` digest, the supervisor worktree's `RecordedGitIdentity` (three absolute paths; decoding refuses a relative one), and the owner's commands, one tagged class each, in the union `SessionCommand`. Its two closed vocabularies are `CloseKinds`, the ways a session closes, and `Attestations`. The one attestation, `quiescence-and-inspection`, is what the owner's `--attest` asserts: no process of an earlier attempt still runs, and the protected inputs were inspected since that attempt.
 
 [`session-events.ts`](session-events.ts) puts a session in the log. `SessionOpened` and `SessionClosed` bracket it. Each attempt's `ReportRecorded` lists the attempt's raw output file and handoff file with the SHA-256 of each, and is appended in one batch with the attempt's `Finished`. `SnapshotTaken`, `HandoffApproved`, `HandoffRejected` and `ReviewChecked` record the handoffs between attempts. `StepEndedByOwner` is the owner's attestation that an attempt with no `Finished` has ended; settlement then charges its grant, and no outcome is written for it.
 
