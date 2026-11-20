@@ -5,7 +5,9 @@
 // pass, on the reviewed tree when there is one, so that a command refused
 // for its attestation, its state or its reports stages nothing. Only then
 // does `takeSnapshot` run the attribute-source check again and stage the
-// worktree, and the rules are checked again with the snapshot taken.
+// worktree, and the rules are checked again with the snapshot taken. The
+// staged candidate's own attribute files are judged before any client
+// gets it (batch review B07).
 import { Array as Arr, Effect, Option, Schema } from "effect"
 import type { OpId } from "../domain/ids.ts"
 import { Roles } from "../domain/roles.ts"
@@ -62,6 +64,13 @@ export const presumedOnReviewedTree = (state: SessionState): Option.Option<Snaps
  * B11c, through the pinned runner), then the snapshot from the session's
  * base revision. A snapshot the raw checks refuse is a check that did not
  * pass, which the rules then refuse; any other failure stops the command.
+ *
+ * A snapshot that passes is the candidate a client would get, so its own
+ * tree is judged by the same attribute rule (batch review B07): its root
+ * and nested `.gitattributes` blobs are read with `git cat-file` and
+ * judged from their contents, no candidate filter runs, and a refusal
+ * stops the command with `AttributeSourcesRefused` before any client
+ * gets the candidate.
  */
 export const takeSnapshot = (context: SessionContext, session: OpenSession) =>
   Effect.gen(function* () {
@@ -69,6 +78,7 @@ export const takeSnapshot = (context: SessionContext, session: OpenSession) =>
     const base = session.opened.baseRevision
     yield* git.checkAttributes(base)
     return yield* git.snapshot(base).pipe(
+      Effect.tap((tree) => git.checkAttributes(tree)),
       Effect.map((tree): SnapshotCheck => ({ tree, passedRawChecks: true })),
       Effect.catchTag("SnapshotRefused", (refused) => Effect.succeed(refusedCheck(refused))),
     )

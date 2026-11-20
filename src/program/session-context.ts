@@ -38,10 +38,15 @@ export class WorktreeUnready extends Schema.TaggedError<WorktreeUnready>()("Work
 
 /**
  * Runs the startup worktree check on the recorded supervisor worktree and
- * returns its HEAD. Production runs `identifyWorktree` and then `git
- * rev-parse HEAD` through the runner pinned to the record.
+ * returns its HEAD. Production runs `identifyWorktree`, then `git
+ * rev-parse HEAD` through the runner pinned to the record, then the
+ * attribute check on `base`, the open session's base, or on that HEAD
+ * when no session is open (batch review B07).
  */
-export type CheckWorktree = (recorded: WorktreeCreated) => Effect.Effect<Revision, WorktreeUnready>
+export type CheckWorktree = (
+  recorded: WorktreeCreated,
+  base: Option.Option<Revision>,
+) => Effect.Effect<Revision, WorktreeUnready>
 
 /**
  * Why a snapshot was not taken: refused before staging

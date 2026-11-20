@@ -10,29 +10,27 @@
 // a log is reported as `StateMissing`, and nothing is created in it. The
 // ledger is read in one deferred transaction, so status answers while
 // another process holds the ledger's write lock. The worktree check runs
-// as production.ts runs it, with the same empty git home, which a
-// missing directory reads as empty.
-import { Effect, Formatter, Option, Record, Schema } from "effect"
+// as production.ts runs it (`checkedHead`, the attribute check included,
+// batch review B07), with the same empty git home, which a missing
+// directory reads as empty.
+import { Effect, Option, Record, Schema } from "effect"
 import type { Scope } from "effect"
-import type { WorktreeCreated } from "../domain/events.ts"
 import { defaultPolicy } from "../domain/policy.ts"
 import { allocationsInFallback } from "../features/admission.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { ownerOnly } from "../features/counting.ts"
-import { decodeRevParseRevision } from "../format/rev-parse.ts"
 import { readClientVersionWith } from "../runtime/client-version.ts"
-import { pinnedGitWith, startGit } from "../runtime/git.ts"
+import { startGit } from "../runtime/git.ts"
 import { readProcesses } from "../runtime/processes.ts"
 import { openLedgerReader, openLogReader } from "../runtime/state-read.ts"
 import { stateFiles } from "../runtime/state-files.ts"
-import { readOwnerHeadWith } from "../runtime/worktree.ts"
-import { initialEstimates } from "./production.ts"
+import { handoffGitWith } from "./handoff-git.ts"
+import { checkedHead, initialEstimates } from "./production.ts"
 import { settledTarget } from "./production-target.ts"
-import { WorktreeUnready } from "./session-context.ts"
 import { status, StatusReport } from "./status.ts"
 import type { StatusContext } from "./status-context.ts"
 import { recordedOrConfigured } from "./target-binding.ts"
-import { worktreeProgramWith, type WorktreeProgram } from "./worktree.ts"
+import { worktreeProgramWith } from "./worktree.ts"
 
 /** How long a status read waits for a lock SQLite holds briefly, in milliseconds. */
 const busyTimeoutMillis = 5_000
@@ -67,6 +65,7 @@ export const productionStatus = (
     const ledger = yield* openLedgerReader(target.ledger, busyTimeoutMillis)
     const home = `${stateDir}/git-home`
     const worktree = worktreeProgramWith(startGit, target.attributeAllowance)(home)
+    const handoffGit = handoffGitWith(startGit, target.attributeAllowance)(home, stateDir)
     const parentEnvironment = Record.getSomes(Record.map(environment, Option.fromNullishOr))
     const context: StatusContext = {
       capabilities: {
@@ -78,7 +77,7 @@ export const productionStatus = (
         readProcesses,
         readClientVersion: readClientVersionWith({ cwd: stateDir, env: clientEnvironment(parentEnvironment) }),
         stateFiles,
-        checkWorktree: (recorded) => checkedHead(worktree, home, recorded),
+        checkWorktree: (recorded, base) => checkedHead({ worktree, home, handoffGit }, recorded, base),
         nowMono: Effect.succeed(Option.none()),
       },
       settings: {
@@ -89,18 +88,3 @@ export const productionStatus = (
     }
     return yield* status(context)
   })
-
-/**
- * The startup check (`identifyWorktree`), then the worktree's HEAD read
- * through the runner pinned to the record (plan B11d) and decoded; the
- * same check production.ts gives the other commands.
- */
-const checkedHead = (worktree: WorktreeProgram, home: string, recorded: WorktreeCreated) =>
-  Effect.mapError(
-    Effect.gen(function* () {
-      yield* worktree.identifyWorktree(recorded)
-      const text = yield* readOwnerHeadWith(pinnedGitWith(startGit)(home)(recorded))(recorded.path)
-      return yield* Effect.fromResult(decodeRevParseRevision(text))
-    }),
-    (failure) => new WorktreeUnready({ reason: Formatter.formatJson(failure) }),
-  )

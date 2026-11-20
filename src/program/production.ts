@@ -15,6 +15,7 @@
 import { Clock, Console, Effect, Formatter, Option, Random, Record } from "effect"
 import type { Scope } from "effect"
 import type { WorktreeCreated } from "../domain/events.ts"
+import type { Revision } from "../domain/ids.ts"
 import type { TargetBinding } from "../domain/target.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { allocationsInFallback } from "../features/admission.ts"
@@ -111,6 +112,7 @@ const productionUnder = (
     const { stateDir } = config
     const home = yield* preparedGitHome(gitHomePath(stateDir))
     const worktree = worktreeProgramWith(startGit, target.attributeAllowance)(home)
+    const handoffGit = handoffGitWith(startGit, target.attributeAllowance)(home, stateDir)
     const parentEnvironment = Record.getSomes(Record.map(environment, Option.fromNullishOr))
     const context: SessionContext = {
       capabilities: {
@@ -122,8 +124,8 @@ const productionUnder = (
         readClientVersion: readClientVersionWith({ cwd: stateDir, env: clientEnvironment(parentEnvironment) }),
         stateFiles,
         publishClaudeProfile: publishClaudeProfileWith(stateFiles, stateDir),
-        checkWorktree: (recorded) => checkedHead(worktree, home, recorded),
-        handoffGit: handoffGitWith(startGit, target.attributeAllowance)(home, stateDir),
+        checkWorktree: (recorded, base) => checkedHead({ worktree, home, handoffGit }, recorded, base),
+        handoffGit,
         newId,
         nowMono: Effect.succeed(Option.none()),
         show: Console.log,
@@ -151,16 +153,30 @@ const newId = Effect.gen(function* () {
   return `${millis.toString(idRadix)}-${random.toString(idRadix)}`
 })
 
+/** What the startup check runs over: the worktree entry points, git's HOME and the handoff's git work. */
+export interface StartupGit {
+  /** The worktree entry points, judging attributes under the target's allowance. */
+  readonly worktree: WorktreeProgram
+  /** Git's private HOME, already judged usable. */
+  readonly home: string
+  /** The handoff's git work, whose attribute check judges the base. */
+  readonly handoffGit: ReturnType<ReturnType<typeof handoffGitWith>>
+}
+
 /**
  * The startup check (`identifyWorktree`), then the worktree's HEAD read
- * through the runner pinned to the record (plan B11d) and decoded.
+ * through the runner pinned to the record (plan B11d) and decoded, then
+ * the attribute check on `base`, or on that HEAD when `base` is none
+ * (batch review B07). `status` runs the same check (production-status.ts).
  */
-const checkedHead = (worktree: WorktreeProgram, home: string, recorded: WorktreeCreated) =>
+export const checkedHead = (git: StartupGit, recorded: WorktreeCreated, base: Option.Option<Revision>) =>
   Effect.mapError(
     Effect.gen(function* () {
-      yield* worktree.identifyWorktree(recorded)
-      const text = yield* readOwnerHeadWith(pinnedGitWith(startGit)(home)(recorded))(recorded.path)
-      return yield* Effect.fromResult(decodeRevParseRevision(text))
+      yield* git.worktree.identifyWorktree(recorded)
+      const text = yield* readOwnerHeadWith(pinnedGitWith(startGit)(git.home)(recorded))(recorded.path)
+      const head = yield* Effect.fromResult(decodeRevParseRevision(text))
+      yield* git.handoffGit(recorded).checkAttributes(Option.getOrElse(base, () => head))
+      return head
     }),
     (failure) => new WorktreeUnready({ reason: Formatter.formatJson(failure) }),
   )

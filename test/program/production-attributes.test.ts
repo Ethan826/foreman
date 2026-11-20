@@ -8,7 +8,10 @@
 // session, not the base the worktree was created at (batch review B07).
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
+import { existsSync, writeFileSync } from "node:fs"
+import { git } from "../runtime/git-repo.ts"
 import { commitAttributes } from "./attribute-fixtures.ts"
+import { commitFile, markerScript } from "./git-hazard-fixtures.ts"
 import {
   cli,
   configOf,
@@ -16,6 +19,8 @@ import {
   failureTag,
   type Layout,
   openedSession,
+  recorded,
+  succeeded,
   withLayout,
   writeConfig,
 } from "./production-harness.ts"
@@ -73,4 +78,109 @@ describe("the configured attribute allowance", () => {
   it.effect("Waxwing's line, when allowed, passes creation and the startup check", waxwingLineAllowed, endToEndMillis)
   it.effect("Waxwing's line is refused without the allowance", waxwingLineRefusedWithoutAllowance, endToEndMillis)
   it.effect("the allowance cannot be enabled for a state directory bound without it", allowanceOnlyForBoundTarget, endToEndMillis)
+})
+
+/** A shell action for the fake Claude: writes `content` to `path` in its working directory. */
+const writing = (path: string, content: string) => `mkdir -p "$(dirname '${path}')" && printf '%s' '${content}' > '${path}'`
+
+/**
+ * Opens a session, lets the implementer write `path` with `content`, and
+ * runs `review`; returns the review's run. `prepare` runs first.
+ */
+const reviewedAfterWriting = (layout: Layout, path: string, content: string) =>
+  Effect.gen(function* () {
+    yield* openedSession(layout)
+    yield* succeeded(layout, ["implement", "--waive"], { env: { FAKE_EDIT: writing(path, content) } })
+    return yield* cli(layout, ["review", "--waive", "--attest"])
+  })
+
+const candidateRefused = (path: string, content: string, rootLines: ReadonlyArray<string> = []) => () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      allowing(layout, rootLines)
+      const run = yield* reviewedAfterWriting(layout, path, content)
+      expect([run.status, failureTag(run)]).toEqual([1, "AttributeSourcesRefused"])
+      expect(recorded(layout, "codex-launches")).toBeUndefined()
+    }),
+  )
+
+const editedRootRefused = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* commitAttributes(layout.owner, ".gitattributes", "# no attributes yet\n")
+      const run = yield* reviewedAfterWriting(layout, ".gitattributes", "# no attributes yet\n*.txt eol=crlf\n")
+      expect([run.status, failureTag(run)]).toEqual([1, "AttributeSourcesRefused"])
+      expect(recorded(layout, "codex-launches")).toBeUndefined()
+    }),
+  )
+
+const candidateFilterNotRun = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* commitFile(layout.owner)
+      const marker = `${layout.root}/filter.marker`
+      const filter = markerScript(`${layout.root}/filter.sh`, marker, "cat\n")
+      yield* git(layout.owner, "config", "filter.mark.clean", filter)
+      yield* git(layout.owner, "config", "filter.mark.smudge", filter)
+      const run = yield* reviewedAfterWriting(layout, ".gitattributes", "* filter=mark\n")
+      expect([run.status, failureTag(run)]).toEqual([1, "AttributeSourcesRefused"])
+      expect(existsSync(marker)).toBe(false)
+    }),
+  )
+
+const waxwingCandidatePasses = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      allowing(layout, [waxwingLine])
+      const run = yield* reviewedAfterWriting(layout, ".gitattributes", `${waxwingLine}\n`)
+      expect(run.status).toBe(0)
+      expect(recorded(layout, "codex-launches")).toBe("ran\n")
+    }),
+  )
+
+/** Commits `content` as the supervisor branch's root `.gitattributes`, moving the worktree's HEAD. */
+const commitInWorktree = (layout: Layout, content: string) =>
+  Effect.gen(function* () {
+    writeFileSync(`${layout.supervisor}/.gitattributes`, content)
+    yield* git(layout.supervisor, "add", ".gitattributes")
+    yield* git(layout.supervisor, "commit", "--quiet", "-m", "attributes")
+  })
+
+const openJudgesCurrentHead = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* succeeded(layout, ["worktree", "create"])
+      yield* commitInWorktree(layout, "* text\n")
+      const run = yield* cli(layout, ["session", "open", "--tranche", "t-1", "--task", layout.taskFile])
+      expect([run.status, failureTag(run)]).toEqual([1, "CommandRefused"])
+      const status = yield* succeeded(layout, ["status"])
+      expect(status.out.join("\n")).toContain("AttributeSourcesRefused")
+    }),
+  )
+
+const launchJudgesSessionBase = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      yield* commitInWorktree(layout, "* text\n")
+      yield* succeeded(layout, ["implement", "--waive"])
+    }),
+  )
+
+describe("the candidate tree's attribute files", () => {
+  it.effect("an added root file with a conversion is refused before review launches", candidateRefused(".gitattributes", "* text\n"), endToEndMillis)
+  it.effect("an edited root file is refused before review launches", editedRootRefused, endToEndMillis)
+  it.effect("an added macro is refused before review launches", candidateRefused(".gitattributes", "[attr]x text\n"), endToEndMillis)
+  it.effect(
+    "a nested file with Waxwing's line is refused even when the root may hold it",
+    candidateRefused("sub/.gitattributes", `${waxwingLine}\n`, [waxwingLine]),
+    endToEndMillis,
+  )
+  it.effect("a candidate filter is judged from the blob and never run", candidateFilterNotRun, endToEndMillis)
+  it.effect("Waxwing's line added to the root passes when allowed", waxwingCandidatePasses, endToEndMillis)
+})
+
+describe("the startup check's base", () => {
+  it.effect("session open judges the worktree's HEAD, not the base it was created at", openJudgesCurrentHead, endToEndMillis)
+  it.effect("a launch judges the session's base, not a HEAD that moved since", launchJudgesSessionBase, endToEndMillis)
 })

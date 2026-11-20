@@ -18,6 +18,8 @@ import type { SessionState } from "../domain/session-state.ts"
 import { allowed, Allowed, type CommandChecks } from "../features/command-rules.ts"
 import { holdsInPlace, pinMatches } from "../features/launch-facts.ts"
 import type { LedgerSnapshot } from "../domain/ledger.ts"
+import { openSessionOf } from "../features/session-phases.ts"
+import { foldSession } from "../features/session.ts"
 import type { SessionCapabilities, SessionContext, SessionSettings } from "./session-context.ts"
 import { CommandRefused } from "./session-errors.ts"
 
@@ -48,8 +50,10 @@ export const recordedWorktree = (events: ReadonlyArray<ProjectEvent>): Option.Op
 
 /**
  * The startup worktree check on the recorded worktree: its HEAD when it
- * passes, or why not. Never fails, so a command that does not need the
- * check still runs.
+ * passes, or why not. The attribute check judges the open session's base,
+ * or the worktree's HEAD when no session is open, never the base the
+ * worktree was created at (batch review B07). Never fails, so a command
+ * that does not need the check still runs.
  */
 export const worktreeReading = (
   context: { readonly capabilities: Pick<SessionCapabilities, "checkWorktree"> },
@@ -58,8 +62,14 @@ export const worktreeReading = (
   Option.match(recordedWorktree(events), {
     onNone: () => Effect.succeed(Result.fail("no supervisor worktree is recorded; run `worktree create`")),
     onSome: (recorded) =>
-      Effect.result(Effect.mapError(context.capabilities.checkWorktree(recorded), (failed) => failed.reason)),
+      Effect.result(
+        Effect.mapError(context.capabilities.checkWorktree(recorded, sessionBase(events)), (failed) => failed.reason),
+      ),
   })
+
+/** The open session's base revision, if a session is open. */
+const sessionBase = (events: ReadonlyArray<ProjectEvent>) =>
+  Option.map(openSessionOf(foldSession(events).state), (session) => session.opened.baseRevision)
 
 /**
  * Whether the installed `client` matches its pin. A client that cannot
