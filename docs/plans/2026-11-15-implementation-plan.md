@@ -1718,6 +1718,55 @@ uncertain and not a cap. `bun run docs`, `bun run check` and the full
 `bun run test` must pass. Measured usage is recorded, and the work stops
 for Codex review. Landing and push are not authorized.
 
+Result (2026-11-19): complete, on `b11d-pinned-git`, as a9f3e47. The
+worker stopped at completion with no scope conflict.
+
+- Runtime `src/runtime/git.ts` adds `RecordedGitIdentity` and
+  `pinnedGitWith(start)(home)(identity)`. A pinned command gets the five
+  clean variables plus `GIT_DIR`, `GIT_WORK_TREE` and `GIT_COMMON_DIR`
+  from the recorded identity, after the three overrides. Program injects
+  the pinned runner into `identifyWorktreeWith`. Only the startup
+  attribute check uses it, after `checkWorktree` passes, and it still
+  runs in the supervisor path. Pinned commands: `ls-tree --full-tree -r
+  -t -z <base>`, `cat-file blob` for each `.gitattributes` blob, `config
+  --get core.attributesFile` and `config --get-regexp ^includeif\.`.
+  The listing, `stat` and identity reads stay on the clean runner, and no
+  pinned `rev-parse` takes part in verification.
+- Evidence:
+  - A recording test requires exactly eight variables for the startup
+    attribute reads, and exactly five for every other command.
+  - Real-repository redirections each pass with the pin and fail on the
+    clean-runner control: a `.git` file naming a decoy, a `commondir`
+    file naming it, and `core.worktree` in `config.worktree`.
+  - Parent `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR` and a parent-only
+    variable do not reach the pinned child.
+  - The existing identity, attribute and hazard tests pass unchanged.
+- Per-variable mutants:
+  - Removing `GIT_DIR` failed 3 tests, `GIT_WORK_TREE` 4 and
+    `GIT_COMMON_DIR` 4.
+  - Substituting `GIT_DIR=commonDir` failed 8, `GIT_WORK_TREE=gitDir` 7
+    and `GIT_COMMON_DIR=gitDir` 26.
+  - The child-environment test survives the `GIT_DIR` removal, because
+    git exports the `GIT_DIR` it discovered to the alias.
+- Coordinator's check: `bun run docs` PASS (no warnings), `bun run
+  check` PASS (0 blocking, 30 notes), `bun run test` PASS (59 files, 688
+  tests). No config, lint, plan or CI file changed, and no changed file
+  is over 250 lines. Removing `GIT_COMMON_DIR` failed the same 4 tests
+  the worker listed.
+- Consumption, measured by the harness: 181,520 tokens (53 tool calls,
+  about 12 minutes), against an estimate of about 200k.
+- Finding for later slices: on git 2.50.1, ref reads ignore the pin. In
+  a supervisor worktree whose `<gitDir>/commondir` names a decoy, a
+  pinned `for-each-ref` listed the decoy's branches even with
+  `GIT_COMMON_DIR` set to the owner's (probed by the worker and the
+  coordinator). Config and object reads do follow the pin. The attribute
+  check reads no refs (`ls-tree` takes a revision id), so B11d is
+  unaffected. The commit procedure (`update-ref`) and any later ref read
+  must not rely on the pin alone. The protected set already covers the
+  worktree's `commondir` file. The finding is documented in the TSDoc
+  and the Runtime README, with no repository test, because CI's git
+  version may behave differently.
+
 ### Task B12: Step runner (in-session process control)
 
 **Files:** `src/runtime/spawn.ts` (`spawnStep(spec: StepSpec): Effect<RunningStep>`: new process group through Node's `child_process.spawn` with `detached: true`, which calls `setsid`; records the pgid), `src/runtime/classify.ts` (maps decoded Format events and exit status to `StepOutcome`); tests with a fixture script standing in for the client (no model).
