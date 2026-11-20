@@ -7,6 +7,11 @@
 // link, the temporary index directory and `node:crypto`'s SHA-1.
 // `execFile` takes the
 // child's whole environment, required, so no call inherits the parent's.
+// For the assisted cycle (plan A1): `spawn` for a client process, the
+// file calls of the atomic state-file publish, `createHash` from
+// `node:crypto` and `dirname` from `node:path`. `spawn` takes the whole
+// environment too, and its child type declares no `kill`, so Runtime has
+// no typed way to signal a client (plan "Global constraints").
 declare module "node:child_process" {
   /**
    * The error `execFile` passes when the child did not exit 0. `code` is
@@ -29,9 +34,84 @@ declare module "node:child_process" {
       readonly cwd: string
       readonly env: Readonly<Record<string, string>>
       readonly encoding: "utf8"
+      /**
+       * The most bytes of stdout or of stderr kept before the child is
+       * killed and an error reported; Node's default is 1 MiB.
+       */
+      readonly maxBuffer?: number
     },
     callback: (error: ExecFileError | null, stdout: string, stderr: string) => void,
   ): unknown
+
+  /** A child's piped stdout or stderr. */
+  export interface ChildOutput {
+    /** Calls `listener` with each chunk of bytes as it arrives, in order. */
+    on(event: "data", listener: (chunk: Uint8Array) => void): unknown
+  }
+
+  /**
+   * A child started by {@link spawn}. Only the members foreman uses are
+   * declared; `kill` is deliberately absent.
+   */
+  export interface ChildProcess {
+    /** The child's pid; undefined when it could not be started. */
+    readonly pid: number | undefined
+    /** The child's stdout, piped. */
+    readonly stdout: ChildOutput
+    /** The child's stderr, piped. */
+    readonly stderr: ChildOutput
+    /** Emitted once the child has started. */
+    on(event: "spawn", listener: () => void): unknown
+    /** Emitted when the child could not be started, such as ENOENT for the file or the directory. */
+    on(event: "error", listener: (error: { readonly message: string }) => void): unknown
+    /**
+     * Emitted after the child has ended and its stdout and stderr have
+     * closed: the exit code, or null and the name of the signal that ended
+     * it.
+     */
+    on(event: "close", listener: (code: number | null, signal: string | null) => void): unknown
+  }
+
+  /**
+   * Starts `file` with `args` (no shell) in `cwd`. `env` is the child's
+   * entire environment, and `file` is resolved on its PATH. With
+   * `detached: true` the child is the leader of a new session and process
+   * group, whose id is its pid. Stdin reads from /dev/null; stdout and
+   * stderr are piped. The child is not killed when the parent exits.
+   */
+  export function spawn(
+    file: string,
+    args: ReadonlyArray<string>,
+    options: {
+      readonly cwd: string
+      readonly env: Readonly<Record<string, string>>
+      readonly detached: true
+      readonly stdio: readonly ["ignore", "pipe", "pipe"]
+    },
+  ): ChildProcess
+}
+
+declare module "node:crypto" {
+  /** A running digest; feed it with {@link Hash.update}, then read it once with {@link Hash.digest}. */
+  export interface Hash {
+    /** Adds `data` to the digest: bytes as they are, a string as its UTF-8 bytes. Returns the same digest. */
+    update(data: string | Uint8Array): Hash
+    /** The finished digest's raw bytes; the digest cannot be updated after. */
+    digest(): Uint8Array
+    /** The finished digest as lower-case hexadecimal. */
+    digest(encoding: "hex"): string
+  }
+  /**
+   * Starts a digest with the platform's implementation of `algorithm`:
+   * "sha1" for git's blob ids (plan A2), "sha256" for state-file hashes
+   * (plan A1).
+   */
+  export function createHash(algorithm: "sha1" | "sha256"): Hash
+}
+
+declare module "node:path" {
+  /** The directory part of `path`: everything before its last segment. */
+  export function dirname(path: string): string
 }
 
 declare module "node:fs" {
@@ -76,11 +156,14 @@ declare module "node:fs" {
    */
   export function readlinkSync(path: string, options: { readonly encoding: "buffer" }): Uint8Array
   /**
-   * Opens `path` with the open(2) `flags` (from {@link constants}) and
-   * returns its file descriptor; throws on failure, with `code` ELOOP when
-   * O_NOFOLLOW meets a symbolic link.
+   * Opens `path` and returns its file descriptor. `flags` is either the
+   * open(2) flags as a number (from {@link constants}), which fails with
+   * `code` ELOOP when O_NOFOLLOW meets a symbolic link, or a mode string:
+   * `"a"` to append, creating the file; `"w"` to write, creating or
+   * truncating it; `"r"` to read, as for a directory to be flushed.
+   * Throws when it cannot.
    */
-  export function openSync(path: string, flags: number): number
+  export function openSync(path: string, flags: number | "a" | "w" | "r"): number
   /** The status of an open file descriptor, which cannot be a link. Throws when it cannot be read. */
   export function fstatSync(descriptor: number): {
     /** Whether the descriptor is a regular file. */
@@ -112,19 +195,16 @@ declare module "node:fs" {
     path: string,
     options: { readonly recursive: boolean; readonly force: boolean },
   ): void
-}
-
-declare module "node:crypto" {
-  /** A running digest; feed it with {@link Hash.update}, then read it once with {@link Hash.digest}. */
-  export interface Hash {
-    /** Adds `data` to the digest: bytes as they are, a string as its UTF-8 bytes. Returns the same digest. */
-    update(data: string | Uint8Array): Hash
-    /** The finished digest's raw bytes; the digest cannot be updated after. */
-    digest(): Uint8Array
-  }
   /**
-   * Starts a digest with the platform's implementation of `algorithm`.
-   * Runtime uses only "sha1", for git's blob ids (plan A2).
+   * Writes `length` bytes of `buffer` from `offset` to the descriptor and
+   * returns how many were written, which may be fewer. Throws on failure.
    */
-  export function createHash(algorithm: "sha1"): Hash
+  export function writeSync(fd: number, buffer: Uint8Array, offset: number, length: number): number
+  /** Flushes the descriptor's data and metadata to storage (fsync(2)). Throws on failure. */
+  export function fsyncSync(fd: number): void
+  /**
+   * Renames `oldPath` to `newPath`, replacing a file there, in one step
+   * (rename(2)) when both are on one file system. Throws on failure.
+   */
+  export function renameSync(oldPath: string, newPath: string): void
 }
