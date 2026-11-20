@@ -11,7 +11,17 @@
 // importing, re-exporting, `import()`ing or `require()`ing
 // `node:child_process`, `child_process`, `node:cluster` or `bun`; any
 // reference to the `Bun` or `process` globals. A module with a syntax
-// error fails outright, since its tree may not show all its code.
+// error fails outright, since its tree may not show all its code. The
+// name of an ambient `declare const` or `declare var` declaration is not
+// a reference (owner ruling, 2026-11-20); every use of it is.
+//
+// One exception (owner ruling on A1, 2026-11-19): `src/facade/main.ts`,
+// the CLI's entry, may reference `process` as `process.argv`,
+// `process.env` and `process.exit`, written as dotted property accesses,
+// and in no other way. It may not reference `Bun` or import a process
+// module. No other file has the exception. Its cases, and the ambient
+// declaration's, are in process-entry-gate.test.ts; the scanner both
+// files use is process-gate-scan.ts.
 //
 // Blind spots: a process started through another module this gate does
 // not name (a native addon, a worker that imports child_process,
@@ -29,132 +39,7 @@
 // path nothing does. The must-fail cases below show what this gate
 // detects.
 import { describe, expect, it } from "@effect/vitest"
-import ts from "typescript"
-
-const sources = import.meta.glob<string>("../../src/**/*.ts", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-})
-
-/** The one module that may start git. */
-const gitModule = "../../src/runtime/git.ts"
-
-/** The modules that may start a process (owner ruling on A1). */
-const processStarters = [
-  gitModule,
-  "../../src/runtime/spawn.ts",
-  "../../src/runtime/processes.ts",
-  "../../src/runtime/client-version.ts",
-]
-
-/** The calls that start a process and take an options object third. */
-const processCalls = ["execFile", "spawn"]
-
-const processModules = ["node:child_process", "child_process", "node:cluster", "cluster", "bun"]
-
-const processGlobals = ["Bun", "process"]
-
-/** The string a module specifier or call argument names, if it is a literal. */
-const literalText = (node: ts.Node | undefined) =>
-  node !== undefined && ts.isStringLiteralLike(node) ? [node.text] : []
-
-/** Module names a node imports, re-exports, `import()`s or `require()`s. */
-const importedBy = (node: ts.Node): ReadonlyArray<string> => {
-  if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) return literalText(node.moduleSpecifier)
-  if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference))
-    return literalText(node.moduleReference.expression)
-  if (ts.isCallExpression(node)) {
-    const dynamic = node.expression.kind === ts.SyntaxKind.ImportKeyword
-    const required = ts.isIdentifier(node.expression) && node.expression.text === "require"
-    return dynamic || required ? literalText(node.arguments[0]) : []
-  }
-  return []
-}
-
-/** Whether an identifier is a reference to a global, not a property name or declaration. */
-const isGlobalReference = (node: ts.Identifier) => {
-  const parent = node.parent
-  if (ts.isPropertyAccessExpression(parent) && parent.name === node) return false
-  if (ts.isPropertyAssignment(parent) && parent.name === node) return false
-  if (ts.isImportSpecifier(parent) || ts.isPropertySignature(parent)) return false
-  return processGlobals.includes(node.text)
-}
-
-/** The name of a process call (`execFile` or `spawn`) by identifier, if the call is one. */
-const processCallName = (node: ts.CallExpression): ReadonlyArray<string> =>
-  ts.isIdentifier(node.expression) && processCalls.includes(node.expression.text) ? [node.expression.text] : []
-
-/** Whether a process call's program (first argument) is the literal "git". */
-const runsGit = (node: ts.CallExpression) =>
-  processCallName(node).length > 0 && literalText(node.arguments[0]).includes("git")
-
-/** Whether a process call's options object (third argument) has no `env` property. */
-const isProcessCallWithoutEnv = (node: ts.CallExpression) => {
-  const options = node.arguments[2]
-  if (options === undefined || !ts.isObjectLiteralExpression(options)) return true
-  return !options.properties.some(
-    (property) =>
-      (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) &&
-      ts.isIdentifier(property.name) &&
-      property.name.text === "env",
-  )
-}
-
-/** Every node of a parsed module, depth first. */
-const nodesOf = (text: string): ReadonlyArray<ts.Node> => {
-  const file = ts.createSourceFile("module.ts", text, ts.ScriptTarget.ES2022, true)
-  const found: Array<ts.Node> = []
-  const visit = (node: ts.Node): void => {
-    found.push(node)
-    ts.forEachChild(node, visit)
-  }
-  visit(file)
-  return found
-}
-
-/**
- * The syntax errors TypeScript reports for a module, as findings. A module
- * that does not parse may hold code the syntax tree does not show, so the
- * gate fails it rather than judge a partial tree.
- */
-const parseFindings = (text: string): ReadonlyArray<string> =>
-  (
-    ts.transpileModule(text, {
-      reportDiagnostics: true,
-      compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.ESNext },
-    }).diagnostics ?? []
-  ).map((diagnostic) => `does not parse: ${ts.flattenDiagnosticMessageText(diagnostic.messageText, " ")}`)
-
-/**
- * What a module does that the gate forbids: a syntax error, a process
- * module imported (unless `mayStartProcesses`), a process global
- * referenced, an `execFile` or `spawn` call without an explicit `env`,
- * or "git" as such a call's program (unless `mayRunGit`).
- */
-export const processFindings = (
-  text: string,
-  mayStartProcesses: boolean,
-  mayRunGit: boolean,
-): ReadonlyArray<string> => [
-  ...parseFindings(text),
-  ...nodesOf(text).flatMap((node) => [
-    ...importedBy(node)
-      .filter((name) => processModules.includes(name) && !mayStartProcesses)
-      .map((name) => `imports ${name}`),
-    ...(ts.isIdentifier(node) && isGlobalReference(node) ? [`references ${node.text}`] : []),
-    ...(ts.isCallExpression(node) && isProcessCallWithoutEnv(node)
-      ? processCallName(node).map((name) => `${name} without env`)
-      : []),
-    ...(ts.isCallExpression(node) && !mayRunGit && runsGit(node) ? ["runs git outside git.ts"] : []),
-  ]),
-]
-
-/** The number of calls named `name` in a module. */
-const callsNamed = (name: string, text: string) =>
-  nodesOf(text).filter(
-    (node) => ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name,
-  ).length
+import { callsNamed, entryModule, gitModule, processFindings, processStarters, sources } from "./process-gate-scan.ts"
 
 describe("only the four process modules start a process, always with an explicit environment", () => {
   it.each([
@@ -169,7 +54,9 @@ describe("only the four process modules start a process, always with an explicit
   })
 
   it.each(Object.entries(sources))("%s", (path, text) => {
-    expect(processFindings(text, processStarters.includes(path), path === gitModule)).toEqual([])
+    expect(processFindings(text, processStarters.includes(path), path === gitModule, path === entryModule)).toEqual(
+      [],
+    )
   })
 })
 

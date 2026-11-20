@@ -1,7 +1,8 @@
 // The project has no Bun type package; this declares the parts of Bun
 // 1.3.6 that the cross-process tests and their child fixtures use:
-// `spawn` from "bun", the Bun executable's path, the child's arguments,
-// the process environment that the git hazard tests set and restore,
+// `spawn` from "bun", the Bun executable's path (added to the `process`
+// global that src/facade/process.d.ts declares with the child's
+// arguments and the environment the git hazard tests set and restore),
 // and `import.meta.dirname` for paths relative to a test file.
 declare module "bun" {
   /** A running child process started by {@link spawn}. */
@@ -27,14 +28,14 @@ declare module "bun" {
   ): Subprocess
 }
 
-/** The parts of Bun's Node-compatible `process` global the tests read. */
-declare const process: {
+/**
+ * The test-only member of Bun's `process` global, merged into the
+ * {@link Process} that src/facade/process.d.ts declares with `argv`,
+ * `env` and `exit`; the global itself is declared there, once.
+ */
+interface Process {
   /** The path of the running Bun executable. */
   readonly execPath: string
-  /** The executable, the script, then the script's arguments. */
-  readonly argv: ReadonlyArray<string>
-  /** The process environment; a child started without its own inherits it. */
-  readonly env: Record<string, string>
 }
 
 interface ImportMeta {

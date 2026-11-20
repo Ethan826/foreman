@@ -129,6 +129,19 @@ const mustFail: Record<string, ReadonlyArray<Expected>> = {
   "test/run-sync.ts": [{ ruleId: "no-restricted-syntax", message: "running them" }],
   "test/runtime/fixtures/other-child.ts": [{ ruleId: "no-restricted-syntax", message: "running them" }],
   "test/runtime/fixtures/hold-lock.ts": [{ ruleId: "no-restricted-syntax", message: "running them" }],
+  "src/facade/other-entry.ts": [
+    { ruleId: "no-restricted-syntax", message: "No await in core code.", line: 8 },
+    { ruleId: "no-restricted-syntax", message: "running them", line: 8 },
+  ],
+  "src/facade/main.ts": [
+    { ruleId: "no-restricted-syntax", message: "runs one Effect", line: 8 },
+    { ruleId: "no-restricted-syntax", message: "running them", line: 9 },
+    { ruleId: "no-restricted-syntax", message: "only as the awaited callee", line: 10 },
+    { ruleId: "no-restricted-syntax", message: "No await in core code.", line: 11 },
+    { ruleId: "no-restricted-syntax", message: "No Promise in core code.", line: 11 },
+    { ruleId: "no-restricted-syntax", message: "No async function in core code.", line: 12 },
+    { ruleId: "no-restricted-syntax", message: "only as the awaited callee", line: 12 },
+  ],
 }
 
 const clean: ReadonlyArray<string> = [

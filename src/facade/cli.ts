@@ -5,11 +5,9 @@
 // status: 0 on success, 1 when the command failed, 2 on a usage error.
 // It decides nothing.
 //
-// Not yet runnable as `bun src/facade/cli.ts`: the entry statement must
-// read `process.argv` and `process.env`, run `main` and call
-// `process.exit`, and the process gate (test/runtime/git-process-gate
-// .test.ts, owner ruling on A1) allows a reference to `process` only in
-// four Runtime modules. Where the entry may live waits on the owner.
+// The entry statement that runs `main` with `process.argv` and
+// `process.env` and exits with its status is in main.ts (owner ruling on
+// A1, 2026-11-19): run `bun src/facade/main.ts --config <path> <command>`.
 import { Cause, Console, Effect, Formatter, Match, Option, Result, Schema } from "effect"
 import { HandoffRejected, SessionClosed, SessionOpened, StepEndedByOwner, WorktreeCreated } from "../domain/events.ts"
 import { AttemptRecorded } from "../program/attempt.ts"

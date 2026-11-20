@@ -92,15 +92,17 @@ const failures = [
   ),
 ]
 
-const asynchrony = [
+/** The asynchrony bans other than the ban on `await`. */
+const asynchronyExceptAwait = [
   message("NewExpression[callee.name='Promise']", "No Promise in core code."),
   message("MemberExpression[object.name='Promise']", "No Promise in core code."),
   message("TSTypeReference[typeName.name='Promise']", "No Promise in core code."),
-  message("AwaitExpression", "No await in core code."),
   message("FunctionDeclaration[async=true]", "No async function in core code."),
   message("FunctionExpression[async=true]", "No async function in core code."),
   message("ArrowFunctionExpression[async=true]", "No async function in core code."),
 ]
+
+const asynchrony = [...asynchronyExceptAwait, message("AwaitExpression", "No await in core code.")]
 
 const throwingSchema =
   "decode|decodeSync|decodeUnknownSync|encodeSync|encodeUnknownSync|" +
@@ -111,7 +113,7 @@ const effectRunners = ["runSync", "runPromise", "runFork", "runSyncExit", "runPr
 
 /**
  * The effect bans, with the runners in `permitted` left out. Only the
- * named entrypoint exception below passes a non-empty list.
+ * two named entrypoint exceptions below pass a non-empty list.
  */
 const effectBansExcept = (permitted) => [
   message(
@@ -260,13 +262,17 @@ const nativeMethods = [
   },
 ]
 
-const coreGroups = [loops, collections, failures, asynchrony, effectBans, parsing, literalSchemas, bareNames]
+/** The syntax groups core code keeps, with a given asynchrony group and set of effect bans. */
+const coreGroupsWith = (asynchronyGroup, bans) => [
+  loops, collections, failures, asynchronyGroup, bans, parsing, literalSchemas, bareNames,
+]
+const coreGroups = coreGroupsWith(asynchrony, effectBans)
 /** The syntax groups tests keep, with a given set of effect bans. */
 const testGroupsWith = (bans) => [failures, asynchrony, bans, bareNames]
 const testGroups = testGroupsWith(effectBans)
 
 /**
- * The one entrypoint exception (owner decision, 2026-11-17): the
+ * The test entrypoint exception (owner decision, 2026-11-17): the
  * lock-child fixture is a child process's entrypoint, and it runs the
  * production `tryLock` so the cross-process lock test exercises the real
  * acquisition and release rather than a copy of its pragmas. It may call
@@ -280,6 +286,50 @@ const lockChildEntrypoint = {
   file: "test/runtime/fixtures/hold-lock.ts",
   permitted: ["runSync"],
 }
+
+/**
+ * The CLI's entrypoint exception (owner ruling on A1, 2026-11-19):
+ * `src/facade/main.ts` reads the owner's words, runs `main` and exits
+ * with its status, so it may run one Effect, as
+ * `const status = await Effect.runPromise(...)` at the top level. It
+ * may call `Effect.runPromise` and nothing else from the runner ban, and
+ * `await` only in that one statement (`entryRunRules`); every other
+ * src/ rule holds. Exact path, no glob: the same statement in any other
+ * file still fails (lint-fixtures/src/facade/other-entry.ts), and so do
+ * a second run, another runner, an await of anything else and
+ * runPromise taken as a value at this path
+ * (lint-fixtures/src/facade/main.ts). Blind spots: `Effect` imported
+ * under another name, and a member read by index (`Effect["runFork"]`),
+ * escape here as they do the runner ban everywhere.
+ */
+const cliEntrypoint = {
+  file: "src/facade/main.ts",
+  permitted: ["runPromise"],
+}
+
+/**
+ * The one awaited run the CLI's entry may hold: `await Effect.runPromise(...)`
+ * as the whole initializer of the only declarator of a top-level `const`.
+ */
+const entryRun =
+  "Program > VariableDeclaration[kind='const'][declarations.length=1] > VariableDeclarator > " +
+  "AwaitExpression.init[argument.callee.object.name='Effect'][argument.callee.property.name='runPromise']"
+
+/** What narrows the entry's exception to {@link entryRun}, once. */
+const entryRunRules = [
+  message(
+    `AwaitExpression:not(${entryRun})`,
+    "No await in core code. The CLI's entry awaits only Effect.runPromise, as the whole initializer of one top-level const.",
+  ),
+  message(
+    `MemberExpression[object.name='Effect'][property.name='runPromise']:not(${entryRun} > CallExpression.argument > MemberExpression.callee)`,
+    "The CLI's entry may call Effect.runPromise only as the awaited callee of its one top-level const.",
+  ),
+  message(
+    "Program > VariableDeclaration:has(AwaitExpression) ~ VariableDeclaration:has(AwaitExpression)",
+    "The CLI's entry runs one Effect: one top-level await of Effect.runPromise.",
+  ),
+]
 
 const throwingImports = {
   name: "effect/Schema",
@@ -414,6 +464,15 @@ export const buildConfig = ({ tsconfigRootDir, ignores = [] }) => defineConfig([
     rules: {
       "no-restricted-syntax": noRestrictedSyntax(
         ...testGroupsWith(effectBansExcept(lockChildEntrypoint.permitted)),
+      ),
+    },
+  },
+  {
+    files: [cliEntrypoint.file],
+    rules: {
+      "no-restricted-syntax": noRestrictedSyntax(
+        ...coreGroupsWith(asynchronyExceptAwait, effectBansExcept(cliEntrypoint.permitted)),
+        entryRunRules,
       ),
     },
   },
