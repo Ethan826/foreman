@@ -5,9 +5,12 @@
 // Blind spots. This checks presence only: it does not judge whether a
 // comment is accurate, complete or more than a restatement of the name.
 // It does not cover non-exported code; the rule asks for TSDoc on
-// substantial private code too, and that part rests on review. `export {
-// ... }` lists and re-exports are not checked (src/ has none). The
-// must-fail cases below show what the check detects.
+// substantial private code too, and that part rests on review. It skips
+// every `export { ... }` statement, so a re-export such as those in
+// src/domain/events.ts and src/features/command-rules.ts needs no comment
+// here; each re-exported name is checked in the module that declares it,
+// as long as that module is in src/. The must-fail cases below show what
+// the check detects.
 import { describe, expect, it } from "@effect/vitest"
 import ts from "typescript"
 

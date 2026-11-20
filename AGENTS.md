@@ -80,11 +80,12 @@ only one Format decoder knows lives in a constant at the top of that
 decoder. Two rules in `eslint.rules.js` enforce this: `Schema.Literals` and
 `Schema.Literal` in `src/` may not take inline literals, and no name in
 `closedNames` may appear as a string literal outside the modules in
-`canonicalModules`. The list has 25 names from seven constants: `Clients`
-and `Roles` (`src/domain/clients.ts`, `roles.ts`), `WorktreeConditions`
-(`src/domain/worktree.ts`), and `TreeEntryTypes`, `FileKinds`,
-`AttributeSources` and `AttributeRefusalReasons`
-(`src/domain/attributes.ts`). A new vocabulary adds its names to
+`canonicalModules`. The list has 29 names from nine constants in five
+modules: `Clients` and `Roles` (`src/domain/clients.ts`, `roles.ts`),
+`WorktreeConditions` (`src/domain/worktree.ts`), `TreeEntryTypes`,
+`FileKinds`, `AttributeSources` and `AttributeRefusalReasons`
+(`src/domain/attributes.ts`), and `CloseKinds` and `Attestations`
+(`src/domain/session.ts`). A new vocabulary adds its names to
 `closedNames` and its module to `canonicalModules`. It also adds one line
 per name to `lint-fixtures/src/features/bare-names.ts`, where
 `test/lint/fixtures.test.ts` checks each name on its own line. A value
