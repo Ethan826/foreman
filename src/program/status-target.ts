@@ -1,19 +1,20 @@
 // The target `status` runs on, and what it found wrong on the way
 // (re-review R03; batch review B04 and B05; plan "Commands and their
 // prerequisites", AC1). Status never refuses here. A configured layout
-// that breaks a rule or cannot be resolved, a binding that cannot be read
-// or decoded, and a recorded target whose layout breaks a rule are each a
-// finding. Status then runs on the recorded target when a binding is
+// that breaks a rule or cannot be resolved, the default ledger directory
+// among its paths when HOME is unset (follow-up review at 3b72efc, finding
+// 4), a binding that cannot be read or decoded, and a recorded target
+// whose layout breaks a rule are each a finding. Status then runs on the recorded target when a binding is
 // recorded, readable and its layout passes; on the configured target when
 // none is recorded and the configured layout passes; and otherwise on no
 // target, without guessing a replacement. Everything here reads only.
 import { Array as Arr, Effect, Option, Result, Schema } from "effect"
 import { constant } from "effect/Function"
-import type { CanonicalLayout, LayoutRefused } from "../domain/layout.ts"
+import { type CanonicalLayout, LayoutRefused } from "../domain/layout.ts"
 import { TargetBinding, TargetBindingUnreadable, TargetMismatch } from "../domain/target.ts"
 import { checkLayout } from "../features/layout.ts"
 import { compareTarget } from "../features/target-binding.ts"
-import type { ForemanConfig } from "../format/foreman-config.ts"
+import type { ConfigUndecodable, ForemanConfig } from "../format/foreman-config.ts"
 import { resolvedLayout } from "./layout.ts"
 import { checkedTargetLayout, targetOf } from "./production-target.ts"
 import { bindingPath, recordedTarget } from "./target-binding.ts"
@@ -93,12 +94,16 @@ export interface StatusTarget {
 
 /**
  * Settles the target status runs on for `config`, whose layout as
- * written is `layout` (see the module comment). Reads only; never fails.
+ * written is `layout`, or why its ledger directory could not be settled
+ * (see the module comment). Reads only; never fails.
  */
-export const statusTarget = (config: ForemanConfig, layout: CanonicalLayout): Effect.Effect<StatusTarget> =>
+export const statusTarget = (
+  config: ForemanConfig,
+  layout: Result.Result<CanonicalLayout, ConfigUndecodable>,
+): Effect.Effect<StatusTarget> =>
   Effect.gen(function* () {
     const { stateDir } = config
-    const resolved = yield* Effect.result(resolvedLayout(layout))
+    const resolved = yield* Effect.result(Effect.flatMap(Effect.fromResult(Result.mapError(layout, ledgerUnresolved)), resolvedLayout))
     const configured = Result.map(resolved, (canonical) => targetOf(config, canonical))
     const configuredUsable = Result.flatMap(resolved, usableTarget(config))
     const recorded = yield* Effect.result(recordedTarget(stateDir))
@@ -113,6 +118,13 @@ export const statusTarget = (config: ForemanConfig, layout: CanonicalLayout): Ef
       inForce: inForceOf(Result.flatMap(recorded, keptIfPassed(recordedLayout)), configuredUsable),
     }
   })
+
+/**
+ * A configured ledger directory that could not be settled, such as the
+ * default with HOME unset, as a layout path that cannot be resolved.
+ */
+const ledgerUnresolved = (undecodable: ConfigUndecodable): LayoutRefused =>
+  new LayoutRefused({ reasons: [`cannot resolve the ledger directory: ${undecodable.reason}`] })
 
 /** No binding to check, for a binding that could not be read. */
 const noBinding = (): Option.Option<TargetBinding> => Option.none()

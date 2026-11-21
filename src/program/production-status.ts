@@ -5,9 +5,10 @@
 // target, and reports what is broken beside whatever it can read.
 //
 // It decodes the configuration, then settles the target it runs on
-// (status-target.ts): a refused configured layout, an unreadable binding
-// and a refused recorded layout are findings, never refusals, and no
-// binding is recorded. It opens the project log in the configured state
+// (status-target.ts): a refused configured layout, a configured ledger
+// directory it cannot settle (the default with HOME unset), an unreadable
+// binding and a refused recorded layout are findings, never refusals, and
+// no binding is recorded. It opens the project log in the configured state
 // directory read-only and only if it is there; a state directory without
 // a log is `StateMissing`, which carries the findings too. It reads the
 // ledger of the target in force read-only, in one deferred transaction,
@@ -35,7 +36,7 @@ import { stateFiles } from "../runtime/state-files.ts"
 import { gitHomePath, judgedGitHome } from "./git-home.ts"
 import { handoffGitWith } from "./handoff-git.ts"
 import { checkedHead, initialEstimates } from "./production.ts"
-import { decodedConfiguration } from "./production-target.ts"
+import { configuredLayout, readConfiguration } from "./production-target.ts"
 import { type CheckWorktree, WorktreeUnready } from "./session-context.ts"
 import { status, StatusReport } from "./status.ts"
 import type { StatusCapabilities, StatusContext } from "./status-context.ts"
@@ -92,7 +93,10 @@ export type StatusOutcome = typeof StatusOutcome.Type
  * `environment` is foreman's own, from which a client's version read
  * gets everything but `GIT_*` (decision P2) and the default ledger
  * directory its `HOME`. A broken layout or binding is a finding in the
- * outcome, never a failure. Fails only when the configuration cannot be
+ * outcome, never a failure, and so is a default ledger directory that
+ * cannot be settled because `HOME` is unset: status then runs on the
+ * recorded target, or on none, and still reads the log (follow-up review
+ * at 3b72efc, finding 4). Fails only when the configuration cannot be
  * read or decoded (`ConfigUndecodable`, among others) or a store cannot
  * be read.
  */
@@ -101,9 +105,9 @@ export const productionStatus = (
   environment: Readonly<Record<string, string | undefined>>,
 ): Effect.Effect<StatusOutcome, unknown, Scope.Scope> =>
   Effect.gen(function* () {
-    const { config, layout } = yield* decodedConfiguration(configPath, environment)
+    const config = yield* readConfiguration(configPath)
     const { stateDir } = config
-    const settled = yield* statusTarget(config, layout)
+    const settled = yield* statusTarget(config, configuredLayout(config, environment))
     const logPath = `${stateDir}/log.sqlite`
     const log = yield* openLogReader(logPath, busyTimeoutMillis)
     if (Option.isNone(log)) return new StateMissing({ stateDir, logPath, findings: settled.findings })

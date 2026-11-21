@@ -52,7 +52,7 @@ export const decodedConfiguration = (
 ) =>
   Effect.gen(function* () {
     const config = yield* readConfiguration(configPath)
-    return { config, layout: yield* Effect.fromResult(layoutOf(config, environment)) }
+    return { config, layout: yield* Effect.fromResult(configuredLayout(config, environment)) }
   })
 
 /**
@@ -136,8 +136,10 @@ export const exitTarget = (configPath: string, environment: Readonly<Record<stri
 /**
  * The configuration's layout as written, the ledger's directory settled:
  * the configured `ledgerDir`, or the default under `environment`'s `HOME`.
+ * Fails with `ConfigUndecodable` when neither is set or the default is
+ * not an absolute, normalized path (`ledgerDirOf`).
  */
-const layoutOf = (config: ForemanConfig, environment: Readonly<Record<string, string | undefined>>) =>
+export const configuredLayout = (config: ForemanConfig, environment: Readonly<Record<string, string | undefined>>) =>
   Result.map(
     ledgerDirOf(config, Option.fromNullishOr(environment.HOME)),
     (ledgerDir): CanonicalLayout => ({
@@ -150,6 +152,6 @@ const layoutOf = (config: ForemanConfig, environment: Readonly<Record<string, st
 
 /** The configured target of an exit with no binding: only here is the default ledger directory needed. */
 const unboundExitTarget = (config: ForemanConfig, environment: Readonly<Record<string, string | undefined>>) =>
-  Effect.flatMap(Effect.fromResult(layoutOf(config, environment)), (layout) =>
+  Effect.flatMap(Effect.fromResult(configuredLayout(config, environment)), (layout) =>
     Effect.map(checkedLayout(layout), (canonical) => targetOf(config, canonical)),
   )
