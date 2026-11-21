@@ -1,6 +1,8 @@
 #!/bin/bash
 # L3 subset: create the disposable repository, its linked worktree and the
-# rendered Claude settings under a new scratch root. Runs no agent client.
+# Claude settings production renders for it, under a new scratch root.
+# Runs no agent client; it runs bun to read production's profile code
+# (profile.sh).
 #
 # Usage: setup.sh <scratch-root> [--temp-ok]
 #
@@ -22,8 +24,8 @@
 set -eu
 
 here=$(cd "$(dirname "$0")" && pwd -P)
-template="$here/claude-settings.json"
 . "$here/ownership.sh"
+. "$here/profile.sh"
 
 if [ $# -lt 1 ] || [ $# -gt 2 ]; then
   echo "usage: setup.sh <scratch-root> [--temp-ok]" >&2
@@ -180,9 +182,30 @@ cat > "$owner/AGENTS.md" <<'EOF'
 
 This repository exists only for a permission test. It has no build.
 EOF
+# The project settings approve the fixture's MCP server, so that only the
+# profile's own exclusion (--strict-mcp-config) keeps it from starting;
+# whether project scope may approve its own servers is UNCONFIRMED (plan.md,
+# "Project MCP fixture").
 mkdir -p "$owner/.claude"
 cat > "$owner/.claude/settings.json" <<'EOF'
-{}
+{
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": ["l3-marker"]
+}
+EOF
+# The project MCP server: if a client starts it, it appends one line to
+# out/mcp-server.log and exits. It reads nothing and writes nothing else.
+# The root's path is plain (checked above), so it needs no quoting in the
+# shell command; the JSON encoder writes the file.
+/usr/bin/python3 -I - "$out/mcp-server.log" "$owner/.mcp.json" <<'EOF'
+import json
+import sys
+
+log, output = sys.argv[1:3]
+server = {"type": "stdio", "command": "/bin/sh", "args": ["-c", "echo started >> " + log]}
+with open(output, "x", encoding="utf-8") as target:
+    json.dump({"mcpServers": {"l3-marker": server}}, target, indent=2)
+    target.write("\n")
 EOF
 cat > "$owner/.gitattributes" <<'EOF'
 *.txt text
@@ -198,7 +221,7 @@ else
 fi
 echo "check: done"
 EOF
-cleangit -C "$owner" add notes.txt README.txt AGENTS.md .claude/settings.json .gitattributes check.sh
+cleangit -C "$owner" add notes.txt README.txt AGENTS.md .claude/settings.json .gitattributes .mcp.json check.sh
 cleangit -C "$owner" commit --quiet -m "L3 subset: disposable repository"
 cleangit -C "$owner" remote add origin "$remote"
 cleangit -C "$owner" push --quiet origin main
@@ -209,36 +232,10 @@ cleangit -C "$owner" push --quiet origin main
 base=$(cleangit -C "$owner" rev-parse HEAD)
 cleangit -C "$owner" worktree add --quiet --lock --reason foreman -b "$branch" "$worktree" "$base"
 
-# Render the settings template for this worktree. The path goes in as a
-# JSON string value, so json.dump escapes it; the template must use the
-# placeholder at least once. Mode "x" refuses an existing output file.
+# Production's settings for this worktree, with the one stand-in plan.md
+# lists (profile.sh). The file is created new; an existing one fails.
 claim claude-settings.json
-/usr/bin/python3 -I - "$template" "$worktree" "$settings" <<'EOF'
-import json
-import sys
-
-template, worktree, output = sys.argv[1:4]
-placeholder = "@WORKTREE@"
-
-
-def render(value):
-    if isinstance(value, str):
-        return value.replace(placeholder, worktree)
-    if isinstance(value, list):
-        return [render(item) for item in value]
-    if isinstance(value, dict):
-        return {key: render(item) for key, item in value.items()}
-    return value
-
-
-with open(template, encoding="utf-8") as source:
-    data = json.load(source)
-if placeholder not in json.dumps(data):
-    sys.exit("setup.sh: the template has no " + placeholder)
-with open(output, "x", encoding="utf-8") as target:
-    json.dump(render(data), target, indent=2, ensure_ascii=False)
-    target.write("\n")
-EOF
+l3_production_settings "$worktree" "$settings"
 
 git_dir=$(cleangit -C "$worktree" rev-parse --absolute-git-dir)
 common_dir=$(cleangit -C "$worktree" rev-parse --path-format=absolute --git-common-dir)

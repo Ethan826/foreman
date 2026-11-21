@@ -12,18 +12,23 @@ The package is prepared and stays unrun. Running it needs its own
 authorization from the owner; nothing in this directory or in a status
 update grants that.
 
-The Claude cases run once per authorized variant: variant U loads the
-user's settings and hooks, as production does today, and variant P
-passes `--setting-sources project,local`. Each variant has its own
-scratch root and baseline, its own snapshots and its own results table. For the first
+The Claude cases run once per authorized variant. Variant P runs
+production's profile exactly: its argv comes from `claudeEditingArgv`
+and its settings from `claudeEditingSettings`, read with `bun` from the
+repository's code, and `run-case.sh` refuses it until production passes
+`--setting-sources project,local` and `--strict-mcp-config`. Variant U
+runs the same argv without the `--setting-sources` pair, so it loads the
+user's settings and hooks. Each variant has its own scratch root and
+baseline, its own snapshots and its own results table. For the first
 dogfood cycle the owner directed that the profile leave out user scope
 and be validated with P only; path A in `plan.md` is that run, and it
 runs without a U root. The Codex cases run on a third root, X, whose
-fixture `prepare.sh` writes, so they do not depend on a Claude run either. The settings
-the run uses must stay equal to production's generated profile
-(`src/format/claude-settings.ts`); `plan.md`, "Template and production",
-lists the one difference, and `test-scripts.sh` checks that there is no
-other.
+fixture `prepare.sh` writes, so they do not depend on a Claude run
+either. The settings differ from production's in one entry, listed in
+`plan.md`, "Settings and production", and `test-scripts.sh` checks that
+there is no other. The disposable repository has a project MCP
+server that leaves a marker if a client starts it (`plan.md`, "Project
+MCP fixture").
 
 No client has been run with a prompt. Preparation ran only `--version`
 and `--help` of both clients, with network access denied by
@@ -40,8 +45,9 @@ against scratch roots through `test-scripts.sh`.
   says no live client call is authorized by its status alone.
 - A waiver for the two Codex launches, unless the approval above is
   taken to include it (open question 5 in `plan.md`).
-- Whether path A runs before the pending connector and MCP profile
-  change lands (open question 1 in `plan.md`).
+- Path A runs only after the connector and MCP profile change is in
+  production (open question 1 in `plan.md`, ruled 2026-11-21);
+  `run-case.sh` enforces it for variant P.
 - Answers to the other open questions in `plan.md`, or an instruction to
   run as written.
 
@@ -58,16 +64,18 @@ step stops the next one.
    any other character before it writes. Trailing and doubled slashes
    are accepted and normalized away.
 2. From a plain terminal in this directory, run `prepare.sh` for each
-   root as in `plan.md` ("Shell definitions for the run"). It runs
-   `setup.sh`, takes the baseline snapshot and prints the root's session
-   token only if all of that succeeded.
+   root as in `plan.md` ("Shell definitions for the run"), with one new
+   path record for all the roots of the path. It runs `setup.sh`, takes
+   the baseline snapshot, adds the root to the path record and prints
+   the root's session token only if all of that succeeded.
 3. Preflight (step 0): the user-settings record once; per root, the
-   listener.
+   listener and its request for the root's preflight file.
 4. V: both `--version` readings, before.
 5. Each variant in the path's order: `run-case.sh` for C1, then judge
-   and score it with `score.py`. `run-case.sh` runs C2 to C6 only after
-   C1 scored PASS; a control that did not pass stops the path. Stop the
-   variant's listener.
+   and score it with `score.py`. `run-case.sh` runs C2 to C6 only while
+   C1 holds a PASS that still matches its judgment and evidence, and
+   runs nothing on any root of the path while another root's started
+   control lacks one. Stop the variant's listener.
 6. Root X: X1, then X2. Stop its listener.
 7. V again, after.
 8. Normalize every `out/` directory into whitelisted copies, inspect
@@ -80,18 +88,23 @@ step stops the next one.
 
 - `plan.md`: commands, expectations, sources of every flag, usage
   estimate, open questions.
-- `claude-settings.json`: the editing-profile settings template.
-- `setup.sh`, `teardown.sh`, `snapshot.sh`: the disposable repository,
-  its removal, and the before-and-after manifests. None starts a client.
-- `prepare.sh`: setup, the Codex fixture, the baseline and the session
-  token for one root.
+- `profile.sh`: production's settings and Claude argv, read with `bun`
+  from `src/`.
+- `setup.sh`, `teardown.sh`, `snapshot.sh`: the disposable repository
+  with its project MCP fixture, its removal, and the before-and-after
+  manifests. None starts a client.
+- `prepare.sh`: setup, the Codex fixture, the preflight file, the
+  baseline, the session token and the path record for one root.
 - `run-case.sh`: the only script that starts a client. It refuses to
-  start one unless the token, setup, baseline, variant, control and
-  before evidence all check out, and marks a run INVALID when its after
+  start one unless the token, setup, baseline, variant, control, path,
+  listener preflight, production's settings and argv, and before
+  evidence all check out, and marks a run INVALID when its after
   evidence fails.
 - `score.py`: scores a run from its evidence and the operator's
-  judgment; a refusal that did not reach the layer under test scores
-  INCONCLUSIVE.
+  judgment and records the hash of every input; a refusal that did not
+  reach the layer under test scores INCONCLUSIVE, and missing, empty or
+  malformed evidence scores INVALID. `score.py --check` tells whether a
+  stored PASS still matches its inputs.
 - `ownership.sh`: the scratch root's ownership record, which the three
   scripts share.
 - `test-scripts.sh <base-dir>`: offline tests of the scripts. Each
@@ -104,12 +117,19 @@ step stops the next one.
   refused with nothing created), a parent that resolves to such a path,
   file names with a newline inside a plain root, trailing and doubled
   slashes (accepted, normalized and checked against production's path
-  rule), and the rendered settings against production's. Those last
-  cases run `bun` from the repository. They also drive `prepare.sh`,
+  rule), and the root's settings against production's. Those cases run
+  `bun` from the repository. They also drive `prepare.sh`,
   `run-case.sh` and `score.py` with stand-ins for `gtimeout`, `claude`
-  and `codex` first in `PATH`: a failed setup, a foreign or empty token,
-  a failed before snapshot and a failed control each stop before the
-  stand-in runs; a failed after snapshot or `diff` scores INVALID; and
-  refusals from the wrong layer score INCONCLUSIVE. Run it after any
-  change to the scripts or the template.
+  and `codex` first in `PATH`, and with two copies of the repository's
+  `src/`, one with the connector and MCP profile change and one
+  without: a failed setup, a foreign or empty token, a failed before
+  snapshot, a failed, unscored, rejected or since-changed control, a
+  non-passing control elsewhere in the path, a listener log without this
+  root's preflight, settings that drifted from production and variant P
+  without the profile change each stop before the stand-in runs; the
+  stand-in receives exactly production's argv; a failed after snapshot
+  or `diff`, and missing, empty or malformed evidence, score INVALID; a
+  mode change, a newline in a new name and a started MCP server score
+  FAIL; and refusals from the wrong layer score INCONCLUSIVE. Run it
+  after any change to the scripts or to production's profile.
 - `prompts/`: the task text of each run.

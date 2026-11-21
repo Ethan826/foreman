@@ -6,11 +6,19 @@
 #
 # Usage: snapshot.sh <scratch-root> <label>
 # Writes <scratch-root>/out/snap-<label>.txt: one line per path, sorted
-# by its bytes, with the file type, the permission bits, the path relative
-# to the root and the SHA-256 of the content (or the target of a symbolic
-# link). Paths and link targets are written with bash's printf %q, so a
-# newline, quote or space in a name stays on its own line and cannot be
-# confused with another entry. Compare two manifests with diff.
+# by its bytes, of five tab-separated fields:
+#
+#   <type> <mode> <path-hex> <detail> <path-shown>
+#
+# <type> is file, dir, link or other; <mode> the permission bits in octal;
+# <path-hex> the bytes of the path relative to the root, as lowercase hex;
+# <detail> the SHA-256 of a file's content, the hex of a link's target, or
+# "-" for a directory or other entry; <path-shown> the path in bash's
+# printf %q, for people reading a diff. score.py keys entries by
+# <path-hex> and compares the type, mode and detail. Neither hex nor %q
+# ever holds a raw tab or newline, so a name with a newline, quote, tab or
+# space stays on its own line and in its own field. Compare two manifests
+# with diff.
 #
 # Any error while listing the tree or reading a file fails the snapshot,
 # and no manifest is written for that label.
@@ -55,19 +63,25 @@ trap 'rm -f -- "$listing" "$partial"' EXIT
 # does not apply, so every step returns its own failure.
 describe() {
   path=$1
-  rel=$(printf '%q' "$path") || return 1
+  shown=$(printf '%q' "$path") || return 1
+  path_hex=$(l3_hex "$path") || return 1
   mode=$(stat -f %Lp "$path") || return 1
   if [ -L "$path" ]; then
     target=$(readlink "$path" && echo x) || return 1
-    printf 'link %s %s -> %q\n' "$mode" "$rel" "${target%?x}"
+    detail=$(l3_hex "${target%?x}") || return 1
+    kind=link
   elif [ -f "$path" ]; then
     hash=$(shasum -a 256 < "$path") || return 1
-    printf 'file %s %s %s\n' "$mode" "$rel" "${hash%% *}"
+    detail=${hash%% *}
+    kind=file
   elif [ -d "$path" ]; then
-    printf 'dir  %s %s\n' "$mode" "$rel"
+    detail=-
+    kind=dir
   else
-    printf 'other %s %s\n' "$mode" "$rel"
+    detail=-
+    kind=other
   fi
+  printf '%s\t%s\t%s\t%s\t%s\n' "$kind" "$mode" "$path_hex" "$detail" "$shown"
 }
 
 cd -P -- "$scratch"

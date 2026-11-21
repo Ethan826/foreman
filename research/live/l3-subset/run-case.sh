@@ -13,18 +13,30 @@
 # Before the client, in order, and stopping at the first failure with no
 # client started: the session token, the completed setup, the baseline,
 # the case's variant, unused run ids, the control gate (C2 to C6 need the
-# variant's latest C1 attempt scored PASS by score.py), the listener's
-# preflight line, the client commands on PATH, then the before evidence
-# (snapshot, index state, listener count). After the client, whatever its
-# exit: the after evidence and the snapshot diff. Any failure there
-# marks the run INVALID in out/<run>.evidence and exits 3; score.py then
-# scores it INVALID. Exits 0 when the evidence is complete, whatever the
-# client did.
+# variant's latest C1 attempt to hold a current PASS: score.py --check),
+# the path gate (every other Claude root in the root's path record whose
+# C1 has started holds a current PASS for its latest attempt), the
+# listener's preflight (the first line of out/listener.log is this root's
+# nonce request, answered 200), the commands on PATH, for Claude the
+# root's settings equal to production's current rendering and the argv
+# production builds (profile.sh), then the before evidence (snapshot,
+# argv, index state, listener and MCP-marker counts). After the
+# client, whatever its exit: the after evidence and the snapshot diff.
+# Any failure there marks the run INVALID in out/<run>.evidence and exits
+# 3; score.py then scores it INVALID. Exits 0 when the evidence is
+# complete, whatever the client did.
+#
+# The Claude argv is production's claudeEditingArgv for the case's prompt
+# and the root's settings file, followed by --max-turns. Variant P takes
+# it whole and requires the profile change of open question 1
+# (--setting-sources project,local and --strict-mcp-config); variant U
+# takes it without the --setting-sources pair.
 set -eu
 set -o pipefail
 
 here=$(cd "$(dirname "$0")" && pwd -P)
 . "$here/ownership.sh"
+. "$here/profile.sh"
 
 stop() {
   echo "run-case.sh: $1; no client was started" >&2
@@ -92,22 +104,132 @@ if [ "$attempt" -gt 1 ]; then
     stop "attempt $attempt needs attempt $((attempt - 1)) first"
 fi
 
+# Whether the latest C1 attempt of the root $1 holds a current PASS
+# (score.py --check: the stored PASS equals the score of the judgment and
+# evidence as they are now). Returns 0 if it does, 3 when C1 has not
+# started in that root, 1 otherwise. Sets control to the latest attempt's
+# run id.
+control_state() {
+  control=c1-control
+  if [ ! -e "$1/out/c1-control.exit" ] && [ ! -e "$1/out/snap-c1-control-before.txt" ]; then
+    return 3
+  fi
+  n=1
+  while [ -e "$1/out/$(run_id c1-control $((n + 1))).exit" ]; do n=$((n + 1)); done
+  control=$(run_id c1-control "$n")
+  "$here/score.py" --check "$1" "$control" > /dev/null 2>&1 || return 1
+}
+
 # The control gate: a variant whose C1 has not passed runs nothing more.
 if [ "$gated" = yes ]; then
-  n=1
-  while [ -e "$out/$(run_id c1-control $((n + 1))).exit" ]; do n=$((n + 1)); done
-  control=$(run_id c1-control "$n")
-  [ "$(head -n 1 "$out/$control.score" 2> /dev/null)" = PASS ] ||
-    stop "$control has not scored PASS; a failed or unscored control stops variant $variant"
+  control_state "$root" ||
+    stop "$control has no current PASS (score.py --check); a failed, unscored or since-changed control stops variant $variant"
 fi
 
-[ -s "$out/listener.log" ] || stop "the listener has not logged its preflight request (plan.md, step 0)"
-for command in gtimeout "$client"; do
+# The path gate: a Claude control that ran without a current PASS stops
+# every root of the path (plan.md, "Stop and retry rules"). This root's
+# own C1 is left to the control gate above and to the retry rule.
+path_record=$(sed -n 's/^path //p' "$session")
+[ -n "$path_record" ] || stop "this root's session names no path record"
+if [ -L "$path_record" ] || [ ! -f "$path_record" ] || [ "$(head -n 1 "$path_record")" != "foreman-l3-path 1" ]; then
+  stop "the path record $path_record is missing or not a path record"
+fi
+grep -qxF "root $variant $root" "$path_record" || stop "the path record does not list this root as variant $variant"
+members=$(tail -n +2 "$path_record") || stop "the path record could not be read"
+while read -r tag other_variant other_root; do
+  [ "$tag" = root ] || continue
+  case "$other_variant" in U|P) ;; *) continue ;; esac
+  [ "$other_root" = "$root" ] && continue
+  status=0
+  control_state "$other_root" || status=$?
+  if [ "$status" -eq 1 ]; then
+    stop "variant $other_variant's $control in $other_root has no current PASS; a control that did not pass stops every root of its path"
+  fi
+done <<< "$members"
+
+# The listener's preflight: the first line of its log is this root's
+# nonce request, answered 200 by a listener serving this root's www/
+# (plan.md, step 0). A bind error, another root's request or a request for
+# another file is not a preflight. A listener started again truncates its
+# log, so it needs a new preflight.
+nonce=$(sed -n 's/^preflight //p' "$session")
+case "$nonce" in
+  ""|*[!0-9a-f]*) stop "this root's session has no preflight nonce" ;;
+esac
+first=
+if [ -f "$out/listener.log" ] && [ ! -L "$out/listener.log" ]; then
+  first=$(head -n 1 "$out/listener.log")
+fi
+preflight="^127\\.0\\.0\\.1 - - \\[[^]]*\\] \"GET /preflight-$nonce HTTP/1\\.[01]\" 200 [-0-9]+\$"
+grep -qE "$preflight" <<< "$first" ||
+  stop "the listener's log does not start with this root's preflight request answered 200 (plan.md, step 0)"
+
+needed="gtimeout $client"
+if [ "$client" = claude ]; then
+  needed="$needed bun"
+fi
+for command in $needed; do
   command -v "$command" > /dev/null || stop "$command is not on PATH"
 done
 
 worktree="$root/state/worktree"
 git_dir="$root/owner/.git/worktrees/worktree"
+settings="$root/claude-settings.json"
+prompt=$(cat "$prompt_file")
+
+# The client's argv. Claude's comes from production (profile.sh): the
+# root's settings must still equal production's rendering, and the argv is
+# claudeEditingArgv's, with the variant's setting sources and the turn cap.
+client_argv=()
+if [ "$client" = claude ]; then
+  fresh="$out/.$run.settings.partial"
+  produced="$out/.$run.argv.partial"
+  rm -f -- "$fresh" "$produced"
+  l3_production_settings "$worktree" "$fresh" || stop "production's settings could not be rendered"
+  same=yes
+  cmp -s -- "$fresh" "$settings" || same=no
+  rm -f -- "$fresh"
+  [ "$same" = yes ] ||
+    stop "the root's claude-settings.json differs from production's current settings; prepare a new root"
+  l3_production_argv "$prompt" "$settings" "$produced" || stop "production's argv could not be built"
+  production=()
+  while IFS= read -r -d '' part; do production+=("$part"); done < "$produced"
+  rm -f -- "$produced"
+  if [ "${#production[@]}" -eq 0 ] || [ "${production[0]}" != claude ]; then
+    stop "production's argv does not start with claude"
+  fi
+  has_sources=no
+  has_strict=no
+  i=0
+  while [ "$i" -lt "${#production[@]}" ]; do
+    part=${production[$i]}
+    if [ "$part" = --setting-sources ]; then
+      [ "${production[$((i + 1))]-}" = project,local ] ||
+        stop "production passes --setting-sources with a value other than project,local"
+      has_sources=yes
+      if [ "$variant" = P ]; then
+        client_argv+=("$part" project,local)
+      fi
+      i=$((i + 2))
+      continue
+    fi
+    if [ "$part" = --strict-mcp-config ]; then
+      has_strict=yes
+    fi
+    client_argv+=("$part")
+    i=$((i + 1))
+  done
+  if [ "$variant" = P ] && { [ "$has_sources" = no ] || [ "$has_strict" = no ]; }; then
+    stop "production's argv lacks --setting-sources project,local or --strict-mcp-config: path A runs only after the connector and MCP profile change (plan.md, open question 1)"
+  fi
+  client_argv+=(--max-turns "$turns")
+  limit=600
+else
+  client_argv=(codex exec --sandbox read-only -c 'approval_policy="never"' --json
+    --output-last-message "$out/$run-last.txt" "$prompt")
+  limit=300
+fi
+
 # The index's modification time, size and SHA-256. Called in || lists,
 # where set -e does not apply, so each step returns its own failure.
 index_state() {
@@ -118,14 +240,24 @@ index_state() {
 listener_lines() {
   wc -l < "$out/listener.log" | tr -d ' '
 }
+# The lines the fixture's project MCP server appended: 0 before any start.
+mcp_lines() {
+  if [ -e "$out/mcp-server.log" ] || [ -L "$out/mcp-server.log" ]; then
+    wc -l < "$out/mcp-server.log" | tr -d ' '
+  else
+    echo 0
+  fi
+}
 
 # Before evidence. C6 first makes the index's stat data stale (plan.md, C6).
 if [ "$case_id" = c6-index ]; then
   touch "$worktree/README.txt" || stop "README.txt could not be touched for C6"
 fi
 "$here/snapshot.sh" "$root" "$run-before" > /dev/null || stop "the before snapshot failed"
+printf '%s\0' "${client_argv[@]}" > "$out/$run.argv" || stop "the argv could not be recorded"
 index_state > "$out/$run-index-before" || stop "the index state could not be recorded"
 listener_lines > "$out/$run-listener-before" || stop "the listener count could not be recorded"
+mcp_lines > "$out/$run-mcp-before" || stop "the MCP marker count could not be recorded"
 
 # The client, with every GIT_* variable removed from its environment
 # (assisted plan 320, decision P2). Its exit status is evidence, not a
@@ -134,27 +266,10 @@ unset_git=()
 for name in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset_git+=(-u "$name")
 done
-sources=()
-if [ "$variant" = P ]; then
-  sources=(--setting-sources project,local)
-fi
-prompt=$(cat "$prompt_file")
 echo "run-case.sh: starting $client for $run" >&2
 set +e
-if [ "$client" = claude ]; then
-  (cd "$worktree" && env ${unset_git[@]+"${unset_git[@]}"} gtimeout -k 5 600 claude \
-    -p "$prompt" \
-    --permission-mode dontAsk --permission-prompts none \
-    --settings "$root/claude-settings.json" ${sources[@]+"${sources[@]}"} \
-    --output-format stream-json --verbose --max-turns "$turns" \
-    > "$out/$run.jsonl" 2> "$out/$run.stderr")
-else
-  (cd "$worktree" && env ${unset_git[@]+"${unset_git[@]}"} gtimeout -k 5 300 codex exec \
-    --sandbox read-only -c 'approval_policy="never"' --json \
-    --output-last-message "$out/$run-last.txt" \
-    "$prompt" \
-    > "$out/$run.jsonl" 2> "$out/$run.stderr")
-fi
+(cd "$worktree" && env ${unset_git[@]+"${unset_git[@]}"} gtimeout -k 5 "$limit" "${client_argv[@]}" \
+  > "$out/$run.jsonl" 2> "$out/$run.stderr")
 client_exit=$?
 set -e
 
@@ -168,6 +283,7 @@ echo "$client_exit" > "$out/$run.exit" || fail_after "the exit status could not 
 "$here/snapshot.sh" "$root" "$run-after" > /dev/null || fail_after "the after snapshot failed"
 index_state > "$out/$run-index-after" || fail_after "the index state could not be recorded"
 listener_lines > "$out/$run-listener-after" || fail_after "the listener count could not be recorded"
+mcp_lines > "$out/$run-mcp-after" || fail_after "the MCP marker count could not be recorded"
 diff_status=0
 diff "$out/snap-$run-before.txt" "$out/snap-$run-after.txt" > "$out/$run.diff" || diff_status=$?
 [ "$diff_status" -le 1 ] || fail_after "diff failed with status $diff_status"
