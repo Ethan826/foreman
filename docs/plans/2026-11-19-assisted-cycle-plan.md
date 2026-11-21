@@ -831,3 +831,22 @@ test's timeout, which it reproduced.
 Owner ruling (2026-11-20): the assisted-cycle file's four cycle tests get
 a named, provisional budget (as the production end-to-end tests have),
 assertions unchanged. One worker (`fix-focused`) corrects all four.
+
+`fix-focused` integrated, 274,172 tokens: item 1 (a failure to run a
+check or read a file keeps its own cause and the waiver; only a judgment
+is a refusal; the findings reader too), a test race fix (the
+status-findings test read the state tree before a fake client's output
+finished streaming into its raw file; 2 of 8 isolated runs failed at
+6d263c5, 8 of 8 passed after), item 2 (exits run on the recorded target
+whatever the configured layout says; `step-ended` opens only the log and
+lock), item 3 (configuration and binding decoded strictly; `utf8Text`
+removed) and item 4 (`cycleMillis = 60_000` for the four cycle tests; a
+50 ms budget failed all four with "Test timed out in 50ms"). On 96b526d:
+check (0 blocking, 48 notes), docs (no warnings) and the full suite
+twice with output kept (129 files, 1,524 tests, both passing).
+
+Open for the next review and the owner: a non-UTF-8 configuration fails
+with `FileNotUtf8` rather than `ConfigUndecodable`; a findings path that
+is a directory keeps the waiver (a read failure, not a refusal);
+`session open` now prints the check's own failure tag instead of
+`CommandRefused`.
