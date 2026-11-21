@@ -1075,3 +1075,44 @@ Open for the owner (from the rehearsal):
    (`cp -cR`; a symlink would change the tree); `session open` before
    `worktree create` fails with a bare `WorktreeCheckFailed`; the Codex
    desktop daemon is 0.171.0 against the CLI's 0.170.0 pin.
+
+## Profile and L3 review (2026-11-21)
+
+[The profile and L3 review](2026-11-21-profile-and-l3-review.md) of
+`95fd4e1..fa70235` holds L3 Path A for three P2 findings: C1's generated
+`check.sh` suppresses stderr and prints `outside-write: refused` for any
+error, so a missing target looks like a sandbox denial; the scorer
+passes C6 with an empty client stream, an after-snapshot holding only
+the root row, and a listener count that drops; and the C1 gate finds
+later attempts by their exit files, so a newer attempt that recorded
+evidence but no exit leaves an older PASS usable. It confirms that
+variant P runs production's argv and settings builders. The owner
+adopted it in full (2026-11-21):
+
+- C1 keeps the OS diagnostic so a sandbox denial is distinguishable
+  from a missing target; the scorer invalidates an empty stream, a
+  snapshot missing the fixture's layout and a dropped listener count;
+  the gate requires a current PASS for the newest attempt that began
+  recording evidence.
+- During the live trial the operator verifies the pinned client's
+  actual MCP inventory; an absent marker alone cannot tell exclusion
+  from a server that failed to start.
+- `test-scripts.sh` needs an absolute scratch base; the README states it
+  or the script enforces it at entry.
+- First cycle's operating procedure (answers the rehearsal's items 1 to
+  5): keep the current profile; run from a plain terminal without
+  inherited Claude Code session variables; the owner runs the checks
+  between handoffs; `--waive` only on a required, owner-approved launch;
+  finish each session with a reviewed commit or an owner-approved reset
+  before opening another.
+
+The coordinator corrected the remaining 2026-11-21 dates for the L03
+ruling and synchronized the checkpoint. One worker (`fix-l3-evidence`)
+corrects the gates.
+
+Open failure (2026-11-21, Codex's review run): `test/runtime/state-files.test.ts`,
+"writes every byte of a large binary file, and read returns them",
+exceeded its 5,000 ms default once while the offline L3 suite ran
+beside it (1,563 of 1,564); the serial rerun passed. Unchanged in the
+range. Earlier timing failures were resolved by a named provisional
+budget; this one awaits a ruling.

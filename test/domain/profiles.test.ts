@@ -1,7 +1,7 @@
 // The two fixed permission profiles (plan "Profiles, environment and
 // briefs", decision P4): the exact argv each builds from a brief, with no
 // bypass flag and no session reuse for either client. Claude's argv loads
-// no user settings and no MCP server (owner ruling of 2026-11-21).
+// no user settings and no MCP server (owner ruling of 2026-11-20).
 import { describe, expect, it } from "@effect/vitest"
 import { Clients } from "../../src/domain/clients.ts"
 import { claudeEditingArgv, codexReviewArgv } from "../../src/domain/profiles.ts"

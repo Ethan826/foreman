@@ -23,7 +23,7 @@ const Settings = Schema.fromJsonString(
   }),
 )
 
-/** The template's connector switch (owner ruling of 2026-11-21). */
+/** The template's connector switch (owner ruling of 2026-11-20). */
 const ConnectorSwitch = Schema.fromJsonString(Schema.Struct({ disableClaudeAiConnectors: Schema.Boolean }))
 
 const isFileRule = (rule: string) => /^(Read|Edit)\(/.test(rule)

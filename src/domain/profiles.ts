@@ -33,7 +33,7 @@ export interface ReviewProfileInput {
  * lists and the sandbox come from the settings file. No bypass flag, no
  * `--resume`, no `--continue`.
  *
- * The owner's ruling of 2026-11-21 (L03) settles what else loads.
+ * The owner's ruling of 2026-11-20 (L03) settles what else loads.
  * `--setting-sources project,local` leaves out the user's settings,
  * hooks, `~/.claude/CLAUDE.md` and skills; the `--settings` file and managed policy load
  * whatever the flag says. `--strict-mcp-config` with no `--mcp-config`

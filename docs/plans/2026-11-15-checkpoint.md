@@ -77,29 +77,23 @@ slice does not authorize it.
   change (c0d0952) and the L3 gate fixes (b5c7e91) are integrated, and
   an offline rehearsal of the first cycle on foreman ran with stand-in
   clients (findings and the draft task are at the end of the plan).
-- Next: Codex reviews 95fd4e1..HEAD; the owner rules on the rehearsal's
-  findings; then the L3 Path A live run (separate authorization),
-  landing (a fast-forward of `main`) and push, and the first real cycle
-  on foreman (decision P10).
-- Open owner decisions, each recorded at the end of the plan:
-  - L03: whether foreman's Claude sessions load the owner's user-level
-    settings and hooks. The read-only inventory is in the git-ignored
-    `.build/l03/inventory.md` (local only). The L3 runbook now tests
-    both variants (U inherited, P `--setting-sources project,local`).
-  - Found by the inventory, outside L03: claude.ai connectors (Gmail,
-    Docs, Calendar, Drive) and a target repository's `.mcp.json` servers
-    and project hooks reach a session under both variants; the profile
-    should switch connectors off and neutralize project MCP servers,
-    which is a code change needing the owner's OK.
-  - From the last fixes: attribute-check read failures still refuse
-    (B11c) against R01's rule; a damaged `.git` file is a failure, not a
-    judgment; `status` still needs HOME when `ledgerDir` is omitted.
-  - From the L3 package: run both variants or only the ruled one; the
-    changed odd-path case; `test-scripts.sh` now depends on `bun` and
-    `src/`.
-- The L3 subset is prepared, not run (`research/live/l3-subset/`). It
-  needs the L03 ruling and a separate authorization (about 14 short
-  client runs).
+- 2026-11-21: Codex reviewed 95fd4e1..fa70235 and holds L3 Path A for
+  three evidence-gate findings (C1's diagnostic, incomplete evidence
+  scoring PASS, an incomplete C1 retry leaving an older PASS usable);
+  the owner adopted it, including the first cycle's operating procedure
+  (recorded at the end of the plan). One worker corrects the gates.
+- Ruled, no longer open: L03 (P: user settings and hooks excluded),
+  connectors off and project MCP servers excluded (`--strict-mcp-config`
+  plus `disableClaudeAiConnectors`), L3 by Path A only (P and X, eight
+  runs) after the profile change, attribute read failures keep the
+  waiver, a damaged gitfile stays `GitCommandFailed`, `status` works
+  without HOME.
+- Open: Codex's review of the gate corrections; the L3 Path A live run
+  (separate authorization); landing (a fast-forward of `main`) and
+  push; then the first real cycle on foreman (decision P10) with
+  [the dogfood-1 task](2026-11-21-dogfood-1-task.md). The state-file
+  large-binary test timed out once under concurrent load (recorded at
+  the end of the plan).
 - The rest of B11 (the protected digest, the commit procedure and the
   review worktree) and B12 to B18 remain unauthorized. L4 waits on B13 to
   B15. Each push needs the owner's OK.
