@@ -7,7 +7,7 @@
 // one. All of this runs before any store is opened, any directory made or
 // any git command run. The owner's exits settle theirs with `exitTarget`,
 // which consults the binding before the configured layout.
-import { Effect, Option, String } from "effect"
+import { Effect, Option, Result, String } from "effect"
 import type { CanonicalLayout } from "../domain/layout.ts"
 import type { TargetBinding } from "../domain/target.ts"
 import { decodeForemanConfig, type ForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
@@ -51,17 +51,21 @@ export const decodedConfiguration = (
   environment: Readonly<Record<string, string | undefined>>,
 ) =>
   Effect.gen(function* () {
-    const text = yield* strictText(configPath, yield* stateFiles.read(configPath))
-    const config = yield* Effect.fromResult(decodeForemanConfig(text))
-    const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
-    const layout: CanonicalLayout = {
-      stateDir: config.stateDir,
-      ownerCheckout: config.ownerCheckout,
-      supervisor: config.supervisor.path,
-      ledgerDir,
-    }
-    return { config, layout }
+    const config = yield* readConfiguration(configPath)
+    return { config, layout: yield* Effect.fromResult(layoutOf(config, environment)) }
   })
+
+/**
+ * Reads and decodes the configuration at `configPath`, leaving the
+ * ledger's directory unsettled, so nothing here needs `HOME` (focused
+ * re-review finding 3). Reads only. Fails with `FileNotUtf8` or
+ * `ConfigUndecodable`, among others.
+ */
+export const readConfiguration = (configPath: string) =>
+  Effect.flatMap(
+    Effect.flatMap(stateFiles.read(configPath), (bytes) => strictText(configPath, bytes)),
+    (text) => Effect.fromResult(decodeForemanConfig(text)),
+  )
 
 /** The target `config` names, with the canonical paths of its resolved layout `canonical`. */
 export const targetOf = (config: ForemanConfig, canonical: CanonicalLayout): TargetBinding => ({
@@ -108,7 +112,10 @@ export const settledTarget = (
  * `configPath` (plan "Commands and their prerequisites", AC1; focused
  * review finding 2). The recorded target when a binding is recorded,
  * whatever the configured layout says, as `status` runs; otherwise the
- * configured target, whose layout is then checked. The layout of the
+ * configured target, whose layout is then checked. The binding is read
+ * before the ledger's directory is settled, so with a binding recorded
+ * the default `<HOME>/.foreman` is never resolved and `HOME` is not
+ * needed (focused re-review finding 3). The layout of the
  * target in force is checked with the state directory, so an exit never
  * writes through a refused layout. Records nothing. Fails with
  * `ConfigUndecodable`, `TargetBindingUnreadable` or `LayoutRefused`,
@@ -116,12 +123,33 @@ export const settledTarget = (
  */
 export const exitTarget = (configPath: string, environment: Readonly<Record<string, string | undefined>>) =>
   Effect.gen(function* () {
-    const { config, layout } = yield* decodedConfiguration(configPath, environment)
+    const config = yield* readConfiguration(configPath)
     const recorded = yield* recordedTarget(config.stateDir)
     const target = yield* Option.match(recorded, {
       onSome: Effect.succeed,
-      onNone: () => Effect.map(checkedLayout(layout), (canonical) => targetOf(config, canonical)),
+      onNone: () => unboundExitTarget(config, environment),
     })
     yield* checkedTargetLayout(config.stateDir, target)
     return { config, target } satisfies SettledTarget
   })
+
+/**
+ * The configuration's layout as written, the ledger's directory settled:
+ * the configured `ledgerDir`, or the default under `environment`'s `HOME`.
+ */
+const layoutOf = (config: ForemanConfig, environment: Readonly<Record<string, string | undefined>>) =>
+  Result.map(
+    ledgerDirOf(config, Option.fromNullishOr(environment.HOME)),
+    (ledgerDir): CanonicalLayout => ({
+      stateDir: config.stateDir,
+      ownerCheckout: config.ownerCheckout,
+      supervisor: config.supervisor.path,
+      ledgerDir,
+    }),
+  )
+
+/** The configured target of an exit with no binding: only here is the default ledger directory needed. */
+const unboundExitTarget = (config: ForemanConfig, environment: Readonly<Record<string, string | undefined>>) =>
+  Effect.flatMap(Effect.fromResult(layoutOf(config, environment)), (layout) =>
+    Effect.map(checkedLayout(layout), (canonical) => targetOf(config, canonical)),
+  )
