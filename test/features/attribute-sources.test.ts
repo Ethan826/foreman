@@ -1,10 +1,11 @@
 import { describe, expect, it } from "@effect/vitest"
-import { Option, Result } from "effect"
+import { Match, Option, Result } from "effect"
 import type { AttributeReading, AttributeRefusal, FileReading, GitResult, TreeEntry, TreeReading } from "../../src/domain/attributes.ts"
 import {
   AttributeRefusalReasons,
   AttributeSources,
   AttributeSourcesRefused,
+  AttributeSourcesUnread,
   FileAbsent,
   FileFound,
   FileKinds,
@@ -57,6 +58,17 @@ const refusal = (
 
 const refused = (...refusals: [AttributeRefusal, ...Array<AttributeRefusal>]) =>
   Result.fail(new AttributeSourcesRefused({ revision, refusals }))
+
+/** The check stopped only because reading failed (owner ruling on B11c and R01). */
+const unread = (...failures: [AttributeRefusal, ...Array<AttributeRefusal>]) =>
+  Result.fail(new AttributeSourcesUnread({ revision, failures }))
+
+/** What a stop lists: a refusal's refusals, or an unread check's failed reads. */
+const listedOf = (stop: AttributeSourcesRefused | AttributeSourcesUnread) =>
+  Match.valueTags(stop, {
+    AttributeSourcesRefused: (refused) => refused.refusals,
+    AttributeSourcesUnread: (unread) => unread.failures,
+  })
 
 const treeContent = (path: string, line: number, detail: string) =>
   refusal(AttributeSources.Tree, AttributeRefusalReasons.Content, Option.some(path), Option.some(line), detail)
@@ -139,7 +151,7 @@ describe("checkAttributeSources", () => {
     )
   })
 
-  it("refuses a regular blob whose cat-file exited non-zero, or that was not read", () => {
+  it("stops on a regular blob whose cat-file exited non-zero, or that was not read, as unread", () => {
     const files = [
       { entry: entry(".gitattributes"), blob: Option.some(exited(128, "", "fatal: bad object\n")) },
       { entry: entry("a/.gitattributes"), blob: Option.none() },
@@ -147,22 +159,22 @@ describe("checkAttributeSources", () => {
     const failed = (path: string, detail: string) =>
       refusal(AttributeSources.Tree, AttributeRefusalReasons.ReadFailed, Option.some(path), Option.none(), detail)
     expect(checkWithNoAllowance(reading({ tree: new TreeListed({ files }) }))).toEqual(
-      refused(failed(".gitattributes", "exit 128: fatal: bad object\n"), failed("a/.gitattributes", "not read")),
+      unread(failed(".gitattributes", "exit 128: fatal: bad object\n"), failed("a/.gitattributes", "not read")),
     )
   })
 
-  it("refuses a tree that was not listed or did not decode", () => {
+  it("stops on a tree that was not listed or did not decode, as unread", () => {
     const failed = (detail: string) =>
       refusal(AttributeSources.Tree, AttributeRefusalReasons.ReadFailed, Option.none(), Option.none(), detail)
     expect(checkWithNoAllowance(reading({ tree: new TreeNotListed({ exitCode: 128, stderr: "fatal: x\n" }) }))).toEqual(
-      refused(failed("exit 128: fatal: x\n")),
+      unread(failed("exit 128: fatal: x\n")),
     )
     expect(checkWithNoAllowance(reading({ tree: new TreeUndecodable({ reason: "bad record" }) }))).toEqual(
-      refused(failed("bad record")),
+      unread(failed("bad record")),
     )
   })
 
-  it("refuses info/attributes with any content, of another kind, or unreadable", () => {
+  it("refuses info/attributes with any content or of another kind, and stops on an unreadable one as unread", () => {
     const info = (detail: string, reason: AttributeRefusal["reason"]) =>
       refusal(AttributeSources.InfoAttributes, reason, Option.some(infoPath), Option.none(), detail)
     const cases: ReadonlyArray<readonly [FileReading, AttributeRefusal]> = [
@@ -170,28 +182,30 @@ describe("checkAttributeSources", () => {
       [new FileFound({ kind: FileKinds.File, content: "\n" }), info("\n", AttributeRefusalReasons.Content)],
       [new FileFound({ kind: FileKinds.Directory, content: "" }), info(FileKinds.Directory, AttributeRefusalReasons.NotRegular)],
       [new FileFound({ kind: FileKinds.SymbolicLink, content: "" }), info(FileKinds.SymbolicLink, AttributeRefusalReasons.NotRegular)],
-      [new FileUnreadable({ reason: "EACCES" }), info("EACCES", AttributeRefusalReasons.ReadFailed)],
     ]
     cases.forEach(([found, expected]) => {
       expect(checkWithNoAllowance(reading({ info: found }))).toEqual(refused(expected))
     })
+    expect(checkWithNoAllowance(reading({ info: new FileUnreadable({ reason: "EACCES" }) }))).toEqual(
+      unread(info("EACCES", AttributeRefusalReasons.ReadFailed)),
+    )
   })
 
-  it("refuses a configured core.attributesFile, and any config exit other than 0 or 1", () => {
+  it("refuses a configured core.attributesFile, and stops on any config exit other than 0 or 1 as unread", () => {
     const setting = (reason: AttributeRefusal["reason"], detail: string) =>
       refusal(AttributeSources.AttributesFile, reason, Option.none(), Option.none(), detail)
     expect(checkWithNoAllowance(reading({ attributesFile: exited(0, "/x/attributes\n") }))).toEqual(
       refused(setting(AttributeRefusalReasons.Configured, "/x/attributes\n")),
     )
     expect(checkWithNoAllowance(reading({ attributesFile: exited(128, "", "fatal: bad config\n") }))).toEqual(
-      refused(setting(AttributeRefusalReasons.ReadFailed, "exit 128: fatal: bad config\n")),
+      unread(setting(AttributeRefusalReasons.ReadFailed, "exit 128: fatal: bad config\n")),
     )
     expect(checkWithNoAllowance(reading({ attributesFile: exited(2) }))).toEqual(
-      refused(setting(AttributeRefusalReasons.ReadFailed, "exit 2: ")),
+      unread(setting(AttributeRefusalReasons.ReadFailed, "exit 2: ")),
     )
   })
 
-  it("refuses any conditional include listed (exit 0), and any listing exit other than 0 or 1", () => {
+  it("refuses any conditional include listed (exit 0), and stops on any listing exit other than 0 or 1 as unread", () => {
     const listing = (reason: AttributeRefusal["reason"], detail: string) =>
       refusal(AttributeSources.ConditionalInclude, reason, Option.none(), Option.none(), detail)
     const listed = "includeif.onbranch:foreman/**.path /x/selected\n"
@@ -199,10 +213,10 @@ describe("checkAttributeSources", () => {
       refused(listing(AttributeRefusalReasons.Configured, listed)),
     )
     expect(checkWithNoAllowance(reading({ conditionalIncludes: exited(128, "", "fatal: bad config\n") }))).toEqual(
-      refused(listing(AttributeRefusalReasons.ReadFailed, "exit 128: fatal: bad config\n")),
+      unread(listing(AttributeRefusalReasons.ReadFailed, "exit 128: fatal: bad config\n")),
     )
     expect(checkWithNoAllowance(reading({ conditionalIncludes: exited(2) }))).toEqual(
-      refused(listing(AttributeRefusalReasons.ReadFailed, "exit 2: ")),
+      unread(listing(AttributeRefusalReasons.ReadFailed, "exit 2: ")),
     )
   })
 
@@ -211,13 +225,37 @@ describe("checkAttributeSources", () => {
     const info = new FileFound({ kind: FileKinds.File, content: "x" })
     const conditionalIncludes = exited(0, "includeif.gitdir:/z.path /w\n")
     const result = checkWithNoAllowance(reading({ tree, info, attributesFile: exited(0, "/y\n"), conditionalIncludes }))
-    expect(Result.map(Result.flip(result), (failure) => failure.refusals.map((each) => each.source))).toEqual(
+    expect(Result.map(Result.flip(result), (failure) => listedOf(failure).map((each) => each.source))).toEqual(
       Result.succeed([
         AttributeSources.Tree,
         AttributeSources.InfoAttributes,
         AttributeSources.AttributesFile,
         AttributeSources.ConditionalInclude,
       ]),
+    )
+  })
+
+  it("refuses, keeping every read diagnostic, when a source that was read is refused beside one that was not", () => {
+    const tree = new TreeListed({ files: [blobFile(".gitattributes", "* -text\n")] })
+    const info = new FileUnreadable({ reason: "EACCES" })
+    const failedSetting = exited(128, "", "fatal: bad config\n")
+    expect(checkWithNoAllowance(reading({ tree, info, attributesFile: failedSetting }))).toEqual(
+      refused(
+        treeContent(".gitattributes", 1, "* -text"),
+        refusal(AttributeSources.InfoAttributes, AttributeRefusalReasons.ReadFailed, Option.some(infoPath), Option.none(), "EACCES"),
+        refusal(AttributeSources.AttributesFile, AttributeRefusalReasons.ReadFailed, Option.none(), Option.none(), "exit 128: fatal: bad config\n"),
+      ),
+    )
+  })
+
+  it("refuses a source of another kind beside a failed read", () => {
+    const tree = new TreeNotListed({ exitCode: 128, stderr: "fatal: x\n" })
+    const info = new FileFound({ kind: FileKinds.Directory, content: "" })
+    expect(checkWithNoAllowance(reading({ tree, info }))).toEqual(
+      refused(
+        refusal(AttributeSources.Tree, AttributeRefusalReasons.ReadFailed, Option.none(), Option.none(), "exit 128: fatal: x\n"),
+        refusal(AttributeSources.InfoAttributes, AttributeRefusalReasons.NotRegular, Option.some(infoPath), Option.none(), FileKinds.Directory),
+      ),
     )
   })
 })

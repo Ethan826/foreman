@@ -1,8 +1,9 @@
 // The attribute check's read failures, and the startup check's attribute
 // condition (plan B11c, owner rulings 3 and 4 of 2026-11-19). A read that
-// fails is a refusal and never a pass: an unreadable info/attributes, a
-// `cat-file` that exits non-zero and a `git config` that exits other than
-// 0 or 1. The last two are made by a process call that passes every other
+// fails stops creation and is never a pass: an unreadable info/attributes,
+// a `cat-file` that exits non-zero and a `git config` that exits other
+// than 0 or 1. With nothing else refused it stops as unread rather than
+// refused (owner ruling on B11c and R01, 2026-11-20). The last two are made by a process call that passes every other
 // command to the real one, through `worktreeProgramWith`'s clean runner.
 // The startup check runs against the recorded revision and reads no
 // working tree's `.gitattributes`, as git under the clean environment
@@ -22,7 +23,7 @@ import { worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type StartGit } from "../../src/runtime/git.ts"
 import { emptyHome, git, withRepo } from "../runtime/git-repo.ts"
 import { createWorktree, identifyWorktree, request } from "./git-hazard-fixtures.ts"
-import { commitAttributes, kinds, leftNothing, refusalsOf } from "./attribute-fixtures.ts"
+import { commitAttributes, kinds, leftNothing, readFailuresOf, refusalsOf } from "./attribute-fixtures.ts"
 
 /** The real process call, except that a command starting with `verb` exits `exitCode`. */
 const exitingFor =
@@ -44,7 +45,7 @@ const refusesUnreadableInfo = (dir: string, owner: string) =>
     writeFileSync(path, "")
     chmodSync(path, unreadableMode)
     const refusals = yield* Effect.ensuring(
-      refusalsOf(createWorktree(request(owner, dir))),
+      readFailuresOf(createWorktree(request(owner, dir))),
       Effect.sync(() => {
         chmodSync(path, readableMode)
       }),
@@ -72,20 +73,20 @@ const refusesInfoSymlink = (dir: string, owner: string) =>
     yield* leftNothing(dir, owner)
   })
 
-/** Creation over a process call where `verb` exits `exitCode`, refused with `expected`. */
+/** Creation over a process call where `verb` exits `exitCode`, stopped as unread with `expected`. */
 const refusedWhenExiting =
   (verb: string, exitCode: number, expected: ReadonlyArray<readonly [string, string, string]>) => () =>
     withRepo((dir, owner) =>
       Effect.gen(function* () {
         yield* commitAttributes(owner, ".gitattributes", "# only a comment\n")
         const program = worktreeProgramWith(exitingFor(verb, exitCode), noAttributeAllowance)(emptyHome)
-        const refusals = yield* refusalsOf(program.createWorktree(request(owner, dir)))
-        expect(refusals.map((each) => [each.source, each.reason, each.detail])).toEqual(expected)
+        const failures = yield* readFailuresOf(program.createWorktree(request(owner, dir)))
+        expect(failures.map((each) => [each.source, each.reason, each.detail])).toEqual(expected)
         yield* leftNothing(dir, owner)
       }),
     )
 
-describe("a read failure is a refusal", () => {
+describe("a read failure stops creation as unread, and a source of another kind is refused", () => {
   it.effect("an unreadable info/attributes", () => withRepo(refusesUnreadableInfo))
   it.effect("an info/attributes that is a directory", () => withRepo(refusesInfoDirectory))
   it.effect("an info/attributes that is a symbolic link to an empty file", () => withRepo(refusesInfoSymlink))

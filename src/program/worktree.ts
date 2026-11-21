@@ -59,8 +59,10 @@ export interface WorktreeProgram {
    * before any git command when the path is not absolute; with
    * `AttributeSourcesRefused` when the base revision or the repository has
    * an attribute source that option A refuses, or the config holds any
-   * conditional include (option R; plan B11c), checked in the owner's
-   * checkout before the branch and path prechecks; with `WorktreeBranchExists` or
+   * conditional include (option R; plan B11c), and with
+   * `AttributeSourcesUnread` when a source could not be read and none that
+   * was read is refused, both checked in the owner's checkout before the
+   * branch and path prechecks; with `WorktreeBranchExists` or
    * `WorktreePathExists` before running `worktree add`; with `PathUnreadable` when `stat` cannot inspect the
    * path; with `WorktreeNotAsCreated` when the new worktree is not at the
    * requested path on its branch; and with `GitCommandFailed` (args, exit
@@ -81,7 +83,8 @@ export interface WorktreeProgram {
    * `config.worktree` applies, with git pinned to the recorded `gitDir`,
    * `path` and `commonDir` (plan B11d), against the recorded `base` (plan B11c) and
    * fails with `AttributeSourcesRefused`, including for any conditional
-   * include (option R); no working tree's `.gitattributes` is read. Fails with
+   * include (option R), or with `AttributeSourcesUnread` when only a read
+   * failed; no working tree's `.gitattributes` is read. Fails with
    * `PathUnreadable` when the recorded path cannot be inspected, with
    * `GitCommandFailed` when git could not complete a command, an identity
    * read included (any exit but its no-repository report), and with

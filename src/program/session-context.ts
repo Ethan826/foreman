@@ -4,7 +4,7 @@
 // in production.ts; a test passes its own, such as a fake `StartClient`.
 import { Schema } from "effect"
 import type { Effect, Option, Scope } from "effect"
-import type { AttributeSourcesRefused } from "../domain/attributes.ts"
+import type { AttributeSourcesRefused, AttributeSourcesUnread } from "../domain/attributes.ts"
 import type { Client } from "../domain/clients.ts"
 import type { MonoStamp } from "../domain/clock.ts"
 import type { LockHeld, ProjectLog, ProjectLogError, WorktreeCreated } from "../domain/events.ts"
@@ -41,11 +41,14 @@ export class WorktreeUnready extends Schema.TaggedError<WorktreeUnready>()("Work
 
 /**
  * The startup worktree check could not run: a git command failed or
- * printed what does not decode, or the recorded path could not be
- * inspected. These are failures, never a judgment of the worktree, so a
- * launch stopped by one keeps every armed waiver (review item R01).
+ * printed what does not decode, the recorded path could not be
+ * inspected, or an attribute source could not be read while every source
+ * that was read passed (`AttributeSourcesUnread`). These are failures,
+ * never a judgment of the worktree, so a launch stopped by one keeps
+ * every armed waiver (review item R01; owner ruling on B11c and R01,
+ * 2026-11-20).
  */
-export type WorktreeCheckUnrun = GitCommandFailed | GitOutputUndecodable | PathUnreadable
+export type WorktreeCheckUnrun = AttributeSourcesUnread | GitCommandFailed | GitOutputUndecodable | PathUnreadable
 
 /**
  * Runs the startup worktree check on the recorded supervisor worktree and
@@ -75,7 +78,7 @@ export type SnapshotFailure =
   | GitCommandFailed
 
 /** Why the handoff's attribute check or snapshot stopped a command. */
-export type HandoffGitFailure = AttributeSourcesRefused | SnapshotFailure
+export type HandoffGitFailure = AttributeSourcesRefused | AttributeSourcesUnread | SnapshotFailure
 
 /**
  * The git work of a handoff (plan "Write protocol", step 2; "Snapshot
@@ -85,8 +88,14 @@ export type HandoffGitFailure = AttributeSourcesRefused | SnapshotFailure
  * nothing is staged before them.
  */
 export interface HandoffGit {
-  /** The attribute-source check (plan B11c) again, against `base`. */
-  readonly checkAttributes: (base: Revision) => Effect.Effect<void, AttributeSourcesRefused | GitCommandFailed>
+  /**
+   * The attribute-source check (plan B11c) again, against `base`: refused
+   * when a source that was read is refused, unread when the only reason
+   * to stop is a failed read.
+   */
+  readonly checkAttributes: (
+    base: Revision,
+  ) => Effect.Effect<void, AttributeSourcesRefused | AttributeSourcesUnread | GitCommandFailed>
   /** The snapshot from `base`: its tree when every entry passes the raw checks. */
   readonly snapshot: (base: Revision) => Effect.Effect<Revision, SnapshotFailure>
   /** The raw run of `git diff-tree -r -z --name-status <base> <tree>`. */

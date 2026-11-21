@@ -5,7 +5,7 @@
 import { expect } from "@effect/vitest"
 import { Effect, Schema } from "effect"
 import { existsSync, writeFileSync } from "node:fs"
-import { AttributeSourcesRefused, type AttributeRefusal } from "../../src/domain/attributes.ts"
+import { AttributeSourcesRefused, AttributeSourcesUnread, type AttributeRefusal } from "../../src/domain/attributes.ts"
 import { git } from "../runtime/git-repo.ts"
 import { commitFile, markerScript } from "./git-hazard-fixtures.ts"
 
@@ -48,6 +48,17 @@ export const refusalsOf = <A, E>(effect: Effect.Effect<A, E>) =>
   )
 
 const isRefused = Schema.is(AttributeSourcesRefused)
+
+/**
+ * The failed reads of an effect that must fail with
+ * `AttributeSourcesUnread`; a success or any other failure fails the test.
+ */
+export const readFailuresOf = <A, E>(effect: Effect.Effect<A, E>) =>
+  Effect.flatMap(Effect.flip(effect), (error) =>
+    isUnread(error) ? Effect.succeed(error.failures) : Effect.fail(error),
+  )
+
+const isUnread = Schema.is(AttributeSourcesUnread)
 
 /** The source and reason of each refusal, which most cases check. */
 export const kinds = (refusals: ReadonlyArray<AttributeRefusal>) =>

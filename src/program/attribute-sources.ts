@@ -43,10 +43,13 @@ export interface AttributeCheckSite {
  * The attribute check over an injected git runner and root
  * `.gitattributes` allowance: succeeds with
  * `revision` when Features passes the reading under `allowance`, and fails with
- * `AttributeSourcesRefused` listing every refusal otherwise. A git run's
- * non-zero exit and an undecodable listing are refusals; it fails with
- * `GitCommandFailed` only when git could not start or printed bytes that
- * are not UTF-8 (review finding B17).
+ * `AttributeSourcesRefused` listing every refusal when a source that was
+ * read is refused. A git run's non-zero exit, an undecodable listing and
+ * an unreadable `info/attributes` are failed reads: with nothing read
+ * refused, it fails with `AttributeSourcesUnread` listing them (owner
+ * ruling on B11c and R01, 2026-11-20). It fails with `GitCommandFailed`
+ * only when git could not start or printed bytes that are not UTF-8
+ * (review finding B17).
  *
  * Stated dependency, not checked here: the check does not read
  * `$HOME/.config/git/attributes`, which git keeps in force under the

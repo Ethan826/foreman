@@ -14,7 +14,7 @@
 // out, so a new failure cannot slip past the rule unclassified.
 import { Array as Arr, type Cause, Effect, Match, Option } from "effect"
 import { constant } from "effect/Function"
-import type { AttributeSourcesRefused } from "../domain/attributes.ts"
+import type { AttributeSourcesRefused, AttributeSourcesUnread } from "../domain/attributes.ts"
 import { type PositionMoved, type ProjectLogError, WaiverExpired } from "../domain/events.ts"
 import type { WaiverId } from "../domain/ids.ts"
 import type { GrantSettled, LedgerBusy, LedgerError } from "../domain/ledger.ts"
@@ -50,6 +50,7 @@ import type {
 /** Every typed failure a launch attempt (`implement`, `review`, `correct`) may stop with under the lock. */
 export type AttemptStop =
   | AttributeSourcesRefused
+  | AttributeSourcesUnread
   | ChangedPathsUnread
   | ClientStartFailed
   | CommandRefused
@@ -92,10 +93,14 @@ const failure = constant(false)
  * refused `--waive`, a lost race at batch I, a missing or changed
  * recorded file, a file that is not UTF-8, a missing or undecodable
  * findings file, an unsafe profile path, refused attribute sources and
- * the snapshot's refusals. A failure is a store, file, git command or
- * process that did not do its work, after which a retry may succeed with
- * the same consent: a file read that failed, git output that does not
- * decode and a path `stat` could not inspect among them. Callers keep a
+ * the snapshot's refusals. Attribute sources count as refused when any
+ * source that was read is refused, even beside one that could not be
+ * read. A failure is a store, file, git command or process that did not
+ * do its work, after which a retry may succeed with the same consent: a
+ * file read that failed, git output that does not decode, a path `stat`
+ * could not inspect and attribute sources that could not be read while
+ * every one read passed (`AttributeSourcesUnread`; owner ruling on B11c
+ * and R01, 2026-11-20) among them. Callers keep a
  * failure's own tag and never turn it into a refusal's (focused review
  * of R01). `NoSuchElementError` arises only when state the rules
  * required is missing, which is a fault, not a decision.
@@ -105,6 +110,7 @@ const failure = constant(false)
 export const isRefusal: (stop: AttemptStop) => boolean = Match.type<AttemptStop>().pipe(
   Match.tagsExhaustive({
     AttributeSourcesRefused: refusal,
+    AttributeSourcesUnread: failure,
     ChangedPathsUnread: failure,
     ClientStartFailed: failure,
     CommandRefused: refusal,

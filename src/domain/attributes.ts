@@ -7,7 +7,9 @@
 // blank and comment lines, `<commonDir>/info/attributes` must be absent or
 // empty, the repository may not set `core.attributesFile`, and its config
 // may hold no conditional include (option R of 2026-11-19). A read
-// failure is a refusal (ruling 4). A per-target allowance may permit exact
+// failure stops the operation and is never a pass (ruling 4); when it is
+// the only reason to stop, it is `AttributeSourcesUnread`, not a refusal
+// (owner ruling on B11c and R01, 2026-11-20). A per-target allowance may permit exact
 // lines in the root `.gitattributes` only (owner decision M09, option a).
 import { Record, Schema } from "effect"
 import { Revision } from "./ids.ts"
@@ -235,12 +237,30 @@ export type AttributeRefusal = typeof AttributeRefusal.Type
 
 /**
  * The revision or repository has an attribute source that option A or
- * option R refuses (plan B11c). `refusals` lists every one, in source
- * order: the tree in listing and line order, then `info/attributes`, then
- * `core.attributesFile`, then the conditional includes. Creation refuses
- * before `worktree add`; the startup check stops `run`.
+ * option R refuses (plan B11c): at least one source was read and holds
+ * what the rules forbid, so this is a judgment. `refusals` lists every
+ * refusal, in source order: the tree in listing and line order, then
+ * `info/attributes`, then `core.attributesFile`, then the conditional
+ * includes. A source that could not be read is listed too, with reason
+ * `read-failed`, so its diagnostic is kept. Creation refuses before
+ * `worktree add`; the startup check stops `run`. A launch stopped by it
+ * expires every armed waiver (owner ruling on B11c and R01, 2026-11-20).
  */
 export class AttributeSourcesRefused extends Schema.TaggedError<AttributeSourcesRefused>()(
   "AttributeSourcesRefused",
   { revision: Revision, refusals: Schema.NonEmptyArray(AttributeRefusal) },
+) {}
+
+/**
+ * The attribute check could not read one or more sources, and every
+ * source it did read passed (owner ruling on B11c and R01, 2026-11-20).
+ * It still stops the operation, since an unread source is never a pass
+ * (ruling 4), but nothing was judged: `failures` lists each failed read,
+ * every one with reason `read-failed` and its diagnostic as `detail`, in
+ * the source order of {@link AttributeSourcesRefused}. A launch stopped by
+ * it keeps every armed waiver.
+ */
+export class AttributeSourcesUnread extends Schema.TaggedError<AttributeSourcesUnread>()(
+  "AttributeSourcesUnread",
+  { revision: Revision, failures: Schema.NonEmptyArray(AttributeRefusal) },
 ) {}

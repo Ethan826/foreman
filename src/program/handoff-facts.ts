@@ -70,7 +70,8 @@ export const presumedOnReviewedTree = (state: SessionState): Option.Option<Snaps
  * and nested `.gitattributes` blobs are read with `git cat-file` and
  * judged from their contents, no candidate filter runs, and a refusal
  * stops the command with `AttributeSourcesRefused` before any client
- * gets the candidate.
+ * gets the candidate. A failed read with nothing read refused stops it
+ * with `AttributeSourcesUnread` instead (owner ruling on B11c and R01).
  */
 export const takeSnapshot = (context: SessionContext, session: OpenSession) =>
   Effect.gen(function* () {

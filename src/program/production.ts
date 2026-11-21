@@ -157,8 +157,10 @@ export interface StartupGit {
  * A judgment that the worktree is unready (`WorktreeCheckFailed`,
  * `WorktreeRecordInvalid`, `AttributeSourcesRefused`) becomes
  * `WorktreeUnready`; a check that could not run keeps its own failure
- * (`WorktreeCheckUnrun`, review item R01), and a HEAD that does not
- * decode is `GitOutputUndecodable`.
+ * (`WorktreeCheckUnrun`, review item R01), `AttributeSourcesUnread` among
+ * them, since a failed read alone judges nothing (owner ruling on B11c and
+ * R01, 2026-11-20), and a HEAD that does not decode is
+ * `GitOutputUndecodable`.
  */
 export const checkedHead = (git: StartupGit, recorded: WorktreeCreated, base: Option.Option<Revision>) =>
   Effect.catchTags(

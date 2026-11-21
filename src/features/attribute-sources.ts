@@ -5,8 +5,11 @@
 // blob of blank and comment lines, `<commonDir>/info/attributes` only when
 // absent or empty, `core.attributesFile` only when unset, and the config
 // only when it lists no conditional include (option R). Every other
-// reading, including a failed read, is a refusal and never a pass (ruling
-// 4). The one exception is the per-target allowance of owner decision
+// reading is a refusal, and a failed read is never a pass (ruling 4). A
+// failed read alone stops the check as unread rather than refused, so a
+// launch it stops keeps its waiver; any refusal of a source that was read
+// makes the whole result a refusal, which lists the failed reads too
+// (owner ruling on B11c and R01, 2026-11-20). The one exception is the per-target allowance of owner decision
 // M09 (option a): a line of the root `.gitattributes` passes when it equals
 // an allowed line once its terminator is removed. Pure and total; Program
 // reads the sources through Runtime.
@@ -27,6 +30,7 @@ import {
   AttributeRefusalReasons,
   AttributeSources,
   AttributeSourcesRefused,
+  AttributeSourcesUnread,
   FileKinds,
   TreeEntryTypes,
 } from "../domain/attributes.ts"
@@ -79,7 +83,10 @@ export const isRegularBlob = (entry: TreeEntry): boolean =>
  * is a regular blob of blank and comment lines, `info/attributes` is
  * absent or an empty regular file, `core.attributesFile` is unset (exit
  * 1), and the `includeif.` listing matched nothing (exit 1). Otherwise
- * fails with every refusal, in source order. A blank
+ * fails, listing every refusal in source order: with
+ * `AttributeSourcesRefused` when any source that was read is refused, and
+ * with `AttributeSourcesUnread` when every refusal is a failed read
+ * (owner ruling on B11c and R01, 2026-11-20). A blank
  * line holds only spaces and tabs and at most a final CR; a comment line
  * begins with `#` at its first character, so an indented `#` is refused.
  * A line of the root `.gitattributes` (path exactly `.gitattributes`)
@@ -90,12 +97,23 @@ export const isRegularBlob = (entry: TreeEntry): boolean =>
 export const checkAttributeSources = (
   reading: AttributeReading,
   allowance: AttributeAllowance,
-): Result.Result<Revision, AttributeSourcesRefused> =>
+): Result.Result<Revision, AttributeSourcesRefused | AttributeSourcesUnread> =>
   Arr.match(refusalsOf(reading, allowance), {
     onEmpty: () => Result.succeed(reading.revision),
-    onNonEmpty: (refusals) =>
-      Result.fail(new AttributeSourcesRefused({ revision: reading.revision, refusals })),
+    onNonEmpty: (refusals) => Result.fail(stopOf(reading.revision, refusals)),
   })
+
+/** A refusal when any refused source was read; unread when every refusal is a failed read. */
+const stopOf = (
+  revision: Revision,
+  refusals: Arr.NonEmptyReadonlyArray<AttributeRefusal>,
+): AttributeSourcesRefused | AttributeSourcesUnread =>
+  Arr.every(refusals, isReadFailure)
+    ? new AttributeSourcesUnread({ revision, failures: refusals })
+    : new AttributeSourcesRefused({ revision, refusals })
+
+/** Whether a refusal records a read that failed rather than what a read found. */
+const isReadFailure = (refusal: AttributeRefusal): boolean => refusal.reason === AttributeRefusalReasons.ReadFailed
 
 /** Every refusal of the reading: tree, `info/attributes`, the setting, then conditional includes. */
 const refusalsOf = (reading: AttributeReading, allowance: AttributeAllowance): ReadonlyArray<AttributeRefusal> =>
