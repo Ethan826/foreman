@@ -65,22 +65,39 @@ export class IdentityPrinted extends Schema.TaggedClass<IdentityPrinted>()(
 ) {}
 
 /**
- * An identity `rev-parse` that exited non-zero, as it does where git sees
- * no repository, with its exit code and stderr kept for the report.
+ * An identity `rev-parse` that exited non-zero reporting that git sees no
+ * repository at the path, with its exit code and stderr kept for the
+ * report. This is a reading of the directory, which Features judges.
  */
-export class IdentityExited extends Schema.TaggedClass<IdentityExited>()(
-  "IdentityExited",
+export class IdentityNoRepository extends Schema.TaggedClass<IdentityNoRepository>()(
+  "IdentityNoRepository",
   { exitCode: Schema.Int, stderr: Schema.String },
 ) {}
 
 /**
- * One identity `rev-parse` as Format decoded it (owner ruling on the
- * R2 residue, 2026-11-18): the path it printed, or how it exited. Whether
- * either result identifies the recorded worktree is decided in Features.
+ * An identity `rev-parse` that exited non-zero for any other reason, such
+ * as an I/O error reading a repository (focused re-review finding 1). git
+ * could not complete the read, so nothing about the directory is known:
+ * Program reports it as {@link GitCommandFailed} with git's diagnostic,
+ * never as a judgment (review item R01).
  */
-export const IdentityRead = Schema.Union([IdentityPrinted, IdentityExited])
-/** One decoded identity `rev-parse`; see {@link IdentityRead}. */
+export class IdentityUnread extends Schema.TaggedClass<IdentityUnread>()(
+  "IdentityUnread",
+  { exitCode: Schema.Int, stderr: Schema.String },
+) {}
+
+/**
+ * One identity `rev-parse` that git completed (owner ruling on the R2
+ * residue, 2026-11-18): the path it printed, or its report that there is
+ * no repository. Whether either identifies the recorded worktree is
+ * decided in Features.
+ */
+export const IdentityRead = Schema.Union([IdentityPrinted, IdentityNoRepository])
+/** One identity `rev-parse` that git completed; see {@link IdentityRead}. */
 export type IdentityRead = typeof IdentityRead.Type
+
+/** One identity `rev-parse` as Format decoded it: completed, or not. */
+export type IdentityRun = IdentityRead | IdentityUnread
 
 /**
  * What the startup check found at the recorded path (owner ruling 5 on

@@ -10,12 +10,12 @@
 // pinned to the recorded worktree (plan B11d), with the empty root
 // `.gitattributes` allowance until configuration supplies one (decision
 // M09, option a).
-import { Effect, Option, Result } from "effect"
+import { Effect, Match, Option, Result } from "effect"
 import { WorktreeCreated } from "../domain/events.ts"
 import { noAttributeAllowance, type AttributeAllowance } from "../domain/attributes.ts"
 import type { Revision } from "../domain/ids.ts"
-import type { WorktreeDirectory } from "../domain/worktree.ts"
-import { GitOutputUndecodable, supervisorBranch } from "../domain/worktree.ts"
+import type { IdentityRead, WorktreeDirectory } from "../domain/worktree.ts"
+import { GitCommandFailed, GitOutputUndecodable, supervisorBranch } from "../domain/worktree.ts"
 import { checkWorktree } from "../features/worktree-check.ts"
 import { checkCreated } from "../features/worktree-created.ts"
 import { refuseExistingBranch, refuseExistingPath, requireAbsolute } from "../features/worktree-precheck.ts"
@@ -82,7 +82,9 @@ export interface WorktreeProgram {
    * `path` and `commonDir` (plan B11d), against the recorded `base` (plan B11c) and
    * fails with `AttributeSourcesRefused`, including for any conditional
    * include (option R); no working tree's `.gitattributes` is read. Fails with
-   * `PathUnreadable` when the recorded path cannot be inspected, and with
+   * `PathUnreadable` when the recorded path cannot be inspected, with
+   * `GitCommandFailed` when git could not complete a command, an identity
+   * read included (any exit but its no-repository report), and with
    * `WorktreeRecordInvalid` when a recorded field is empty. It never
    * prunes, unlocks or removes anything.
    */
@@ -211,14 +213,29 @@ const identityOf = (raw: { readonly gitDir: string; readonly commonDir: string }
     commonDir: decoded(decodeRevParsePath, raw.commonDir, revParseArgs.commonDir),
   })
 
-/** The two identity runs decoded (Format), exit codes kept for Features to judge. */
+/** The two identity runs decoded (Format) for Features to judge. */
 const identityRunsOf = (runs: { readonly gitDir: GitOutput; readonly commonDir: GitOutput }) =>
   Effect.all({
-    gitDir: Effect.fromResult(Result.mapError(decodeIdentityRun(runs.gitDir), undecodable(revParseArgs.gitDir))),
-    commonDir: Effect.fromResult(
-      Result.mapError(decodeIdentityRun(runs.commonDir), undecodable(revParseArgs.commonDir)),
-    ),
+    gitDir: completedRead(runs.gitDir, revParseArgs.gitDir),
+    commonDir: completedRead(runs.commonDir, revParseArgs.commonDir),
   })
+
+/**
+ * One identity run decoded, and lifted only when git completed it: a run
+ * git could not complete fails with `GitCommandFailed`, git's exit code
+ * and diagnostic kept, and is never judged (focused re-review finding 1).
+ */
+const completedRead = (run: GitOutput, args: ReadonlyArray<string>) =>
+  Effect.flatMap(
+    Effect.fromResult(Result.mapError(decodeIdentityRun(run), undecodable(args))),
+    (read): Effect.Effect<IdentityRead, GitCommandFailed> =>
+      Match.valueTags(read, {
+        IdentityPrinted: Effect.succeed,
+        IdentityNoRepository: Effect.succeed,
+        IdentityUnread: (unread) =>
+          Effect.fail(new GitCommandFailed({ args, exitCode: Option.some(unread.exitCode), stderr: unread.stderr })),
+      }),
+  )
 
 /** The raw directory reading with its identity runs decoded, `stat` passed through. */
 const directoryOf = (reading: DirectoryReading) =>

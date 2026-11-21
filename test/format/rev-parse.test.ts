@@ -2,7 +2,7 @@
 // removed, so a path containing or ending in a newline survives.
 import { describe, expect, it } from "@effect/vitest"
 import { Result } from "effect"
-import { IdentityExited, IdentityPrinted } from "../../src/domain/worktree.ts"
+import { IdentityNoRepository, IdentityPrinted, IdentityUnread } from "../../src/domain/worktree.ts"
 import {
   decodeIdentityRun,
   decodeRevParseLine,
@@ -76,10 +76,30 @@ describe("decodeIdentityRun", () => {
     expect(decodeIdentityRun(run)).toEqual(Result.succeed(new IdentityPrinted({ path: "/repo/.git/worktrees/w" })))
   })
 
-  it("keeps a non-zero exit's code and stderr, and ignores its stdout", () => {
+  it("keeps a no-repository exit's code and stderr, and ignores its stdout", () => {
     const run = { exitCode: 128, stdout: "ignored\n", stderr: "fatal: not a git repository\n" }
     expect(decodeIdentityRun(run)).toEqual(
-      Result.succeed(new IdentityExited({ exitCode: 128, stderr: "fatal: not a git repository\n" })),
+      Result.succeed(new IdentityNoRepository({ exitCode: 128, stderr: "fatal: not a git repository\n" })),
+    )
+  })
+
+  it.each([
+    "fatal: not a git repository (or any of the parent directories): .git\n",
+    "fatal: not a git repository (or any parent up to mount point /Volumes)\n",
+    "fatal: not a git repository: /gone/.git/worktrees/w\n",
+  ])("reads git's no-repository diagnostic %j as no repository", (stderr) => {
+    expect(decodeIdentityRun({ exitCode: 128, stdout: "", stderr })).toEqual(
+      Result.succeed(new IdentityNoRepository({ exitCode: 128, stderr })),
+    )
+  })
+
+  it.each([
+    "fatal: unable to read git directory: Input/output error\n",
+    "error: fatal: not a git repository\n",
+    "",
+  ])("reads any other non-zero exit, %j, as a read git could not complete", (stderr) => {
+    expect(decodeIdentityRun({ exitCode: 128, stdout: "", stderr })).toEqual(
+      Result.succeed(new IdentityUnread({ exitCode: 128, stderr })),
     )
   })
 

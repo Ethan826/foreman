@@ -93,8 +93,10 @@ const checkListed =
  * Nothing at the path, or a file, means no directory is present, and a
  * path that is not a directory has no identity to report. A directory
  * fails the identity condition unless both identity commands printed
- * exactly the recorded paths. A command that exited non-zero, as where
- * git sees no repository, does not identify it.
+ * exactly the recorded paths. A command that reported no repository
+ * there does not identify it. A command git could not complete never
+ * reaches this judgment: Program fails with `GitCommandFailed` instead
+ * (focused re-review finding 1).
  */
 const directoryFailures = (
   recorded: RecordedWorktree,
@@ -118,7 +120,7 @@ const hasIdentity = (recorded: RecordedWorktree, directory: WorktreeDirectory): 
 const printed = (read: IdentityRead, expected: string): boolean =>
   Match.valueTags(read, {
     IdentityPrinted: (found) => found.path === expected,
-    IdentityExited: () => false,
+    IdentityNoRepository: () => false,
   })
 
 /** The listed entry's branch and lock conditions that do not hold, in vocabulary order. */

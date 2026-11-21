@@ -2,7 +2,7 @@ import { describe, expect, it } from "@effect/vitest"
 import { Option, Result, Schema } from "effect"
 import type { WorktreeCondition, WorktreeDirectory, WorktreeEntry } from "../../src/domain/worktree.ts"
 import {
-  IdentityExited,
+  IdentityNoRepository,
   IdentityPrinted,
   WorktreeCheckFailed,
   WorktreeConditions,
@@ -22,7 +22,7 @@ const directoryStat = Option.some({ directory: true })
 const fileStat = Option.some({ directory: false })
 
 /** An identity command that exited as it does where git sees no repository. */
-const noRepository = new IdentityExited({ exitCode: 128, stderr: "fatal: not a git repository" })
+const noRepository = new IdentityNoRepository({ exitCode: 128, stderr: "fatal: not a git repository" })
 
 /** A directory whose identity commands printed `gitDir` and `commonDir`. */
 const directoryPrinting = (gitDir: string, commonDir: string): WorktreeDirectory => ({
