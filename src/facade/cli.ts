@@ -16,7 +16,12 @@ import { closeFinished, reject } from "../program/handoff.ts"
 import { implement } from "../program/implement.ts"
 import { review } from "../program/review.ts"
 import { production, type Production } from "../program/production.ts"
-import { type ExitProduction, exitProduction } from "../program/production-exits.ts"
+import {
+  type ExitProduction,
+  exitProduction,
+  type StepEndedProduction,
+  stepEndedProduction,
+} from "../program/production-exits.ts"
 import { closeSession, openSession, stepEnded } from "../program/session.ts"
 import { productionStatus, StatusOutcome } from "../program/production-status.ts"
 import { createRecordedWorktree } from "../program/worktree-command.ts"
@@ -59,28 +64,34 @@ export const main = (
  * The command run and printed. `status` has its own construction, which
  * opens nothing for writing, takes no lock and stays reachable under a
  * configuration naming another target (review items B11 and B04). The
- * owner's exits, `step-ended` and `session close --abandoned |
- * --interrupted`, run over `exitProduction`, which runs on the recorded
- * target and never prepares git's HOME (batch review B04, re-review R02).
+ * owner's exits run over their own constructions, which run on the
+ * recorded target whatever the configured layout says and never prepare
+ * git's HOME (batch review B04, re-review R02, focused review finding 2):
+ * `step-ended` over `stepEndedProduction`, which opens only the log and
+ * the lock, and `session close --abandoned | --interrupted` over
+ * `exitProduction`, which also opens the ledger.
  * Every other command runs over `production`, which refuses a
  * configuration naming another target.
  */
 const executed = (invocation: Invocation, environment: Readonly<Record<string, string | undefined>>) =>
   Match.value(invocation.command).pipe(
     Match.tag("ShowStatus", () => printed(StatusOutcome, productionStatus(invocation.configPath, environment))),
-    Match.tag("EndStep", "CloseSession", (exit) =>
-      Effect.flatMap(exitProduction(invocation.configPath, environment), runExit(exit)),
+    Match.tag("EndStep", (ended) =>
+      Effect.flatMap(stepEndedProduction(invocation.configPath, environment), runStepEnded(ended)),
+    ),
+    Match.tag("CloseSession", (close) =>
+      Effect.flatMap(exitProduction(invocation.configPath, environment), runClose(close)),
     ),
     Match.orElse((command) => Effect.flatMap(production(invocation.configPath, environment), run(command))),
   )
 
-/** The Program call for one of the owner's exits, its result printed as JSON. */
-const runExit = (command: EndStep | CloseSession) => (env: ExitProduction) =>
-  Match.value(command).pipe(
-    Match.tag("EndStep", (ended) => printed(StepEndedByOwner, stepEnded(env.context, ended))),
-    Match.tag("CloseSession", (close) => printed(SessionClosed, closeSession(env.context, close))),
-    Match.exhaustive,
-  )
+/** `step-ended` over its log and lock, its result printed as JSON. */
+const runStepEnded = (ended: EndStep) => (env: StepEndedProduction) =>
+  printed(StepEndedByOwner, stepEnded(env.context, ended))
+
+/** `session close --abandoned | --interrupted` over its context, its result printed as JSON. */
+const runClose = (close: CloseSession) => (env: ExitProduction) =>
+  printed(SessionClosed, closeSession(env.context, close))
 
 /** The Program call for one command that runs over `production`, its result printed as JSON. */
 const run = (command: Exclude<CliCommand, ShowStatus | EndStep | CloseSession>) => (env: Production) =>

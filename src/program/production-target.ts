@@ -5,7 +5,8 @@
 // layout of the target in force is checked again, since a reachable
 // command may run on a recorded target that differs from the configured
 // one. All of this runs before any store is opened, any directory made or
-// any git command run.
+// any git command run. The owner's exits settle theirs with `exitTarget`,
+// which consults the binding before the configured layout.
 import { Effect, Option, String } from "effect"
 import type { CanonicalLayout } from "../domain/layout.ts"
 import type { TargetBinding } from "../domain/target.ts"
@@ -13,7 +14,7 @@ import { decodeForemanConfig, type ForemanConfig, ledgerDirOf, ledgerFileName } 
 import { stateFiles } from "../runtime/state-files.ts"
 import { utf8Text } from "./client-output.ts"
 import { checkedLayout } from "./layout.ts"
-import type { TargetPolicy } from "./target-binding.ts"
+import { recordedTarget, type TargetPolicy } from "./target-binding.ts"
 
 /** The decoded configuration and the target in force. */
 export interface SettledTarget {
@@ -95,6 +96,29 @@ export const settledTarget = (
   Effect.gen(function* () {
     const { config, configured } = yield* configuredTarget(configPath, environment)
     const target = yield* policy(config.stateDir, configured)
+    yield* checkedTargetLayout(config.stateDir, target)
+    return { config, target } satisfies SettledTarget
+  })
+
+/**
+ * The target the owner's exits run on, for the configuration at
+ * `configPath` (plan "Commands and their prerequisites", AC1; focused
+ * review finding 2). The recorded target when a binding is recorded,
+ * whatever the configured layout says, as `status` runs; otherwise the
+ * configured target, whose layout is then checked. The layout of the
+ * target in force is checked with the state directory, so an exit never
+ * writes through a refused layout. Records nothing. Fails with
+ * `ConfigUndecodable`, `TargetBindingUnreadable` or `LayoutRefused`,
+ * among others.
+ */
+export const exitTarget = (configPath: string, environment: Readonly<Record<string, string | undefined>>) =>
+  Effect.gen(function* () {
+    const { config, layout } = yield* decodedConfiguration(configPath, environment)
+    const recorded = yield* recordedTarget(config.stateDir)
+    const target = yield* Option.match(recorded, {
+      onSome: Effect.succeed,
+      onNone: () => Effect.map(checkedLayout(layout), (canonical) => targetOf(config, canonical)),
+    })
     yield* checkedTargetLayout(config.stateDir, target)
     return { config, target } satisfies SettledTarget
   })

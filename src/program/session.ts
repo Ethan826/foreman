@@ -43,6 +43,15 @@ export interface ExitContext {
   readonly settings: Pick<SessionSettings, "project">
 }
 
+/**
+ * What `step-ended` runs over: the log and the lock, and not the ledger,
+ * which it never reads or writes (focused review finding 2). An
+ * `ExitContext` or a `SessionContext` is one, so a test may pass either.
+ */
+export interface StepEndedContext {
+  readonly capabilities: Pick<SessionCapabilities, "log" | "lock">
+}
+
 /** The owner's attestation for `step-ended`. */
 export interface StepEndedOptions {
   readonly opId: OpId
@@ -91,7 +100,7 @@ export const openSession = (context: SessionContext, options: OpenOptions) =>
  * operation and the grant are taken from `options`, so the facade's
  * tagged command can be passed as it is.
  */
-export const stepEnded = (context: ExitContext, options: StepEndedOptions) =>
+export const stepEnded = (context: StepEndedContext, options: StepEndedOptions) =>
   Effect.scoped(
     Effect.gen(function* () {
       const { capabilities } = context

@@ -3,8 +3,9 @@
 // configuration that names another target, before any store is opened,
 // any client starts or any git command runs. `status`, `step-ended` and
 // `session close --abandoned | --interrupted` stay reachable under a
-// mismatch: they use the recorded target instead of the configured one,
-// and they never record a binding.
+// mismatch: they read the recorded target with `recordedTarget` and use it
+// instead of the configured one (production-status.ts, `exitTarget` in
+// production-target.ts), and they never record a binding.
 import { Effect, Option, Random } from "effect"
 import { type TargetBinding, TargetBindingUnreadable } from "../domain/target.ts"
 import { compareTarget } from "../features/target-binding.ts"
@@ -35,13 +36,6 @@ export const requireBound: TargetPolicy = (stateDir, configured) =>
     yield* Effect.fromResult(compareTarget(bindingPath(stateDir), target, configured))
     return configured
   })
-
-/**
- * For the commands that stay reachable: the recorded target when there is
- * one, else the configured one. Records nothing.
- */
-export const recordedOrConfigured: TargetPolicy = (stateDir, configured) =>
-  Effect.map(recordedTarget(stateDir), Option.getOrElse(() => configured))
 
 /**
  * The binding recorded in `stateDir`, if any; reads only. Fails with
