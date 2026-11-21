@@ -817,3 +817,17 @@ layout still blocks `step-ended` and the closes; status reads a refused
 state directory's log; `GitCommandFailed` and `ChangedPathsUnread` keep
 the waiver; `utf8Text` stays lossy for the configuration and binding
 reads; the cycle test has no named budget.
+
+## Focused review (2026-11-20)
+
+[The focused review](2026-11-20-assisted-focused-review.md) at 6d263c5
+recommends correcting four items before landing: waiver expiry losing
+the original failure cause (startup git failure and task read error
+turned into refusals); owner exits still blocked by an invalid
+configured layout, and `step-ended` opening the ledger; configuration
+and binding decoding accepting invalid UTF-8; and the assisted-cycle
+test's timeout, which it reproduced.
+
+Owner ruling (2026-11-20): the assisted-cycle file's four cycle tests get
+a named, provisional budget (as the production end-to-end tests have),
+assertions unchanged. One worker (`fix-focused`) corrects all four.
