@@ -65,8 +65,17 @@ slice does not authorize it.
   review record is in this directory (`2026-11-20-assisted-*.md`); the
   plan's execution record lists every integration, ruling, incident and
   measured worker use.
-- Next: Codex reviews 3b72efc..65398e5 (the re-review fixes and the L3
-  package). Landing on `main` and push need the owner's OK after that.
+- Done 2026-11-20 (late): Codex reviewed 3b72efc..65398e5; the owner
+  adopted its rulings (recorded at the end of the plan), including the
+  first dogfood profile: P (user settings and hooks excluded),
+  connectors off and project MCP servers neutralized, validated with P
+  only. Two workers fixed A1, A4, B11c/R01 and the L3 runbook (L1 to
+  L4); `assisted` is at 95fd4e1, where check (0 blocking, 63 notes),
+  docs, the full suite (135 files, 1,562 tests) and `test-scripts.sh`
+  (112 of 112) pass.
+- Next: Codex reviews d0a4e3f..95fd4e1. The connector and MCP profile
+  change is ruled but not dispatched. Landing on `main` and push need
+  the owner's OK.
 - Open owner decisions, each recorded at the end of the plan:
   - L03: whether foreman's Claude sessions load the owner's user-level
     settings and hooks. The read-only inventory is in the git-ignored

@@ -941,3 +941,41 @@ The owner adopted Codex's recommendations in full (2026-11-20):
 
 Dispatched in parallel from 7006884: `fix-3b72efc` (A1, A4, B11c/R01)
 and `fix-l3-runbook` (L1 to L4), estimated at about 400k tokens in all.
+
+`fix-3b72efc` integrated (b43680a A1, 7546410 B11c/R01, 5353a95 A4),
+202,404 tokens. A1: git's no-repository diagnostic counts when it is the
+last stderr line, whatever precedes it; the lines Apple Git printed
+under a denied temporary directory were `git: error: couldn't create
+cache file` lines, captured as a fixture. B11c/R01: a new
+`AttributeSourcesUnread` stop (a failure, waiver kept) when every refused
+source is a failed read; any read source that is refused gives
+`AttributeSourcesRefused`, which lists the failed reads too. At startup
+the unread stop is a `WorktreeCheckUnrun`. In a handoff an unread base
+stops before the candidate is read, so no violation is established. A4:
+status reads the configuration without settling the ledger directory;
+an unresolvable default becomes a `ConfiguredLayoutRefused` finding, the
+log is shown, and a readable binding's recorded ledger is read (the
+worktree check is skipped, as under every finding). Nine existing
+attribute tests changed their expected tag under the ruling.
+
+`fix-l3-runbook` integrated (95fd4e1), 214,848 tokens. `prepare.sh`
+gates setup, the Codex fixture and the baseline behind a session token;
+`run-case.sh` is the only way the package starts a client and refuses
+to launch without a matching token, the setup marker, the baseline, the
+listener preflight, a passing C1 for the variant and complete before
+evidence; failed after evidence marks the run INVALID. `score.py` scores
+INVALID, FAIL, INCONCLUSIVE and PASS from the operator's per-attempt
+judgments with quoted evidence and the snapshots, so a refusal from the
+wrong layer is INCONCLUSIVE. Path A (P only, roots P and X, eight runs)
+and path B (U and P, fourteen runs) are each complete; Codex runs on its
+own root X with a scripted fixture under every path. Slash normalization
+is documented, with offline cases for four spellings. The connector and
+MCP check is described and marked as depending on the pending profile
+change. The runbook's open question 1 asks whether path A may run
+before that change lands.
+
+On 95fd4e1: check (0 blocking, 63 notes), docs (no warnings), the full
+suite (135 files, 1,562 tests) and `test-scripts.sh` (112 of 112), output
+kept in `.build/int-b-*.log`. Next: Codex reviews d0a4e3f..95fd4e1.
+Open: the connector and MCP profile change (not dispatched), the L3 live
+run, landing and push.
