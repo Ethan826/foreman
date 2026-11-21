@@ -884,3 +884,15 @@ L03 preparation running in parallel: a read-only inventory of what the
 owner's user-level Claude settings would bring into a foreman session
 (written to the git-ignored `.build/l03/`, not to the repository), and
 the L3 package's two-variant runbook with the path restriction.
+
+Owner authorization (2026-11-20): the owner authorized two offline L03
+preparation tasks to run in parallel with `fix-rereview`. One is a
+read-only inventory of what the owner's user-level Claude settings,
+hooks, instructions, skills and MCP servers would bring into a foreman
+session, and what `--setting-sources` excludes; it is written to the
+git-ignored `.build/l03/`, never to the repository. The other is the L3
+package (`l3-variants`): a runbook that runs the Claude cases with user
+settings inherited and with them excluded, plus the pre-L3 path
+restriction. Neither runs a client with a prompt or makes a live call.
+L03 itself, the L3 live run, landing and push remain separate owner
+decisions.
