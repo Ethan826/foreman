@@ -1116,3 +1116,14 @@ exceeded its 5,000 ms default once while the offline L3 suite ran
 beside it (1,563 of 1,564); the serial rerun passed. Unchanged in the
 range. Earlier timing failures were resolved by a named provisional
 budget; this one awaits a ruling.
+
+Owner ruling (2026-11-21): the large state-file round trip has now hit
+the 5,000 ms default in two separate runs under load, which is enough
+evidence to act. That one test gets a named, provisional 30 s budget
+(`largeRoundTripMillis`); the fixture and the byte-for-byte assertion
+are unchanged. Observed: the timeout in Codex's review run of fa70235,
+with the offline L3 suite running beside the full suite (1,563 of
+1,564), and a pass on the serial rerun (1,564). A 50 ms budget failed
+the test with "Test timed out in 50ms", which shows the option reaches
+Vitest. The larger budget addresses the recurring deadline failure; the
+cause of the slowdown remains unverified.

@@ -93,14 +93,22 @@ const readFailsOnMissing = (dir: string) =>
     expect(failure.path).toBe(`${dir}/missing`)
   })
 
+// Owner ruling (2026-11-21): the large round trip writes and reads back
+// more than 1 MiB through real files, so it gets a named, provisional
+// budget. It exceeded Vitest's 5,000 ms default in two separate runs
+// under load, once in Codex's review of fa70235 while the offline L3
+// suite ran beside the full suite (1,563 of 1,564), and passed on the
+// serial rerun. The cause of the slowdown is not verified. Investigate
+// if a run comes close to this limit.
+const largeRoundTripMillis = 30_000
+
 describe("stateFiles.publish", () => {
   it.effect("writes the bytes under the final name and returns their SHA-256", () =>
     withTemporaryDirectory(publishesUnderFinalName),
   )
   it.effect("publishes an empty file", () => withTemporaryDirectory(publishesEmpty))
   it.effect("writes every byte of a large binary file, and read returns them", () =>
-    withTemporaryDirectory(roundTripsLarge),
-  )
+    withTemporaryDirectory(roundTripsLarge), largeRoundTripMillis)
   it.effect("replaces an earlier file and a stale temporary file", () =>
     withTemporaryDirectory(replacesEarlierAndStale),
   )
