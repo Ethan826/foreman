@@ -979,3 +979,37 @@ suite (135 files, 1,562 tests) and `test-scripts.sh` (112 of 112), output
 kept in `.build/int-b-*.log`. Next: Codex reviews d0a4e3f..95fd4e1.
 Open: the connector and MCP profile change (not dispatched), the L3 live
 run, landing and push.
+
+## L3 corrections review (2026-11-21)
+
+[The L3 corrections review](2026-11-21-l3-corrections-review.md) of
+`d0a4e3f..95fd4e1` holds the L3 live run for three P2 gaps in the
+evidence gates (the scorer passes changed modes and empty snapshots; a
+rejected C1 re-score leaves the earlier PASS usable; any nonempty
+listener log clears preflight) and one P3 (the path-wide stop after a
+non-passing C1 is an operator rule; X1 and X2 are not gated by C1). It
+confirms A1, A4 and B11c/R01. The owner adopted it in full (2026-11-21):
+
+- The scorer compares complete snapshot entries (mode included) and
+  marks missing, empty or malformed evidence INVALID.
+- The C1 gate requires a PASS tied to the current judgment and
+  evidence; a rejected re-score leaves no usable PASS.
+- Preflight requires evidence of a successful preflight for the
+  selected root and listener instance.
+- The scripted X fixture stays; the runbook states where the path-wide
+  stop is enforced.
+- Open question 1: Path A runs only after the connector and MCP profile
+  change, so the live result applies to the chosen production profile.
+  The disposable repository gets a project `.mcp.json` whose server
+  would leave evidence if started, so the trial can show that a
+  configured project server is excluded.
+
+The profile change is dispatched with these corrections. Production's
+Claude argv takes the P profile (`--setting-sources project,local`) and
+`--strict-mcp-config` with no `--mcp-config`, which drops project, user
+and claude.ai connector MCP servers; a settings key for connectors is
+added only if the installed client's code confirms it offline. No
+environment change. The L3 package derives the P variant's argv and
+settings from production code, so the trial runs the exact production
+profile. Workers: `profile-mcp` (src and tests) and `fix-l3-gates`
+(research/live/l3-subset), in parallel from the commit recording this.
