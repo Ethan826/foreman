@@ -850,3 +850,17 @@ with `FileNotUtf8` rather than `ConfigUndecodable`; a findings path that
 is a directory keeps the waiver (a read failure, not a refusal);
 `session open` now prints the check's own failure tag instead of
 `CommandRefused`.
+
+## Focused re-review (2026-11-20)
+
+[The focused re-review](2026-11-20-assisted-focused-rereview.md) at
+34ce0ab holds landing for three findings: an injected I/O error in
+`git rev-parse --absolute-git-dir` during the startup check becomes
+`WorktreeUnready` (a refusal that expires the waiver) and loses git's
+diagnostic; the strict decoder rejects config and binding files with a
+UTF-8 byte-order mark that 9fee8a5 accepted, and a binding with one
+blocks owner exits; and the owner exits fail with `ConfigUndecodable`
+when HOME is unset and the config omits `ledgerDir`, before the recorded
+binding is read. Raw logs are kept locally in `.build/reviews/` (git
+ignored). One worker (`fix-rereview`) corrects all three. The earlier
+lost-output cycle failure keeps an unknown cause.
