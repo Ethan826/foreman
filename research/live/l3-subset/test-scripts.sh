@@ -169,13 +169,54 @@ teardown "$root"; rc=$?
 expect "teardown accepts the restored record" '[ "$rc" -eq 0 ] && [ ! -e "$root/owner" ]'
 rm -rf "$root"
 
-# --- M06: a scratch path that needs encoding ----------------------------
+# --- pre-L3: the path alphabet of production's profile ------------------
+# src/format/claude-settings.ts binds only paths of letters, digits, ".",
+# "_", "+", "-" and "/" (ProfilePathUnsafe). setup.sh refuses anything
+# else before it writes, because a permission rule could read the other
+# characters as syntax.
+
+refused_root() {
+  parent_before=$(listing "$parent")
+  setup "$1"; rc=$?
+  expect "$2" '[ "$rc" -ne 0 ] && [ ! -e "$1" ] && [ ! -L "$1" ] && [ "$(listing "$parent")" = "$parent_before" ]'
+}
+refused_root "$parent/glob*root" "setup refuses a root with * and creates nothing"
+refused_root "$parent/paren(root" "setup refuses a root with ( and creates nothing"
+refused_root "$parent/paren)root" "setup refuses a root with ) and creates nothing"
+refused_root "$parent/space root" "setup refuses a root with a space and creates nothing"
+refused_root "$parent/quote'root" "setup refuses a root with a single quote and creates nothing"
+refused_root "$parent/quote\"root" "setup refuses a root with a double quote and creates nothing"
+refused_root "$parent/back\\root" "setup refuses a root with a backslash and creates nothing"
+refused_root "$parent/"$'new\nline' "setup refuses a root with a newline and creates nothing"
 
 odd="$parent/"$'odd \'q"\nline $(touch PWNED) `touch PWNED2`'
 (cd "$work" && setup "$odd"); rc=$?
-expect "setup accepts a path with a space, quotes, a newline and \$(...)" '[ "$rc" -eq 0 ]'
+expect "setup refuses a path with a space, quotes, a newline and \$(...)" '[ "$rc" -ne 0 ] && [ ! -e "$odd" ]'
 expect "no command in the path ran" \
   '[ -z "$(find "$work" -name "PWNED*")" ]'
+
+# A plain root under a parent whose own name is outside the alphabet: the
+# canonical path holds the space, so the root is refused.
+mkdir "$work/spaced parent"
+setup "$work/spaced parent/root"; rc=$?
+expect "setup refuses a plain name under a parent with a space, creating nothing" \
+  '[ "$rc" -ne 0 ] && [ -z "$(ls -A "$work/spaced parent")" ]'
+# The argument as given is checked too: a space that resolves away is
+# still refused.
+setup "$work/spaced parent/../resolved-root"; rc=$?
+expect "setup refuses an argument whose space resolves away, creating nothing" \
+  '[ "$rc" -ne 0 ] && [ ! -e "$work/resolved-root" ]'
+# A link with a plain name to that parent: the canonical path still holds the space.
+ln -s "$work/spaced parent" "$work/plain-link"
+setup "$work/plain-link/root"; rc=$?
+expect "setup refuses a root whose resolved parent has a space, creating nothing" \
+  '[ "$rc" -ne 0 ] && [ -z "$(ls -A "$work/spaced parent")" ]'
+
+# --- M06: a plain root, odd names inside it ------------------------------
+
+odd="$parent/plain-m06_v1.2+x"
+(cd "$work" && setup "$odd"); rc=$?
+expect "setup accepts a plain path of letters, digits, . _ + - and /" '[ "$rc" -eq 0 ] && [ -f "$odd/.l3-setup-done" ]'
 wt="$odd/state/worktree"
 /usr/bin/python3 -I - "$odd/claude-settings.json" "$wt" <<'EOF'
 import json, sys
@@ -188,14 +229,40 @@ sys.exit(0 if ok else 1)
 EOF
 rc=$?
 expect "the rendered settings hold the exact worktree path" '[ "$rc" -eq 0 ]'
+
+# The rendered settings equal production's profile for the same worktree,
+# apart from the L3 stand-in Bash(sh check.sh), which production leaves
+# out until a ruling names the target's test command. Order counts.
+prod="$work/production-settings.json"
+(cd "$here/../../.." && bun -e '
+import { Result } from "effect"
+import { claudeEditingSettings } from "./src/format/claude-settings.ts"
+const rendered = claudeEditingSettings(process.argv[1])
+if (Result.isFailure(rendered)) process.exit(3)
+process.stdout.write(rendered.success)
+' "$wt") > "$prod" 2> "$work/production-settings.err"; rc=$?
+expect "production renders the profile for the setup worktree" '[ "$rc" -eq 0 ] && [ -s "$prod" ]'
+/usr/bin/python3 -I - "$odd/claude-settings.json" "$prod" <<'EOF'
+import json, sys
+rendered = json.load(open(sys.argv[1], encoding="utf-8"))
+production = json.load(open(sys.argv[2], encoding="utf-8"))
+allow = rendered["permissions"]["allow"]
+if allow.count("Bash(sh check.sh)") != 1:
+    sys.exit(1)
+allow.remove("Bash(sh check.sh)")
+sys.exit(0 if rendered == production else 1)
+EOF
+rc=$?
+expect "the rendered settings equal production's, less Bash(sh check.sh)" '[ "$rc" -eq 0 ]'
+
 for sh in /bin/bash /bin/sh /bin/zsh; do
   got=$(cd "$work" && "$sh" -c '. "$1" && printf "%s|%s|" "$L3_SCRATCH" "$L3_WORKTREE" && [ -d "$L3_GIT_DIR" ] && [ -d "$L3_COMMON_DIR" ] && printf ok' sh "$odd/layout.env")
-  expect "layout.env sources exactly in $sh" '[ "$got" = "$odd|$wt|ok" ] && [ -z "$(find "$work" -name "PWNED*")" ]'
+  expect "layout.env sources exactly in $sh" '[ "$got" = "$odd|$wt|ok" ]'
 done
 
 snapshot "$odd" base; rc=$?
 manifest="$odd/out/snap-base.txt"
-expect "snapshot succeeds on the odd path" '[ "$rc" -eq 0 ] && [ -f "$manifest" ]'
+expect "snapshot succeeds on the plain root" '[ "$rc" -eq 0 ] && [ -f "$manifest" ]'
 entries=$(cd "$odd" && find . -path ./out -prune -o -print0 | tr -cd '\0' | wc -c | tr -d ' ')
 expect "snapshot has one line per path outside out/" '[ "$(wc -l < "$manifest" | tr -d " ")" = "$entries" ]'
 
@@ -229,7 +296,7 @@ expect "snapshot refuses a root without its record" '[ "$rc" -ne 0 ] && [ ! -e "
 mv "$work/record.saved" "$odd/.l3-owner"
 
 teardown "$odd"; rc=$?
-expect "teardown handles the odd path" '[ "$rc" -eq 0 ] && [ ! -e "$odd/owner" ] && [ -f "$odd/stray-root-file" ]'
+expect "teardown handles the plain root with odd names inside" '[ "$rc" -eq 0 ] && [ ! -e "$odd/owner" ] && [ -f "$odd/stray-root-file" ]'
 
 # --- syntax --------------------------------------------------------------
 

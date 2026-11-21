@@ -5,7 +5,9 @@
 # Usage: setup.sh <scratch-root> [--temp-ok]
 #
 # <scratch-root> must be an absolute path that does not exist yet, in an
-# existing parent directory that is not inside any git repository.
+# existing parent directory that is not inside any git repository. It
+# and its resolved form may hold only letters, digits, ".", "_", "+",
+# "-" and "/", the alphabet production's profile binds (see below).
 # setup.sh creates the root itself, so it never writes into a directory
 # it did not create, and records in <scratch-root>/.l3-owner every
 # top-level path before creating it (ownership.sh); teardown.sh removes
@@ -40,6 +42,30 @@ case "$1" in
   /*) ;;
   *) echo "setup.sh: scratch root must be absolute: $1" >&2; exit 2 ;;
 esac
+
+# The path alphabet of production's profile (src/format/claude-settings.ts,
+# ProfilePathUnsafe): an absolute path of components made of letters,
+# digits, ".", "_", "+" and "-", with no doubled or trailing slash. Any
+# other character could read as syntax in a permission rule (a glob, a
+# parenthesis, a space) or in a sandbox path, and JSON escaping does not
+# neutralize it. The characters are listed, not given as ranges, and the
+# C locale makes every byte one character.
+LC_ALL=C
+plain_path() {
+  case "$1" in
+    ""|[!/]*|*//*|*/) return 1 ;;
+    *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._+/-]*) return 1 ;;
+  esac
+}
+refuse_unplain() {
+  echo "setup.sh: $1 has a character outside letters, digits, . _ + - and /, or a doubled or trailing slash; production's profile would refuse it" >&2
+  exit 2
+}
+# The argument as given, checked before anything else. Trailing slashes
+# are dropped below, so only its characters count here.
+case "$1" in
+  *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._+/-]*) refuse_unplain "the scratch root" ;;
+esac
 # Split the argument into its parent and the new name, ignoring trailing
 # slashes; the parent must exist and is resolved, the name is created.
 argument=$1
@@ -60,6 +86,10 @@ case "$parent" in
   /) scratch="/$name" ;;
   *) scratch="$parent/$name" ;;
 esac
+# The resolved root and the worktree path the settings will bind: a link
+# in the parent can bring in characters the argument did not have.
+plain_path "$scratch" || refuse_unplain "the resolved scratch root"
+plain_path "$scratch/state/worktree" || refuse_unplain "the worktree path"
 l3_canonicalize "$HOME"
 if [ "$scratch" = "$l3_canonical" ]; then
   echo "setup.sh: refusing \$HOME as the scratch root" >&2
