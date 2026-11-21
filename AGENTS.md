@@ -29,11 +29,11 @@ Live tests L1 (Claude usage readings) and L2 (Codex usage windows) ran on
 2026-11-16 and both came back positive; results and limits are in
 `research/live/results-2026-11-16.md`. The L3 subset for the assisted
 cycle is prepared in `research/live/l3-subset/` and has not run. The
-owner ruled L03 on 2026-11-21: Claude's editing argv passes
+owner ruled L03 on 2026-11-20: Claude's editing argv passes
 `--setting-sources project,local`, which keeps out user settings and
 hooks, and `--strict-mcp-config`, which starts no MCP server. The run
-tests that profile and needs a separate authorization. L4 (crash and restart) waits on B13 to
-B15. No live client call is authorized by this status update.
+tests that profile and needs a separate authorization. L4 (crash and
+restart) waits on B13 to B15. No live client call is authorized by this status update.
 Until the Codex windows enter the default policy, every Codex launch
 needs a waiver.
 

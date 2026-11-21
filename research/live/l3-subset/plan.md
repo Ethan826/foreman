@@ -148,6 +148,7 @@ on 2026-11-20, with the stand-in `Bash(sh check.sh)`):
 | `sandbox.filesystem.denyWrite` | the protected names at the worktree's top level | design 1401-1405 ("the Bash sandbox's write allowlist excludes them"); schema: "Paths denied for writing (takes precedence over allowWrite)". Glob support: UNCONFIRMED, so only literal paths are listed |
 | `sandbox.network.allowedDomains` | `[]` | design 1604; schema: "Domains sandboxed commands may reach without a prompt" |
 | `autoMemoryEnabled` | `false` | design 1659-1660 (disable auto-memory writes if a setting exists); schema: "When false, Claude will not read from or write to the auto-memory directory" |
+| `disableClaudeAiConnectors` | `true` | owner ruling 2026-11-20 (connectors off); a second guard beside `--strict-mcp-config`; the client's bundled schema (2.1.328): "When true in any settings source, claude.ai MCP cloud connectors are not auto-fetched or connected" |
 
 Not set, on purpose: `blockReadsOutsideWorkingDirectories` (the schema
 says the sandbox then denies reads outside the working directories,

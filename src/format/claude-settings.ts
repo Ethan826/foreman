@@ -1,9 +1,9 @@
 // The settings file of Claude's editing profile (batch review B03; owner
-// ruling of 2026-11-20; design "Permissions"; the L3 subset's template,
-// research/live/l3-subset/claude-settings.json): one fixed template, bound
-// to the recorded supervisor worktree's path. foreman writes it itself;
-// the configuration cannot supply a settings file. A rule's `//` starts an
-// absolute path, and `Edit(path)` governs Edit, Write and NotebookEdit,
+// ruling of 2026-11-20; design "Permissions"; the L3 subset renders its
+// settings from this module through research/live/l3-subset/profile.sh):
+// one fixed template, bound to the recorded supervisor worktree's path.
+// foreman writes it itself; the configuration cannot supply a settings
+// file. A rule's `//` starts an absolute path, and `Edit(path)` governs Edit, Write and NotebookEdit,
 // so writes are allowed by one `Edit(...)` rule (L3 plan, settings table).
 // The sandbox keys come through `--settings` because a `false` from
 // project settings would be ignored (same table).
@@ -12,7 +12,7 @@
 // template's `Bash(sh check.sh)` stands in for one, and no ruling names
 // production's. User settings and hooks stay out through the argv's
 // `--setting-sources project,local`, and MCP servers through its
-// `--strict-mcp-config` (owner ruling of 2026-11-21, L03; see
+// `--strict-mcp-config` (owner ruling of 2026-11-20, L03; see
 // `claudeEditingArgv`). The template adds `disableClaudeAiConnectors` as
 // a second guard against claude.ai connectors: the 2.1.328 client honors
 // it when any loaded source, `--settings` included, sets it, and then

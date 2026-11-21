@@ -1013,3 +1013,65 @@ environment change. The L3 package derives the P variant's argv and
 settings from production code, so the trial runs the exact production
 profile. Workers: `profile-mcp` (src and tests) and `fix-l3-gates`
 (research/live/l3-subset), in parallel from the commit recording this.
+
+`profile-mcp` integrated (c0d0952), 97,767 tokens. Claude's editing argv
+ends `--settings <file> --setting-sources project,local
+--strict-mcp-config`; the template adds `disableClaudeAiConnectors: true`
+as a second guard, after the client's bundled schema (2.1.328) confirmed
+the key is read from the `--settings` file whatever `--setting-sources`
+says. `claude --help` (no prompt) confirmed both flags. One branch of the
+client's connector code was not traced to its end; `--strict-mcp-config`
+covers connectors either way.
+
+`fix-l3-gates` integrated (b5c7e91), 287,801 tokens. Snapshots are
+tab-separated with hex paths and full (type, mode, hash) entries; the
+scorer marks malformed, empty or incomplete evidence INVALID (it also
+closed a hole Codex did not report: a newline in a path escaped the old
+prefix match). A score records hashes of its 16 inputs and the C1 gate
+accepts only a stored PASS equal to a fresh scoring. Preflight needs the
+listener's 200 for a per-root nonce as the log's first line. A path
+record lets the scripts enforce the path-wide stop. Variant P's argv and
+settings are rendered from production (`profile.sh`); the template
+`claude-settings.json` was removed. The disposable repository carries a
+project `.mcp.json` whose server writes a marker if started, approved by
+the project settings so that only `--strict-mcp-config` should exclude
+it (whether project scope may approve its own server is UNCONFIRMED). A
+coordinator commit corrects the stale template reference, the L03 ruling
+date (2026-11-20) and adds the connector key to the runbook's table.
+
+On the integrated tree: check (0 blocking, 65 notes), docs (no
+warnings), the full suite (135 files, 1,564 tests) and `test-scripts.sh`
+(180 of 180), output kept in `.build/int-d-*.log`.
+
+### Offline dogfood rehearsal (2026-11-21)
+
+One worker (`dogfood-rehearsal`, 156,581 tokens) drove the real CLI
+through a full cycle (worktree create, session open, implement, review,
+correct, review, close finished), an interrupted session and an
+abandoned one, against a local clone of foreman at c0d0952, with
+stand-in clients on PATH and every path in a scratch directory. Both
+argv equalled production's builders, the settings file was as rendered,
+no `GIT_*` variable reached a client, and cwd was the supervisor
+worktree. No foreman defect stopped the cycle. The draft task for the
+first real cycle is [the dogfood-1 task](2026-11-21-dogfood-1-task.md).
+
+Open for the owner (from the rehearsal):
+1. Run from inside Claude Code, the child `claude` inherits
+   `CLAUDECODE` and `CLAUDE_CODE_*` variables, including a messaging
+   token; the client environment strips only `GIT_*` (P2). Run the real
+   cycle from a plain terminal, or rule a code change to strip them.
+2. The implementer cannot run `bun run docs`, `check` or `test` (the
+   profile allows only `git status` and `git diff`) and the reviewer is
+   read-only, so verification is the owner's between steps.
+3. The skills AGENTS.md names live under `~/.claude`, outside both
+   `--setting-sources project,local` and the Read rule; the task tells
+   the implementer to follow the surrounding files instead.
+4. With an empty ledger every launch is `QuotaHeld` and needs `--waive`;
+   the stream's `rate_limit_event` is not recorded as a reading, and the
+   refusal does not mention `--waive`.
+5. `session open` accepts a worktree that still holds the last session's
+   uncommitted changes, which then appear in the next review.
+6. Friction: the supervisor worktree needs a copied `node_modules`
+   (`cp -cR`; a symlink would change the tree); `session open` before
+   `worktree create` fails with a bare `WorktreeCheckFailed`; the Codex
+   desktop daemon is 0.171.0 against the CLI's 0.170.0 pin.
