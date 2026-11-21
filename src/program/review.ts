@@ -23,6 +23,7 @@ import { decodeFindingsBlock, renderFindingsDraft } from "../format/findings.ts"
 import { decodeNameStatus } from "../format/name-status.ts"
 import { type LaunchPlan, type PrepareInput, runAttempt } from "./attempt.ts"
 import type { AttemptFiles } from "./attempt-run.ts"
+import type { StateFileFailed } from "../runtime/state-files.ts"
 import { codexDecoded, utf8Bytes } from "./client-output.ts"
 import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedPassing, handoffTextOf, takeSnapshot } from "./handoff-facts.ts"
@@ -45,6 +46,7 @@ export type ReviewFailure =
   | RecordedFileChanged
   | FileNotUtf8
   | ChangedPathsUnread
+  | StateFileFailed
   | Cause.NoSuchElementError
 
 /** The exit code of a git command that succeeded. */

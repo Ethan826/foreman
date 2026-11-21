@@ -24,11 +24,14 @@ export const fileIntact = (context: RecordedFileReader, path: string, sha256: st
  * The recorded file at `path` as strict UTF-8 text. Fails with
  * {@link RecordedFileChanged} when it is missing or its hash is not
  * `sha256`, and with `FileNotUtf8` when its bytes are not UTF-8 (review
- * finding R04).
+ * finding R04). A read that fails for any other reason keeps its own
+ * `StateFileFailed`: the file was not judged, so it is a failure and not
+ * a refusal (review item R01).
  */
 export const recordedText = (context: SessionContext, path: string, sha256: string) =>
   Effect.gen(function* () {
-    const bytes = yield* Effect.mapError(context.capabilities.stateFiles.read(path), () => new RecordedFileChanged({ path }))
+    const read = yield* context.capabilities.stateFiles.readIfPresent(path)
+    const bytes = yield* Effect.fromOption(read, () => new RecordedFileChanged({ path }))
     if (sha256Of(bytes) !== sha256) return yield* new RecordedFileChanged({ path })
     return yield* strictText(path, bytes)
   })

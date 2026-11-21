@@ -8,7 +8,7 @@
 // transaction that takes the write lock, and nothing that publishes or
 // appends (review item B11). So it works while another command runs and
 // whatever else is broken.
-import { Array as Arr, Effect, Match, Option, Result, Schema } from "effect"
+import { Array as Arr, Effect, Formatter, Match, Option, Result, Schema } from "effect"
 import { Client, Clients } from "../domain/clients.ts"
 import { Launched } from "../domain/events.ts"
 import { Hold } from "../domain/holds.ts"
@@ -25,6 +25,7 @@ import { holdsFrom, pinReading, readLog, worktreeReading } from "./command-start
 import { attemptBriefIntact } from "./brief-files.ts"
 import { fileIntact } from "./recorded-files.ts"
 import type { RecordedFileReader } from "./recorded-files.ts"
+import type { WorktreeCheckUnrun } from "./session-context.ts"
 import type { StatusContext } from "./status-context.ts"
 
 /** What `status` says about process evidence every time it shows some (plan "Process evidence"). */
@@ -115,7 +116,7 @@ export const status = (context: StatusContext) =>
   Effect.gen(function* () {
     const read = yield* readLog(context.capabilities.log)
     const fold = foldSession(read.events)
-    const worktree = yield* worktreeReading(context, read.events)
+    const worktree = yield* Effect.catch(worktreeReading(context, read.events), unrunCheck)
     const listing = yield* Effect.result(context.capabilities.readProcesses())
     const ledger = yield* context.capabilities.ledgerRows
     return {
@@ -139,6 +140,13 @@ export const status = (context: StatusContext) =>
       coverage: snapshotCoverage,
     } satisfies StatusReport
   })
+
+/**
+ * A worktree check that could not run, as status reports it: not passed,
+ * with the failure as the detail (review item R01). Status still answers.
+ */
+const unrunCheck = (failure: WorktreeCheckUnrun) =>
+  Effect.succeed(Result.fail(Formatter.formatJson(failure)))
 
 /** The incomplete attempts a state carries; none outside an incomplete or interrupted session. */
 const incompleteOf = (state: SessionState): ReadonlyArray<SessionAttempt> =>

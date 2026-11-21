@@ -13,6 +13,7 @@ import {
   WorktreeCreated,
 } from "../domain/events.ts"
 import { Roles } from "../domain/roles.ts"
+import type { Revision } from "../domain/ids.ts"
 import type { SessionCommand } from "../domain/session.ts"
 import type { SessionState } from "../domain/session-state.ts"
 import { allowed, Allowed, type CommandChecks } from "../features/command-rules.ts"
@@ -20,7 +21,7 @@ import { holdsInPlace, pinMatches } from "../features/launch-facts.ts"
 import type { LedgerSnapshot } from "../domain/ledger.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
-import type { SessionCapabilities, SessionContext, SessionSettings } from "./session-context.ts"
+import type { SessionCapabilities, SessionContext, SessionSettings, WorktreeCheckUnrun, WorktreeUnready } from "./session-context.ts"
 import { CommandRefused } from "./session-errors.ts"
 
 /** The log as one command read it: every event and the position after the last. */
@@ -50,22 +51,32 @@ export const recordedWorktree = (events: ReadonlyArray<ProjectEvent>): Option.Op
 
 /**
  * The startup worktree check on the recorded worktree: its HEAD when it
- * passes, or why not. The attribute check judges the open session's base,
- * or the worktree's HEAD when no session is open, never the base the
- * worktree was created at (batch review B07). Never fails, so a command
- * that does not need the check still runs.
+ * passes, or the reason it judged the worktree unready. The attribute
+ * check judges the open session's base, or the worktree's HEAD when no
+ * session is open, never the base the worktree was created at (batch
+ * review B07). A judgment never fails, so a command that does not need
+ * the check still runs; a check that could not run fails with its own
+ * `WorktreeCheckUnrun`, never turned into a judgment (review item R01).
  */
 export const worktreeReading = (
   context: { readonly capabilities: Pick<SessionCapabilities, "checkWorktree"> },
   events: ReadonlyArray<ProjectEvent>,
-) =>
+): Effect.Effect<Result.Result<Revision, string>, WorktreeCheckUnrun> =>
   Option.match(recordedWorktree(events), {
     onNone: () => Effect.succeed(Result.fail("no supervisor worktree is recorded; run `worktree create`")),
     onSome: (recorded) =>
-      Effect.result(
-        Effect.mapError(context.capabilities.checkWorktree(recorded, sessionBase(events)), (failed) => failed.reason),
+      Effect.catchTag(
+        Effect.map(context.capabilities.checkWorktree(recorded, sessionBase(events)), passedReading),
+        "WorktreeUnready",
+        unreadyReading,
       ),
   })
+
+/** A check that passed, read as its HEAD. */
+const passedReading = (head: Revision): Result.Result<Revision, string> => Result.succeed(head)
+
+/** A check that judged the worktree unready, read as its reason. */
+const unreadyReading = (unready: WorktreeUnready) => Effect.succeed(Result.fail(unready.reason))
 
 /** The open session's base revision, if a session is open. */
 const sessionBase = (events: ReadonlyArray<ProjectEvent>) =>

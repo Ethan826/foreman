@@ -107,17 +107,21 @@ const prepared = (context: SessionContext, options: CorrectOptions, input: Prepa
 /** Why a findings file whose bytes are not UTF-8 is unreadable (review finding R04). */
 const findingsNotUtf8 = "not valid UTF-8"
 
+/** Why a findings file that is not there is unreadable. */
+const findingsMissing = "no file at this path"
+
 /**
  * The owner's findings file, read and published in the state directory
  * as `<sessionId>.<reviewOpId>.findings.md`: its text and its SHA-256.
+ * A missing file or bytes that are not UTF-8 are `FindingsFileUnreadable`,
+ * a refusal; a read that fails for any other reason keeps its own
+ * `StateFileFailed`, a failure (review item R01).
  */
 const ownerFindings = (context: SessionContext, session: OpenSession, reviewOpId: string, path: string) =>
   Effect.gen(function* () {
     const { stateFiles } = context.capabilities
-    const bytes = yield* Effect.mapError(
-      stateFiles.read(path),
-      (failed) => new FindingsFileUnreadable({ path, reason: failed.reason }),
-    )
+    const read = yield* stateFiles.readIfPresent(path)
+    const bytes = yield* Effect.fromOption(read, () => new FindingsFileUnreadable({ path, reason: findingsMissing }))
     const copy = `${context.settings.stateDir}/${session.opened.sessionId}.${reviewOpId}.findings.md`
     const sha256 = yield* stateFiles.publish(copy, bytes)
     const text = yield* Effect.mapError(

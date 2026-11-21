@@ -27,7 +27,7 @@ import type {
   SnapshotRefused,
   SnapshotStepFailed,
 } from "../domain/snapshot.ts"
-import type { GitCommandFailed } from "../domain/worktree.ts"
+import type { GitCommandFailed, GitOutputUndecodable, PathUnreadable } from "../domain/worktree.ts"
 import { foldSession } from "../features/session.ts"
 import { unusedWaivers } from "../features/waiver.ts"
 import type { ProfilePathUnsafe } from "../format/claude-settings.ts"
@@ -56,11 +56,13 @@ export type AttemptStop =
   | FileNotUtf8
   | FindingsFileUnreadable
   | GitCommandFailed
+  | GitOutputUndecodable
   | GrantSettled
   | LedgerBusy
   | LedgerError
   | LostRace
   | Cause.NoSuchElementError
+  | PathUnreadable
   | PositionMoved
   | ProfilePathUnsafe
   | ProjectLogError
@@ -86,12 +88,16 @@ const failure = constant(false)
  * Whether a failure is a deliberate refusal, which expires every armed
  * waiver, or a failure to read, write or run, which expires none. A
  * refusal is foreman deciding, from what it read, that the attempt must
- * not launch: the rules, quota, a refused `--waive`, a lost race at
- * batch I, a changed recorded file, a file that is not UTF-8, an
- * unreadable findings file, an unsafe profile path, refused attribute
- * sources and the snapshot's refusals. A failure is a store, file, git command or process that did
- * not do its work, after which a retry may succeed with the same
- * consent. `NoSuchElementError` arises only when state the rules
+ * not launch: the rules (a worktree judged unready among them), quota, a
+ * refused `--waive`, a lost race at batch I, a missing or changed
+ * recorded file, a file that is not UTF-8, a missing or undecodable
+ * findings file, an unsafe profile path, refused attribute sources and
+ * the snapshot's refusals. A failure is a store, file, git command or
+ * process that did not do its work, after which a retry may succeed with
+ * the same consent: a file read that failed, git output that does not
+ * decode and a path `stat` could not inspect among them. Callers keep a
+ * failure's own tag and never turn it into a refusal's (focused review
+ * of R01). `NoSuchElementError` arises only when state the rules
  * required is missing, which is a fault, not a decision.
  * `ClientStartFailed` and `RawOutputFailed` come after batch I, which
  * already settled every waiver.
@@ -105,11 +111,13 @@ export const isRefusal: (stop: AttemptStop) => boolean = Match.type<AttemptStop>
     FileNotUtf8: refusal,
     FindingsFileUnreadable: refusal,
     GitCommandFailed: failure,
+    GitOutputUndecodable: failure,
     GrantSettled: failure,
     LedgerBusy: failure,
     LedgerError: failure,
     LostRace: refusal,
     NoSuchElementError: failure,
+    PathUnreadable: failure,
     PositionMoved: failure,
     ProfilePathUnsafe: refusal,
     ProjectLogError: failure,

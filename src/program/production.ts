@@ -12,11 +12,13 @@
 // `git-home`, the empty HOME every git command runs with (plan B11b). A
 // handoff's git work runs through the runner pinned to the session's
 // recorded worktree, with the target's attribute allowance.
-import { Clock, Console, Effect, Formatter, Option, Random, Record } from "effect"
+import { Clock, Console, Effect, Formatter, Option, Random, Record, Result } from "effect"
 import type { Scope } from "effect"
+import type { AttributeSourcesRefused } from "../domain/attributes.ts"
 import type { WorktreeCreated } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
 import type { TargetBinding } from "../domain/target.ts"
+import { GitOutputUndecodable, type WorktreeCheckFailed, type WorktreeRecordInvalid } from "../domain/worktree.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { allocationsInFallback } from "../features/admission.ts"
 import { ownerOnly } from "../features/counting.ts"
@@ -33,7 +35,7 @@ import { openProjectLog } from "../runtime/project-log.ts"
 import { tryLock } from "../runtime/project-lock.ts"
 import { startClientWith } from "../runtime/spawn.ts"
 import { stateFiles } from "../runtime/state-files.ts"
-import { readOwnerHeadWith } from "../runtime/worktree.ts"
+import { readOwnerHeadWith, revParseArgs } from "../runtime/worktree.ts"
 import { publishClaudeProfileWith } from "./claude-profile.ts"
 import { gitHomePath, preparedGitHome } from "./git-home.ts"
 import { handoffGitWith } from "./handoff-git.ts"
@@ -152,15 +154,28 @@ export interface StartupGit {
  * through the runner pinned to the record (plan B11d) and decoded, then
  * the attribute check on `base`, or on that HEAD when `base` is none
  * (batch review B07). `status` runs the same check (production-status.ts).
+ * A judgment that the worktree is unready (`WorktreeCheckFailed`,
+ * `WorktreeRecordInvalid`, `AttributeSourcesRefused`) becomes
+ * `WorktreeUnready`; a check that could not run keeps its own failure
+ * (`WorktreeCheckUnrun`, review item R01), and a HEAD that does not
+ * decode is `GitOutputUndecodable`.
  */
 export const checkedHead = (git: StartupGit, recorded: WorktreeCreated, base: Option.Option<Revision>) =>
-  Effect.mapError(
+  Effect.catchTags(
     Effect.gen(function* () {
       yield* git.worktree.identifyWorktree(recorded)
       const text = yield* readOwnerHeadWith(pinnedGitWith(startGit)(git.home)(recorded))(recorded.path)
-      const head = yield* Effect.fromResult(decodeRevParseRevision(text))
+      const head = yield* Effect.fromResult(Result.mapError(decodeRevParseRevision(text), headUndecodable))
       yield* git.handoffGit(recorded).checkAttributes(Option.getOrElse(base, () => head))
       return head
     }),
-    (failure) => new WorktreeUnready({ reason: Formatter.formatJson(failure) }),
+    { WorktreeCheckFailed: unready, WorktreeRecordInvalid: unready, AttributeSourcesRefused: unready },
   )
+
+/** A judgment that the worktree is unready, with the judgment as its reason. */
+const unready = (judgment: WorktreeCheckFailed | WorktreeRecordInvalid | AttributeSourcesRefused) =>
+  Effect.fail(new WorktreeUnready({ reason: Formatter.formatJson(judgment) }))
+
+/** A HEAD read that does not decode as a revision, naming the command. */
+const headUndecodable = (issue: { readonly message: string }) =>
+  new GitOutputUndecodable({ args: revParseArgs.ownerHead, reason: issue.message })

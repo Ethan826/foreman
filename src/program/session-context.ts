@@ -19,7 +19,7 @@ import type {
   SnapshotRefused,
   SnapshotStepFailed,
 } from "../domain/snapshot.ts"
-import type { GitCommandFailed } from "../domain/worktree.ts"
+import type { GitCommandFailed, GitOutputUndecodable, PathUnreadable } from "../domain/worktree.ts"
 import type { AdmissionContext } from "../features/admission.ts"
 import type { ReadClientVersion } from "../runtime/client-version.ts"
 import type { GitOutput } from "../runtime/git.ts"
@@ -29,16 +29,29 @@ import type { StateFiles } from "../runtime/state-files.ts"
 import type { PublishClaudeProfile } from "./claude-profile.ts"
 
 /**
- * The startup worktree check (plans B11a to B11d) did not pass for the
- * recorded worktree, or its HEAD could not be read; `reason` says why.
+ * The startup worktree check (plans B11a to B11d) judged the recorded
+ * worktree unready: it is not listed, locked and identified as recorded,
+ * its record is invalid, or its attribute sources are refused; `reason`
+ * says why. A check that could not run is a {@link WorktreeCheckUnrun}
+ * instead (review item R01).
  */
 export class WorktreeUnready extends Schema.TaggedError<WorktreeUnready>()("WorktreeUnready", {
   reason: Schema.String,
 }) {}
 
 /**
+ * The startup worktree check could not run: a git command failed or
+ * printed what does not decode, or the recorded path could not be
+ * inspected. These are failures, never a judgment of the worktree, so a
+ * launch stopped by one keeps every armed waiver (review item R01).
+ */
+export type WorktreeCheckUnrun = GitCommandFailed | GitOutputUndecodable | PathUnreadable
+
+/**
  * Runs the startup worktree check on the recorded supervisor worktree and
- * returns its HEAD. Production runs `identifyWorktree`, then `git
+ * returns its HEAD. Fails with `WorktreeUnready` when it judges the
+ * worktree unready and with a {@link WorktreeCheckUnrun} when it could
+ * not run. Production runs `identifyWorktree`, then `git
  * rev-parse HEAD` through the runner pinned to the record, then the
  * attribute check on `base`, the open session's base, or on that HEAD
  * when no session is open (batch review B07).
@@ -46,7 +59,7 @@ export class WorktreeUnready extends Schema.TaggedError<WorktreeUnready>()("Work
 export type CheckWorktree = (
   recorded: WorktreeCreated,
   base: Option.Option<Revision>,
-) => Effect.Effect<Revision, WorktreeUnready>
+) => Effect.Effect<Revision, WorktreeUnready | WorktreeCheckUnrun>
 
 /**
  * Why a snapshot was not taken: refused before staging
