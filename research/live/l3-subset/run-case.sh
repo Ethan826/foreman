@@ -13,9 +13,10 @@
 # Before the client, in order, and stopping at the first failure with no
 # client started: the session token, the completed setup, the baseline,
 # the case's variant, unused run ids, the control gate (C2 to C6 need the
-# variant's latest C1 attempt to hold a current PASS: score.py --check),
-# the path gate (every other Claude root in the root's path record whose
-# C1 has started holds a current PASS for its latest attempt), the
+# variant's newest C1 attempt that began recording evidence to hold a
+# current PASS: score.py --check), the path gate (every other Claude root
+# in the root's path record whose C1 has begun holds a current PASS for
+# that newest attempt), the
 # listener's preflight (the first line of out/listener.log is this root's
 # nonce request, answered 200), the commands on PATH, for Claude the
 # root's settings equal to production's current rendering and the argv
@@ -104,19 +105,44 @@ if [ "$attempt" -gt 1 ]; then
     stop "attempt $attempt needs attempt $((attempt - 1)) first"
 fi
 
-# Whether the latest C1 attempt of the root $1 holds a current PASS
-# (score.py --check: the stored PASS equals the score of the judgment and
-# evidence as they are now). Returns 0 if it does, 3 when C1 has not
-# started in that root, 1 otherwise. Sets control to the latest attempt's
-# run id.
+# The evidence files this script writes for the run $1, in the order it
+# writes them. The first, the before snapshot, is where an attempt begins
+# recording evidence; a later file shows the same even if the earlier ones
+# are gone.
+run_files() {
+  printf '%s\n' "snap-$1-before.txt" "$1.argv" "$1-index-before" "$1-listener-before" "$1-mcp-before" \
+    "$1.jsonl" "$1.stderr" "$1-last.txt" "$1.exit" "snap-$1-after.txt" "$1-index-after" \
+    "$1-listener-after" "$1-mcp-after" "$1.diff" "$1.evidence"
+}
+# Whether the run $2 in the out/ directory $1 began recording evidence.
+began() {
+  for name in $(run_files "$2"); do
+    if [ -e "$1/$name" ] || [ -L "$1/$name" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# Whether the newest C1 attempt of the root $1 that began recording
+# evidence holds a current PASS (score.py --check: the stored PASS equals
+# the score of the judgment and evidence as they are now). Every attempt
+# number is looked at, so an attempt interrupted before its exit status,
+# or one past a gap, is never passed over for an older PASS. Returns 0 if
+# it does, 3 when no C1 attempt has begun in that root, 1 otherwise. Sets
+# control to that attempt's run id.
 control_state() {
   control=c1-control
-  if [ ! -e "$1/out/c1-control.exit" ] && [ ! -e "$1/out/snap-c1-control-before.txt" ]; then
-    return 3
-  fi
+  newest=0
   n=1
-  while [ -e "$1/out/$(run_id c1-control $((n + 1))).exit" ]; do n=$((n + 1)); done
-  control=$(run_id c1-control "$n")
+  while [ "$n" -le 99 ]; do
+    if began "$1/out" "$(run_id c1-control "$n")"; then
+      newest=$n
+    fi
+    n=$((n + 1))
+  done
+  [ "$newest" -gt 0 ] || return 3
+  control=$(run_id c1-control "$newest")
   "$here/score.py" --check "$1" "$control" > /dev/null 2>&1 || return 1
 }
 

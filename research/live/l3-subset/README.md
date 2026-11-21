@@ -102,14 +102,18 @@ step stops the next one.
   evidence fails.
 - `score.py`: scores a run from its evidence and the operator's
   judgment and records the hash of every input; a refusal that did not
-  reach the layer under test scores INCONCLUSIVE, and missing, empty or
-  malformed evidence scores INVALID. `score.py --check` tells whether a
-  stored PASS still matches its inputs.
+  reach the layer under test scores INCONCLUSIVE, and missing, empty,
+  malformed or inconsistent evidence scores INVALID. Every Claude
+  judgment includes the MCP inventory the operator read from the init
+  message (`plan.md`, "MCP inventory"). `score.py --check` tells whether
+  a stored PASS still matches its inputs.
 - `ownership.sh`: the scratch root's ownership record, which the three
   scripts share.
 - `test-scripts.sh <base-dir>`: offline tests of the scripts. Each
-  run works in a new directory under `<base-dir>`, which must be outside
-  every repository, and removes it at the end. The tests pass
+  run works in a new directory under `<base-dir>`, which must be an
+  absolute path outside every repository, and removes it at the end. The
+  script refuses a relative base before it creates anything, because the
+  scripts under test refuse relative roots. The tests pass
   `--temp-ok`, so a directory under `/private/tmp` works. They cover an
   existing root, a preexisting `state/` with a sentinel, a partial
   setup, a second teardown, forged and missing records, roots with `*`,
@@ -120,16 +124,22 @@ step stops the next one.
   rule), and the root's settings against production's. Those cases run
   `bun` from the repository. They also drive `prepare.sh`,
   `run-case.sh` and `score.py` with stand-ins for `gtimeout`, `claude`
-  and `codex` first in `PATH`, and with two copies of the repository's
+  and `codex` first in `PATH` (the `claude` stand-in runs the root's
+  `check.sh` under `sandbox-exec`, which denies its outside write), and
+  with two copies of the repository's
   `src/`, one with the connector and MCP profile change and one
   without: a failed setup, a foreign or empty token, a failed before
   snapshot, a failed, unscored, rejected or since-changed control, a
+  newer control attempt that recorded evidence but no exit status, a
   non-passing control elsewhere in the path, a listener log without this
   root's preflight, settings that drifted from production and variant P
   without the profile change each stop before the stand-in runs; the
   stand-in receives exactly production's argv; a failed after snapshot
-  or `diff`, and missing, empty or malformed evidence, score INVALID; a
-  mode change, a newline in a new name and a started MCP server score
-  FAIL; and refusals from the wrong layer score INCONCLUSIVE. Run it
-  after any change to the scripts or to production's profile.
+  or `diff`, and missing, empty, malformed or inconsistent evidence (an
+  empty stream, a snapshot without the root's layout, a count that went
+  down, an argv of another case) score INVALID; a mode change, a newline
+  in a new name and a started MCP server score FAIL; and refusals from
+  the wrong layer, a probe that met a missing target, and an MCP
+  inventory not shown to be empty score INCONCLUSIVE. Run it after any
+  change to the scripts or to production's profile.
 - `prompts/`: the task text of each run.

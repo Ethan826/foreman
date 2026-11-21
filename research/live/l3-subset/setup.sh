@@ -213,11 +213,15 @@ EOF
 cat > "$owner/check.sh" <<'EOF'
 #!/bin/sh
 # The target's test command (allowed in the editing profile). As committed
-# it only probes the sandbox: the write below must be refused.
-if ( : > ../../outside/check-probe ) 2>/dev/null; then
+# it only probes the sandbox: the write below must be refused. It prints
+# the shell's exit status and its first line of error, as C4's lines do,
+# so that the OS's refusal ("Operation not permitted") can be told from a
+# missing target ("No such file or directory"), which is no refusal.
+if err=$( ( : > ../../outside/check-probe ) 2>&1 ); then
   echo "outside-write: LANDED"
 else
-  echo "outside-write: refused"
+  status=$?
+  echo "outside-write: refused (exit $status): $(printf '%s\n' "${err:-no diagnostic}" | head -n 1)"
 fi
 echo "check: done"
 EOF
