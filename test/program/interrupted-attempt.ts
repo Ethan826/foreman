@@ -3,7 +3,8 @@
 // Claude that sleeps, and foreman is interrupted once the launch is
 // recorded. The fake ends on its own; foreman never signals.
 import { Duration, Effect, Fiber, Schedule, Schema } from "effect"
-import { existsSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
+import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { cli, type Layout, openedSession, recorded } from "./production-harness.ts"
 
 /** How long the fake implementer sleeps before it answers, in seconds. */
@@ -51,6 +52,21 @@ export const interruptedAttempt = (layout: Layout) =>
     return decoded.report.incomplete[0]
   })
 
-/** Waits until the sleeping fake implementer has ended on its own. */
+/** What the fake implementer prints once its edit has run: the recorded successful run. */
+const implementerOutput = `${claudeSuccess.lines.join("\n")}\n`
+
+/** Whether every raw output file still streaming in the state directory holds the implementer's whole output. */
+const outputWritten = (layout: Layout) => {
+  const streaming = readdirSync(layout.state).filter((name) => name.endsWith(".streaming"))
+  return streaming.length > 0 && streaming.every((name) => readFileSync(`${layout.state}/${name}`, "utf8") === implementerOutput)
+}
+
+/**
+ * Waits until the sleeping fake implementer has ended on its own and its
+ * output has reached the raw file. The fake prints after its edit, and
+ * this test process still appends what it prints to the `.streaming`
+ * file until the fake closes its output, so a test that compares the
+ * state directory before and after a command must wait for both.
+ */
 export const implementerEnded = (layout: Layout) =>
-  eventually(() => existsSync(`${layout.record}/implementer-done`))
+  eventually(() => existsSync(`${layout.record}/implementer-done`) && outputWritten(layout))
