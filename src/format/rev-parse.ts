@@ -4,7 +4,7 @@
 // newline survives (owner's correction to ruling 4 on B11a). Each value is
 // read by its own `rev-parse`, so no value is split from another at a
 // newline.
-import { Result, Schema, SchemaTransformation, String } from "effect"
+import { Array as Arr, Option, Result, Schema, SchemaTransformation, String } from "effect"
 import { Revision } from "../domain/ids.ts"
 import { GitText, IdentityNoRepository, IdentityPrinted, type IdentityRun, IdentityUnread } from "../domain/worktree.ts"
 
@@ -75,11 +75,13 @@ const noRepositoryDiagnostic = "fatal: not a git repository"
  * inside the recorded path (owner ruling on the R2 residue of the B11a
  * review; focused re-review finding 1). Exit 0 decodes its stdout as
  * {@link decodeRevParsePath} does, into `IdentityPrinted`. A non-zero exit
- * whose stderr begins with git's no-repository diagnostic is
- * `IdentityNoRepository`; any other non-zero exit, such as an I/O error
+ * whose last stderr line begins with git's no-repository diagnostic is
+ * `IdentityNoRepository`, whatever lines come before it, such as Apple
+ * Git's warnings about its temporary directory (follow-up review at
+ * 3b72efc, finding 1). Any other non-zero exit, such as an I/O error
  * reading the repository, is `IdentityUnread`. Both keep the exit code and
- * stderr. Fails only when a run that exited 0 printed something other
- * than one absolute path.
+ * all of stderr. Fails only when a run that exited 0 printed something
+ * other than one absolute path.
  */
 export const decodeIdentityRun = (run: {
   readonly exitCode: number
@@ -92,6 +94,15 @@ export const decodeIdentityRun = (run: {
 
 /** A non-zero identity run: git's report of no repository, or a read it could not complete. */
 const exitedRun = (run: { readonly exitCode: number; readonly stderr: string }): IdentityRun =>
-  String.startsWith(noRepositoryDiagnostic)(run.stderr)
+  Option.exists(lastLine(run.stderr), String.startsWith(noRepositoryDiagnostic))
     ? new IdentityNoRepository({ exitCode: run.exitCode, stderr: run.stderr })
     : new IdentityUnread({ exitCode: run.exitCode, stderr: run.stderr })
+
+/**
+ * The last line of git's stderr, without the one newline that ends it.
+ * git stops at its fatal diagnostic, so that line is the last one; a
+ * diagnostic followed by anything else, even an empty line, is not read
+ * as one.
+ */
+const lastLine = (stderr: string): Option.Option<string> =>
+  Arr.last(String.split(String.endsWith(lineEnd)(stderr) ? dropLineEnd(stderr) : stderr, lineEnd))

@@ -70,6 +70,19 @@ describe("decodeRevParseRevision", () => {
   })
 })
 
+/**
+ * Real stderr of Apple Git 2.50.1 (Apple Git-155) in a plain directory when
+ * the xcrun shim cannot write its cache in the user temporary directory
+ * (captured under `sandbox-exec` denying `/private/var/folders`; follow-up
+ * review at 3b72efc, finding 1).
+ */
+const xcrunThenNoRepository = [
+  "git: error: couldn't create cache file '/var/folders/2c/7nrm0sn57qs8jjnj2_2w99v80000gn/T/xcrun_db-SrGNuVNA' (errno=Operation not permitted)",
+  "git: error: couldn't create cache file '/var/folders/2c/7nrm0sn57qs8jjnj2_2w99v80000gn/T/xcrun_db-9iAWEeKB' (errno=Operation not permitted)",
+  "fatal: not a git repository (or any of the parent directories): .git",
+  "",
+].join("\n")
+
 describe("decodeIdentityRun", () => {
   it("decodes a run that exited 0 into the path it printed", () => {
     const run = { exitCode: 0, stdout: "/repo/.git/worktrees/w\n", stderr: "" }
@@ -98,6 +111,30 @@ describe("decodeIdentityRun", () => {
     "error: fatal: not a git repository\n",
     "",
   ])("reads any other non-zero exit, %j, as a read git could not complete", (stderr) => {
+    expect(decodeIdentityRun({ exitCode: 128, stdout: "", stderr })).toEqual(
+      Result.succeed(new IdentityUnread({ exitCode: 128, stderr })),
+    )
+  })
+
+  it("reads the no-repository diagnostic after Apple Git's xcrun lines as no repository, keeping all of stderr", () => {
+    expect(decodeIdentityRun({ exitCode: 128, stdout: "", stderr: xcrunThenNoRepository })).toEqual(
+      Result.succeed(new IdentityNoRepository({ exitCode: 128, stderr: xcrunThenNoRepository })),
+    )
+  })
+
+  it("reads the no-repository diagnostic after a warning line as no repository", () => {
+    const stderr = "warning: unable to access '/tmp': Permission denied\nfatal: not a git repository: /gone/.git\n"
+    expect(decodeIdentityRun({ exitCode: 128, stdout: "", stderr })).toEqual(
+      Result.succeed(new IdentityNoRepository({ exitCode: 128, stderr })),
+    )
+  })
+
+  it.each([
+    "fatal: not a git repository\nfatal: unable to read git directory: Input/output error\n",
+    "warning: x\nerror: fatal: not a git repository\n",
+    "warning: x\n  fatal: not a git repository\n",
+    "warning: x\nfatal: not a git repository\n\n",
+  ])("does not read the diagnostic %j anywhere but the start of the last line", (stderr) => {
     expect(decodeIdentityRun({ exitCode: 128, stdout: "", stderr })).toEqual(
       Result.succeed(new IdentityUnread({ exitCode: 128, stderr })),
     )

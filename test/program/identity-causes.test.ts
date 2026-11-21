@@ -31,6 +31,9 @@ const ioDiagnostic = "fatal: unable to read git directory: Input/output error\n"
 /** git's diagnostic where it finds no repository at all. */
 const noRepository = "fatal: not a git repository (or any of the parent directories): .git\n"
 
+/** Apple Git's xcrun lines before the same diagnostic (follow-up review at 3b72efc, finding 1). */
+const xcrunThenNoRepository = `git: error: couldn't create cache file '/var/folders/T/xcrun_db-SrGNuVNA' (errno=Operation not permitted)\n${noRepository}`
+
 /** Real git, except that the command holding `flag` exits 128 with `stderr`. */
 const exitingOn =
   (flag: string, stderr: string): StartGit =>
@@ -83,6 +86,15 @@ const noRepositoryExpires = (harness: Harness) =>
     expect(yield* expiredOf(harness)).toEqual([new WaiverExpired({ waiverId })])
   })
 
+/** git's report of no repository after other lines is still the judgment, and expires the waiver. */
+const noRepositoryAfterWarningsExpires = (harness: Harness) =>
+  Effect.gen(function* () {
+    const stop = yield* implementOver(harness, exitingOn("--absolute-git-dir", xcrunThenNoRepository))
+    expect(stop).toMatchObject({ _tag: "CommandRefused" })
+    expect(yield* expiredOf(harness)).toEqual([new WaiverExpired({ waiverId })])
+    expect(harness.client.launches.length).toBe(0)
+  })
+
 describe("an identity read git could not complete keeps its cause and the waiver", () => {
   it.effect("an I/O error from --absolute-git-dir surfaces as GitCommandFailed", () =>
     withHarness({ repository: true }, keepsWaiverOn("--absolute-git-dir")),
@@ -92,5 +104,8 @@ describe("an identity read git could not complete keeps its cause and the waiver
   )
   it.effect("git's report of no repository is still a judgment that expires the waiver", () =>
     withHarness({ repository: true }, noRepositoryExpires),
+  )
+  it.effect("git's report of no repository after Apple Git's xcrun lines still expires the waiver", () =>
+    withHarness({ repository: true }, noRepositoryAfterWarningsExpires),
   )
 })
