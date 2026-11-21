@@ -54,10 +54,38 @@ slice does not authorize it.
   (0 blocking, 45 notes) and `bun run test` (120 files, 1,473 tests)
   pass. Measured worker use: 2,979,906 tokens to build, 1,434,890 to
   correct. The record is the execution section of
-  `2026-11-19-assisted-cycle-plan.md`. Next: Codex's re-review against
-  the findings ledger.
+  `2026-11-19-assisted-cycle-plan.md`.
+- Checkpoint 2026-11-20 (evening): `assisted` is at 65398e5 (this
+  checkpoint's commit follows it). Three more review rounds (the
+  correction re-review R01 to R06, the focused review, the focused
+  re-review) were corrected; the red intermediate history was folded on
+  the owner's ruling. On 65398e5: check (0 blocking, 52 notes), docs (no
+  warnings), the full suite (133 files, 1,547 tests, output kept) and
+  `research/live/l3-subset/test-scripts.sh` (61 of 61) pass. Each
+  review record is in this directory (`2026-11-20-assisted-*.md`); the
+  plan's execution record lists every integration, ruling, incident and
+  measured worker use.
+- Next: Codex reviews 3b72efc..65398e5 (the re-review fixes and the L3
+  package). Landing on `main` and push need the owner's OK after that.
+- Open owner decisions, each recorded at the end of the plan:
+  - L03: whether foreman's Claude sessions load the owner's user-level
+    settings and hooks. The read-only inventory is in the git-ignored
+    `.build/l03/inventory.md` (local only). The L3 runbook now tests
+    both variants (U inherited, P `--setting-sources project,local`).
+  - Found by the inventory, outside L03: claude.ai connectors (Gmail,
+    Docs, Calendar, Drive) and a target repository's `.mcp.json` servers
+    and project hooks reach a session under both variants; the profile
+    should switch connectors off and neutralize project MCP servers,
+    which is a code change needing the owner's OK.
+  - From the last fixes: attribute-check read failures still refuse
+    (B11c) against R01's rule; a damaged `.git` file is a failure, not a
+    judgment; `status` still needs HOME when `ledgerDir` is omitted.
+  - From the L3 package: run both variants or only the ruled one; the
+    changed odd-path case; `test-scripts.sh` now depends on `bun` and
+    `src/`.
 - The L3 subset is prepared, not run (`research/live/l3-subset/`). It
-  needs the owner's ruling on L03 and a separate authorization.
+  needs the L03 ruling and a separate authorization (about 14 short
+  client runs).
 - The rest of B11 (the protected digest, the commit procedure and the
   review worktree) and B12 to B18 remain unauthorized. L4 waits on B13 to
   B15. Each push needs the owner's OK.

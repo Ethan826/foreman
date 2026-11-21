@@ -896,3 +896,9 @@ settings inherited and with them excluded, plus the pre-L3 path
 restriction. Neither runs a client with a prompt or makes a live call.
 L03 itself, the L3 live run, landing and push remain separate owner
 decisions.
+
+`l3-variants` integrated (65398e5), 142,409 tokens; the L03 inventory
+pass, 129,303 tokens, wrote only the git-ignored
+`.build/l03/inventory.md`. On 65398e5 all four checks pass, including
+the offline L3 script tests (61 of 61). Checkpoint written to
+`2026-11-15-checkpoint.md`; work stops there for the owner's decisions.
