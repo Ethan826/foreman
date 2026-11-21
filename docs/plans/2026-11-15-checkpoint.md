@@ -73,9 +73,14 @@ slice does not authorize it.
   L4); `assisted` is at 95fd4e1, where check (0 blocking, 63 notes),
   docs, the full suite (135 files, 1,562 tests) and `test-scripts.sh`
   (112 of 112) pass.
-- Next: Codex reviews d0a4e3f..95fd4e1. The connector and MCP profile
-  change is ruled but not dispatched. Landing on `main` and push need
-  the owner's OK.
+- 2026-11-21: Codex's L3 corrections review was adopted; the profile
+  change (c0d0952) and the L3 gate fixes (b5c7e91) are integrated, and
+  an offline rehearsal of the first cycle on foreman ran with stand-in
+  clients (findings and the draft task are at the end of the plan).
+- Next: Codex reviews 95fd4e1..HEAD; the owner rules on the rehearsal's
+  findings; then the L3 Path A live run (separate authorization),
+  landing (a fast-forward of `main`) and push, and the first real cycle
+  on foreman (decision P10).
 - Open owner decisions, each recorded at the end of the plan:
   - L03: whether foreman's Claude sessions load the owner's user-level
     settings and hooks. The read-only inventory is in the git-ignored
