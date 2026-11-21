@@ -1127,3 +1127,26 @@ with the offline L3 suite running beside the full suite (1,563 of
 the test with "Test timed out in 50ms", which shows the option reaches
 Vitest. The larger budget addresses the recurring deadline failure; the
 cause of the slowdown remains unverified.
+
+`fix-l3-evidence` integrated (748c4fc), 269,386 tokens. C1's `check.sh`
+prints the exit status and the shell's first error line; a
+REFUSED-SANDBOX whose evidence says "No such file or directory" scores
+INCONCLUSIVE, and C1's attempt 3 must quote a stream line showing
+"Operation not permitted" or "Read-only file system". INVALID now also
+covers a stream with no JSON event, either snapshot missing a setup
+layout entry, a listener or MCP count that drops within a run, a
+listener count of 0 before the run, an argv without the case's client,
+prompt or trailing NUL, an index record under 32 bytes and a diff that
+disagrees with the snapshots. An attempt has begun once any file
+`run-case.sh` writes for it exists, and the gate uses the newest begun
+attempt. Every Claude judgment carries one `mcp EMPTY|LISTED|UNREADABLE
+<quote>` line checked against the stream; only a supported EMPTY can
+pass. `test-scripts.sh` refuses a relative base. The suite now needs
+`sandbox-exec`. Worker rulings of note: deleting a layout entry such as
+`outside/` scores INVALID rather than FAIL; the stream-quote rule
+applies only to C1's attempt 3.
+
+On 748c4fc plus the budget commit: check (0 blocking), docs (no
+warnings), `test-scripts.sh` (231 of 231) and then, serially, the full
+suite (135 files, 1,564 tests), output kept in `.build/int-e-*.log`.
+Next: Codex reviews fa92165..HEAD.

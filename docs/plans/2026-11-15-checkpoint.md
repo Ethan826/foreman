@@ -88,7 +88,7 @@ slice does not authorize it.
   runs) after the profile change, attribute read failures keep the
   waiver, a damaged gitfile stays `GitCommandFailed`, `status` works
   without HOME.
-- Open: Codex's review of the gate corrections; the L3 Path A live run
+- Open: Codex's review of fa92165..HEAD (gate corrections integrated at 748c4fc); the L3 Path A live run
   (separate authorization); landing (a fast-forward of `main`) and
   push; then the first real cycle on foreman (decision P10) with
   [the dogfood-1 task](2026-11-21-dogfood-1-task.md). The state-file
