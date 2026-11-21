@@ -864,3 +864,23 @@ when HOME is unset and the config omits `ledgerDir`, before the recorded
 binding is read. Raw logs are kept locally in `.build/reviews/` (git
 ignored). One worker (`fix-rereview`) corrects all three. The earlier
 lost-output cycle failure keeps an unknown cause.
+
+`fix-rereview` integrated (to 90d34c2), 220,567 tokens: an identity
+read that exits non-zero is a judgment only when git reports no
+repository; any other exit is `GitCommandFailed` with git's diagnostic
+and keeps the waiver; one leading byte-order mark is accepted in the
+configuration and binding files; owner exits read the binding before
+settling the ledger, so an unset HOME no longer blocks them. On
+90d34c2: check (0 blocking, 49 notes), docs (no warnings), full suite
+(133 files, 1,547 tests) at load average about 17, output kept.
+
+Open for the owner and the next review: attribute-check read failures
+still count as refusals under the B11c ruling (a failed read refuses),
+which conflicts with R01's rule for other checks; identity exits such as
+"invalid gitfile format" or "dubious ownership" are now failures, not
+judgments; `status` still needs HOME when the config omits `ledgerDir`.
+
+L03 preparation running in parallel: a read-only inventory of what the
+owner's user-level Claude settings would bring into a foreman session
+(written to the git-ignored `.build/l03/`, not to the repository), and
+the L3 package's two-variant runbook with the path restriction.
