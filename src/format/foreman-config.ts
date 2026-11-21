@@ -12,6 +12,7 @@ import { Option, Result, Schema, String } from "effect"
 import { ApprovedAttributeAllowance } from "../domain/attributes.ts"
 import { Client } from "../domain/clients.ts"
 import { ProjectId } from "../domain/ids.ts"
+import { withoutByteOrderMark } from "./byte-order-mark.ts"
 
 /** The configuration file could not be decoded; `reason` says where. */
 export class ConfigUndecodable extends Schema.TaggedError<ConfigUndecodable>()(
@@ -86,10 +87,11 @@ const decodeFile = Schema.decodeUnknownResult(Schema.fromJsonString(ConfigFile),
  * Decodes the configuration file's text. Fails with
  * {@link ConfigUndecodable} when the text is not JSON, a key is unknown
  * or missing, a path is not absolute, a pin is empty, or a value is
- * malformed.
+ * malformed. One leading byte order mark is dropped first (focused
+ * re-review finding 2).
  */
 export const decodeForemanConfig = (text: string): Result.Result<ForemanConfig, ConfigUndecodable> =>
-  Result.mapBoth(decodeFile(text), {
+  Result.mapBoth(decodeFile(withoutByteOrderMark(text)), {
     onFailure: (error) => new ConfigUndecodable({ reason: String.trim(error.message) }),
     onSuccess: ({ ledgerDir, ...rest }): ForemanConfig => ({ ...rest, ledgerDir: Option.fromNullishOr(ledgerDir) }),
   })
