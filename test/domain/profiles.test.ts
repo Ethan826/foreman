@@ -1,6 +1,7 @@
 // The two fixed permission profiles (plan "Profiles, environment and
 // briefs", decision P4): the exact argv each builds from a brief, with no
-// bypass flag and no session reuse for either client.
+// bypass flag and no session reuse for either client. Claude's argv loads
+// no user settings and no MCP server (owner ruling of 2026-11-21).
 import { describe, expect, it } from "@effect/vitest"
 import { Clients } from "../../src/domain/clients.ts"
 import { claudeEditingArgv, codexReviewArgv } from "../../src/domain/profiles.ts"
@@ -39,7 +40,14 @@ describe("claudeEditingArgv", () => {
       "none",
       "--settings",
       "/state/claude-settings.json",
+      "--setting-sources",
+      "project,local",
+      "--strict-mcp-config",
     ])
+  })
+
+  it("loads no MCP configuration of its own", () => {
+    expect(claude).not.toContain("--mcp-config")
   })
 
   it("holds no bypass or resume flag", () => {

@@ -8,11 +8,15 @@
 // The sandbox keys come through `--settings` because a `false` from
 // project settings would be ignored (same table).
 //
-// The template leaves out two things on purpose. It allows no target test
-// command: the L3 template's `Bash(sh check.sh)` stands in for one, and no
-// ruling names production's. Whether Claude also loads the owner's user
-// settings and hooks (L03) is not decided here: the profile does not
-// restrict setting sources.
+// The template allows no target test command on purpose: the L3
+// template's `Bash(sh check.sh)` stands in for one, and no ruling names
+// production's. User settings and hooks stay out through the argv's
+// `--setting-sources project,local`, and MCP servers through its
+// `--strict-mcp-config` (owner ruling of 2026-11-21, L03; see
+// `claudeEditingArgv`). The template adds `disableClaudeAiConnectors` as
+// a second guard against claude.ai connectors: the 2.1.328 client honors
+// it when any loaded source, `--settings` included, sets it, and then
+// skips fetching the connectors.
 import { Array as Arr, Formatter, Result, Schema } from "effect"
 
 /**
@@ -82,6 +86,7 @@ const profileFor = (worktree: string) => ({
     network: { allowedDomains: [] },
   },
   autoMemoryEnabled: false,
+  disableClaudeAiConnectors: true,
 })
 
 /** The deny rule for a protected name at any depth: a directory's contents, or the file itself. */

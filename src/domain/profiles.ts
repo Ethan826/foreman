@@ -27,10 +27,19 @@ export interface ReviewProfileInput {
  * Claude's editing profile, for the implementer and the corrector:
  * `claude -p <brief> --output-format stream-json --verbose
  * --permission-mode dontAsk --permission-prompts none --settings
- * <settings-file>`. Anything that would prompt is denied (`dontAsk`,
- * and `--permission-prompts none`, so no one is asked); the allow and
- * deny lists and the sandbox come from the settings file. No bypass
- * flag, no `--resume`, no `--continue`.
+ * <settings-file> --setting-sources project,local --strict-mcp-config`.
+ * Anything that would prompt is denied (`dontAsk`, and
+ * `--permission-prompts none`, so no one is asked); the allow and deny
+ * lists and the sandbox come from the settings file. No bypass flag, no
+ * `--resume`, no `--continue`.
+ *
+ * The owner's ruling of 2026-11-21 (L03) settles what else loads.
+ * `--setting-sources project,local` leaves out the user's settings,
+ * hooks, `~/.claude/CLAUDE.md` and skills; the `--settings` file and managed policy load
+ * whatever the flag says. `--strict-mcp-config` with no `--mcp-config`
+ * starts no MCP server: none from a project `.mcp.json`, none at user
+ * scope and no claude.ai connector. The target repository's project and
+ * local settings still load.
  *
  * The exact flags are confirmed only by the L3 subset run
  * (research/live/l3-subset/plan.md), which has not run. A brief that
@@ -49,6 +58,9 @@ export const claudeEditingArgv = (input: EditingProfileInput): Arr.NonEmptyReado
   "none",
   "--settings",
   input.settingsFile,
+  "--setting-sources",
+  "project,local",
+  "--strict-mcp-config",
 ]
 
 /**

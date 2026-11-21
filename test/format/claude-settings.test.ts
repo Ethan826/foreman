@@ -23,6 +23,9 @@ const Settings = Schema.fromJsonString(
   }),
 )
 
+/** The template's connector switch (owner ruling of 2026-11-21). */
+const ConnectorSwitch = Schema.fromJsonString(Schema.Struct({ disableClaudeAiConnectors: Schema.Boolean }))
+
 const isFileRule = (rule: string) => /^(Read|Edit)\(/.test(rule)
 const boundRule = (rule: string) => rule.includes(`(/${worktree}/`)
 const insideWorktree = (path: string) => path.startsWith(`${worktree}/`)
@@ -50,6 +53,13 @@ describe("claudeEditingSettings", () => {
       const { sandbox } = yield* parsed(worktree)
       expect([sandbox.enabled, sandbox.failIfUnavailable, sandbox.allowUnsandboxedCommands]).toEqual([true, true, false])
       expect(sandbox.network.allowedDomains).toEqual([])
+    }))
+
+  it.effect("switches off claude.ai connectors", () =>
+    Effect.gen(function* () {
+      const text = yield* Effect.fromResult(claudeEditingSettings(worktree))
+      const { disableClaudeAiConnectors } = yield* Schema.decodeUnknownEffect(ConnectorSwitch)(text)
+      expect(disableClaudeAiConnectors).toBe(true)
     }))
 
   it("refuses a path that is relative, has a doubled slash, or holds a character a rule could read as syntax", () => {

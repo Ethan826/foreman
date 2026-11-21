@@ -68,6 +68,7 @@ const expectedProfile = (worktree: string) => ({
     network: { allowedDomains: [] },
   },
   autoMemoryEnabled: false,
+  disableClaudeAiConnectors: true,
 })
 
 /** Where foreman publishes the profile. */
