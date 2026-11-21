@@ -902,3 +902,42 @@ pass, 129,303 tokens, wrote only the git-ignored
 `.build/l03/inventory.md`. On 65398e5 all four checks pass, including
 the offline L3 script tests (61 of 61). Checkpoint written to
 `2026-11-15-checkpoint.md`; work stops there for the owner's decisions.
+
+## Follow-up reviews at 3b72efc and 65398e5 (2026-11-20)
+
+Codex reviewed `34ce0ab..3b72efc` (the follow-up section of
+[the focused re-review](2026-11-20-assisted-focused-rereview.md)) and
+`3b72efc..65398e5` ([the L3 package review](2026-11-20-l3-package-review.md)).
+The owner adopted Codex's recommendations in full (2026-11-20):
+
+- B11c and R01: an unreadable attribute source blocks the operation. If
+  the failed read is the only reason to stop, the diagnostic is kept and
+  the waiver stays armed. An independently established policy violation
+  expires it, even if another source was unreadable. This applies at
+  startup and during candidate checks.
+- Damaged gitfile or dubious ownership: stays `GitCommandFailed` with
+  git's diagnostic, and the waiver stays armed.
+- A1: the explicit `fatal: not a git repository` diagnostic is
+  recognized after preceding warning lines, and the full stderr is kept.
+  That verdict still expires the waiver.
+- A4: the bug is the unset-HOME case, which fails before the log lookup
+  (with HOME set, `StateMissing` came from a fixture with no log).
+  `status` reports the unresolved configured ledger path as a finding and
+  shows the log and the recorded ledger when available.
+- L3 variant order: a failed profile stops. A separately authorized
+  P-only run gets its own baseline and Codex fixture. Successful setup and
+  before-evidence capture are prerequisites to launch; missing or failed
+  after-evidence invalidates the result; a failure that did not reach the
+  permission or sandbox layer under test scores inconclusive.
+- Slash normalization: the runbook documents that setup accepts and
+  normalizes trailing and doubled slashes, with offline cases checking
+  that the resulting worktree paths meet the profile's restrictions.
+- Profile for the first dogfood cycle (L03 and the connector question):
+  exclude user settings and hooks (variant P), switch off claude.ai
+  connectors and neutralize project MCP servers, and validate that exact
+  production profile with P only. The profile code change is not yet
+  dispatched. The L3 live run, landing and push remain separate
+  decisions.
+
+Dispatched in parallel from 7006884: `fix-3b72efc` (A1, A4, B11c/R01)
+and `fix-l3-runbook` (L1 to L4), estimated at about 400k tokens in all.

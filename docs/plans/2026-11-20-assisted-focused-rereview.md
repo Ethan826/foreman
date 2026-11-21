@@ -94,3 +94,61 @@ The three findings are open locally. Before the first real tranche,
 decide L03 on whether Claude inherits user settings and hooks, then
 separately authorize the L3 permission trial on a disposable repo.
 Landing and push each require their own approval.
+
+## Follow-up review at 3b72efc
+
+`assisted` was clean at `3b72efc6758bc36f6490b4ca3b4c73ab1a646151` on
+entry. Reviewed the committed diff from `34ce0ab`. The independent
+probes found that an identity I/O exit now preserves Git's exit code and
+diagnostic, both JSON decoders again accept one leading byte-order mark,
+and a valid binding supplies the exit target when `HOME` is unset and
+the config omits `ledgerDir`.
+
+### Findings and recommended rulings
+
+1. **P3, open (R01). A Git warning can hide the no-repository verdict.**
+   The clean runner's Apple Git emitted a temporary-directory warning
+   before its normal `fatal: not a git repository` line in a disposable
+   plain directory. The [decoder](../../src/format/rev-parse.ts#L94)
+   returned `IdentityUnread` because it tests the start of the whole
+   stderr stream. The attempt would stop and leave the waiver armed for
+   this known mismatch. Recognize the fatal diagnostic after warning
+   lines and keep the full stderr. The probe exercises Git and decoding
+   together. The waiver consequence follows from the launch code.
+2. **Owner ruling pending (B11c and R01).** Keep B11c's requirement
+   that an unreadable attribute source blocks the operation. Apply R01
+   to waiver expiry when an incomplete read is the only reason to stop.
+   Preserve the read diagnostic and keep the waiver. An independently
+   established policy violation still expires it. The existing
+   [classifier](../../src/program/waiver-expiry.ts#L105) treats
+   every `AttributeSourcesRefused` as a refusal, including read-only
+   failures that reach it. Startup can also wrap that tag in
+   `WorktreeUnready` and then `CommandRefused`. Apply the ruling to
+   both startup and candidate checks.
+3. **Owner ruling pending (damaged gitfile).** Keep the current
+   `GitCommandFailed` classification for an invalid gitfile or dubious
+   ownership. Git could not establish the identity and its original
+   diagnostic gives the operator a repair signal. A genuine damaged
+   gitfile in a disposable linked worktree returned exit 128 and the
+   invalid-format diagnostic. Both cases stop the launch and leave the
+   waiver armed. A positive identity mismatch still expires it.
+4. **P3, open (status).** With a valid binding and no configured
+   `ledgerDir`, `productionStatus` returned `StateMissing` with a
+   valid `HOME` and `ConfigUndecodable` without one, before reaching
+   the log read. Recommend treating the unresolved configured ledger
+   path as a finding. Report the log and any valid recorded target and
+   ledger. Without a usable binding, report the log without choosing a
+   ledger. [Status setup](../../src/program/production-status.ts#L99)
+
+### Verification
+
+`git diff --check 34ce0ab..3b72efc` passed. The isolated archive's Git
+tree matched `4af1f4db95727403fa45ab706ab2f74108376faa`. Check passed
+with zero blocking prose findings and 49 notes. TypeDoc passed with no
+warnings and `treatWarningsAsErrors` enabled. The first archive setup
+omitted `git init`, so its index setup failed and the prose gate
+refused an empty file inventory. The verified run used the committed
+path inventory. The unrestricted full fake-client suite passed all
+1,547 tests across 133 files in 61.16 seconds.
+
+Raw logs and probes are under `.build/reviews/2026-11-20-3b72efc/`.
