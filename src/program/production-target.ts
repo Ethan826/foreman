@@ -12,7 +12,7 @@ import type { CanonicalLayout } from "../domain/layout.ts"
 import type { TargetBinding } from "../domain/target.ts"
 import { decodeForemanConfig, type ForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
 import { stateFiles } from "../runtime/state-files.ts"
-import { utf8Text } from "./client-output.ts"
+import { strictText } from "./client-output.ts"
 import { checkedLayout } from "./layout.ts"
 import { recordedTarget, type TargetPolicy } from "./target-binding.ts"
 
@@ -42,14 +42,17 @@ export const configuredTarget = (configPath: string, environment: Readonly<Recor
  * Reads the configuration at `configPath` and settles the ledger's
  * directory (`environment` supplies `HOME` for the default). Returns the
  * configuration and its layout as written, unresolved and unchecked.
- * Reads only. Fails with `ConfigUndecodable`, among others.
+ * Reads only. Fails with `FileNotUtf8` when the file is not UTF-8, which
+ * is never read with U+FFFD in place of its bytes (focused review finding
+ * 3), and with `ConfigUndecodable`, among others.
  */
 export const decodedConfiguration = (
   configPath: string,
   environment: Readonly<Record<string, string | undefined>>,
 ) =>
   Effect.gen(function* () {
-    const config = yield* Effect.fromResult(decodeForemanConfig(yield* utf8Text(yield* stateFiles.read(configPath))))
+    const text = yield* strictText(configPath, yield* stateFiles.read(configPath))
+    const config = yield* Effect.fromResult(decodeForemanConfig(text))
     const ledgerDir = yield* Effect.fromResult(ledgerDirOf(config, Option.fromNullishOr(environment.HOME)))
     const layout: CanonicalLayout = {
       stateDir: config.stateDir,

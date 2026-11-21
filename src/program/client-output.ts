@@ -50,16 +50,12 @@ export const utf8Bytes = (text: string) =>
   Stream.runFold(Stream.encodeText(Stream.make(text)), () => new Uint8Array(), concatenated)
 
 /**
- * Bytes read as UTF-8 text, replacing bytes that are not UTF-8 with
- * U+FFFD. Kept only for the foreman configuration and the target binding;
- * a launch command reads its files with {@link strictText}.
- */
-export const utf8Text = (bytes: Uint8Array) => Stream.mkString(Stream.decodeText(Stream.make(bytes)))
-
-/**
  * The bytes of the file at `path` as strict UTF-8 text (review finding
  * R04); fails with {@link FileNotUtf8} when they are not UTF-8. A leading
- * byte order mark is kept as U+FEFF.
+ * byte order mark is kept as U+FEFF. Every file foreman reads as text
+ * goes through it, the configuration and the target binding included
+ * (focused review finding 3); none is read with U+FFFD in place of bytes
+ * that are not UTF-8.
  */
 export const strictText = (path: string, bytes: Uint8Array) =>
   Effect.fromOption(strictUtf8(bytes), () => new FileNotUtf8({ path }))

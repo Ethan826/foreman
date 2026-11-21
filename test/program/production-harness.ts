@@ -187,7 +187,7 @@ export const openedSession = (layout: Layout, options: CliOptions = {}) =>
 /** The error tag a failed run printed: the `_tag` of the JSON on stderr. */
 export const failureTag = (run: CliRun): string => {
   const text = run.err.join("\n")
-  const match = /"_tag": "([A-Za-z]+)"/.exec(text)
+  const match = /"_tag": "([A-Za-z0-9]+)"/.exec(text)
   return match?.[1] ?? text
 }
 

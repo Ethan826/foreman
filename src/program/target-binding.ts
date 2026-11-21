@@ -12,13 +12,16 @@ import { compareTarget } from "../features/target-binding.ts"
 import { decodeTargetBinding, encodeTargetBinding } from "../format/target-binding.ts"
 import { createExclusive, readIfPresent } from "../runtime/binding-file.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
-import { utf8Bytes, utf8Text } from "./client-output.ts"
+import { strictText, utf8Bytes } from "./client-output.ts"
 
 /** How a command settles its target from the recorded and the configured binding. */
 export type TargetPolicy = (stateDir: string, configured: TargetBinding) => Effect.Effect<TargetBinding, unknown>
 
 /** The random part of a temporary file's name is below this bound (2^31). */
 const nonceBound = 2_147_483_648
+
+/** Why a binding whose bytes are not UTF-8 is unreadable. */
+const bindingNotUtf8 = "not valid UTF-8"
 
 /** Where the binding lives in the state directory `stateDir`. */
 export const bindingPath = (stateDir: string): string => `${stateDir}/target-binding.json`
@@ -39,14 +42,16 @@ export const requireBound: TargetPolicy = (stateDir, configured) =>
 
 /**
  * The binding recorded in `stateDir`, if any; reads only. Fails with
- * `TargetBindingUnreadable` when the file cannot be read or decoded.
+ * `TargetBindingUnreadable` when the file cannot be read or decoded,
+ * including when its bytes are not UTF-8, which are never read with
+ * U+FFFD in their place (focused review finding 3).
  */
 export const recordedTarget = (stateDir: string) =>
   Effect.gen(function* () {
     const path = bindingPath(stateDir)
     const bytes = yield* Effect.mapError(readIfPresent(path), fileFailed(path))
     if (Option.isNone(bytes)) return Option.none<TargetBinding>()
-    const text = yield* utf8Text(bytes.value)
+    const text = yield* Effect.mapError(strictText(path, bytes.value), () => undecodable(path)(bindingNotUtf8))
     return Option.some(yield* Effect.mapError(Effect.fromResult(decodeTargetBinding(text)), undecodable(path)))
   })
 
