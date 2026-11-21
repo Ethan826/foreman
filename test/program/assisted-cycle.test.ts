@@ -178,16 +178,24 @@ const handoffRecords = (harness: Harness) =>
     expect(text(yield* draftPathOf(harness))).toBe(renderFindingsDraft([]))
   })
 
+// Owner ruling (2026-11-20, R06 follow-up): each cycle test runs a whole
+// cycle on a real repository, so it gets a named, provisional budget, the
+// value of `endToEndMillis` (production-harness.ts). The focused review
+// saw the first test take 5,053 ms under Vitest's 5,000 ms default while
+// docs and check ran beside the suite. Investigate if a run comes close
+// to this limit.
+const cycleMillis = 60_000
+
 describe("the assisted cycle with fake clients over a real repository", () => {
   it.effect("writes exactly the expected batches and launches once per launch command", () =>
-    withHarness({ repository: true }, exactLog))
+    withHarness({ repository: true }, exactLog), cycleMillis)
 
   it.effect("gives each client a brief built only from recorded inputs", () =>
-    withHarness({ repository: true }, recordedBriefs))
+    withHarness({ repository: true }, recordedBriefs), cycleMillis)
 
   it.effect("reviews the snapshot trees of the implementer's and the corrector's edits", () =>
-    withHarness({ repository: true }, snapshotTrees))
+    withHarness({ repository: true }, snapshotTrees), cycleMillis)
 
   it.effect("records each handoff's role, attestation and findings hash, and drafts the findings", () =>
-    withHarness({ repository: true }, handoffRecords))
+    withHarness({ repository: true }, handoffRecords), cycleMillis)
 })
