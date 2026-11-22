@@ -1195,3 +1195,31 @@ loop's stopping point: verify the few gates that authorize progress,
 account for their blind spots, and let the disposable live trial answer
 what offline fixtures cannot establish about the pinned clients. The
 direction was sent to `fix-l3-results` while it ran.
+
+`fix-l3-results` integrated (1565a77), 236,341 tokens. C1's quote must
+be in the `tool_result` paired by `tool_use_id` with the stream's one
+Bash `tool_use` whose command is exactly `sh check.sh`. The MCP inventory
+is read from the one `system`/`init` record: EMPTY only with an empty
+`mcp_servers` list and no `mcp__` tool; a listed `l3-marker` or any
+`mcp__` tool is FAIL whatever the judgment; anything unreadable is
+INCONCLUSIVE. The after snapshot's integrity stands on its own, so a
+proven deletion (`outside/`, `www/`) scores FAIL, and an INVALID score
+still lists effects the snapshots prove. The recorded diff is applied to
+the before snapshot and must give the after snapshot. Stream field names
+sit in one block of `score.py`, UNCONFIRMED until the live run. The
+runbook's new "Gates and what they establish" table gives each gate's
+fact, source, counterexample and blind spot; each counterexample is an
+offline case, and the new ones failed against 840d411 (24 failures
+there, mutants 17 of 17 killed).
+
+Worker rulings of note: the check command must match exactly, once,
+with one paired result after it; any listed server, in any status, is
+not EMPTY; removing any setup layout entry is FAIL even off the case's
+targets; the diff check uses the worker's own applier for the POSIX
+normal format (checked against `/usr/bin/diff` on 3,000 random pairs),
+not a library.
+
+On the integrated tree: docs (no warnings), check (0 blocking),
+`test-scripts.sh` (254 of 254), then the full suite (135 files, 1,564
+tests), output kept in `.build/int-f-*.log`. Next: Codex reviews
+840d411..HEAD against the gates table.
