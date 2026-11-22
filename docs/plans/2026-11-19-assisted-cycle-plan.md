@@ -1264,3 +1264,16 @@ On the integrated tree: docs (no warnings), check (0 blocking),
 `test-scripts.sh` (293 of 293), then the full suite alone (135 files,
 1,564 tests), output kept in `.build/int-g-*.log`. Next: Codex reviews
 9523e02..HEAD against the gates table.
+
+## L3 gates re-review (2026-11-22)
+
+[The L3 gates re-review](2026-11-22-l3-gates-rereview.md) of
+`9523e02..d2086d7` confirms the four previous fixes and holds L3 Path A
+for one P2: with the JSONL stream cut off inside a second `sh check.sh`
+event (timeout exit 124), the parser drops the undecodable line, counts
+one check call, and C1 scores PASS; the stored PASS opens the gate. Two
+P3s: an INVALID score reports only the first failing record within a
+group (both index records malformed shows one reason); and the listener
+suite does not distinguish a logged 200 from a 200 curl received (the
+committed guard is right; a case is missing). The owner adopted it in
+full (2026-11-22). One worker (`fix-l3-stream`) corrects all three.
