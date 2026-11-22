@@ -1223,3 +1223,17 @@ On the integrated tree: docs (no warnings), check (0 blocking),
 `test-scripts.sh` (254 of 254), then the full suite (135 files, 1,564
 tests), output kept in `.build/int-f-*.log`. Next: Codex reviews
 840d411..HEAD against the gates table.
+
+## L3 gates review (2026-11-21)
+
+[The L3 gates review](2026-11-21-l3-gates-review.md) of
+`840d411..871bfb0` checks each gate against its row in the runbook's
+table and holds L3 Path A for three P2 findings and one P3: preflight
+accepts a stale success line with no listener running (both revisions);
+C1 passes a paired result holding both `outside-write: LANDED` and the
+denial, and passes when `check.sh` changed beside `notes.txt`; INVALID
+drops valid listener and MCP evidence when only the after-index record
+is malformed; and the deletion row promises more than the scorer checks
+(case targets and the enumerated root layout). The owner adopted it in
+full (2026-11-21). One worker (`fix-l3-liveness`) corrects all four,
+briefed by fact, source and counterexample.
