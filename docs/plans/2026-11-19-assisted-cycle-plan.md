@@ -1372,3 +1372,7 @@ On the integrated tree: docs (no warnings), check (0 blocking),
 tests), output kept in `.build/int-j-*.log`. The L3 package awaits the
 owner's decision on the Path A live run; landing and push remain
 separate decisions.
+
+Owner authorization (2026-11-22): the L3 Path A live run (roots P and
+X, eight client runs per the runbook), then landing `assisted` on `main`
+by fast-forward, then the push, in that order.
