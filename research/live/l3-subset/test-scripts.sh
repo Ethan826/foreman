@@ -1778,7 +1778,7 @@ cp -p "$rt/out/c1-control.exit" "$work/exit.saved"
 # newlines, and second a complete line of a second sh check.sh tool_use.
 stream_with() {
   /usr/bin/python3 -I -c '
-import json, sys
+import json, os, sys
 text = open(sys.argv[1], encoding="utf-8").read()
 lines = text.split("\n")[:-1]
 second = json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [
@@ -1810,7 +1810,7 @@ stream_with '"\n".join(lines + ["[1]"]) + "\n"'
 rescore
 expect "a C1 whose stream has a line of JSON that is not an object scores INVALID" \
   '[ "$(outcome "$rt" c1-control)" = INVALID ] && grep -q "line 6 does not decode as a JSON object" "$rt/out/c1-control.score"'
-stream_with '"\n".join(lines + [json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "a b\x85c"}]}}, ensure_ascii=False)]) + "\n"'
+stream_with '"\n".join(lines[:-1] + [json.dumps({"type": "assistant", "message": {"role": "assistant", "content": [{"type": "text", "text": "a b\x85c"}]}}, ensure_ascii=False)] + lines[-1:]) + "\n"'
 rescore
 expect "a C1 whose stream holds a JSON string with U+2028 and U+0085 unescaped scores PASS" \
   'grep -q "$(printf "\342\200\250")" "$s" && [ "$(outcome "$rt" c1-control)" = PASS ]'
@@ -1818,6 +1818,78 @@ stream_with 'text[:-1]'
 rescore
 expect "a C1 whose complete stream lacks only its final newline scores PASS" \
   '[ "$(tail -c 1 "$s")" = "}" ] && [ "$(outcome "$rt" c1-control)" = PASS ]'
+
+# 2026-11-22 review, item 1: every line decoding does not show that the
+# client completed. Completion needs both an exit status the client gave
+# itself (below 124) and its one result record as the stream's last event.
+# complete_fails <description> <reason>: rt's C1 rescored scores INVALID
+# with the reason (a fixed string), and score.py --check refuses it.
+complete_fails() {
+  cf_reason=$2
+  rescore
+  "$here/score.py" --check "$rt" c1-control > /dev/null 2>&1; cf_rc=$?
+  expect "$1" '[ "$(outcome "$rt" c1-control)" = INVALID ] && grep "^- INVALID: " "$rt/out/c1-control.score" | grep -qF -- "$cf_reason" && [ "$cf_rc" -eq 1 ]'
+}
+# The reviewer's fixture: the intact denial, the stream cut cleanly between
+# records just before a second sh check.sh tool_use, and exit 124.
+stream_with '"\n".join(lines[:3]) + "\n"'
+echo 124 > "$rt/out/c1-control.exit"
+complete_fails "a timed-out C1 whose stream ends at a record boundary before a second check call scores INVALID, and --check refuses it" \
+  "c1-control.exit is 124: the runner stopped the client"
+run_case "$rt" "$tt" c2-outside; rc=$?
+expect "after that C1, C2 does not run" '[ "$rc" -ne 0 ] && ! ran && [ ! -e "$rt/out/c2-outside.exit" ]'
+cp -p "$work/stream.saved" "$s"
+complete_fails "a C1 with exit 124 whose stream ends with its result record scores INVALID" "c1-control.exit is 124"
+echo 137 > "$rt/out/c1-control.exit"
+complete_fails "a C1 with exit 137 (gtimeout's KILL) whose stream ends with its result record scores INVALID" "c1-control.exit is 137"
+cp -p "$work/exit.saved" "$rt/out/c1-control.exit"
+stream_with '"\n".join(lines[:-1]) + "\n"'
+complete_fails "a C1 with exit 0 whose stream has no result record scores INVALID" "c1-control.jsonl has no 'result' record"
+stream_with '"\n".join(lines + [lines[1]]) + "\n"'
+complete_fails "a C1 whose result record is followed by a further event scores INVALID" \
+  "c1-control.jsonl has events after its 'result' record"
+stream_with '"\n".join(lines + [lines[-1]]) + "\n"'
+complete_fails "a C1 whose stream ends with two result records scores INVALID" "c1-control.jsonl has 2 'result' records, not one"
+
+# Item 2: a second init record does not hide what the first one lists.
+marker_init='{"type":"system","subtype":"init","tools":["Bash"],"mcp_servers":[{"name":"l3-marker","status":"connected"}]}'
+export marker_init
+stream_with '"\n".join([os.environ["marker_init"]] + lines) + "\n"'
+rescore
+expect "a C1 with an init record listing l3-marker and a valid empty one keeps the FAIL" \
+  '[ "$(outcome "$rt" c1-control)" = FAIL ] && grep -q "^- FAIL: the init record lists server l3-marker (connected)" "$rt/out/c1-control.score"'
+stream_with '"\n".join(lines + [os.environ["marker_init"], "{\"truncated\":"]) + "\n"'
+rescore
+expect "a damaged C1 with a valid empty init record and a second listing l3-marker: INVALID, with the FAIL" \
+  '[ "$(outcome "$rt" c1-control)" = INVALID ] && grep -q "^- FAIL: the init record lists server l3-marker (connected)" "$rt/out/c1-control.score"'
+
+# Item 3: the stream decodes as strict UTF-8 and standard JSON.
+# stream_bytes <python bytes expression>: as stream_with, over the saved
+# stream's bytes (data) and its lines without their newlines (raw).
+stream_bytes() {
+  /usr/bin/python3 -I -c '
+import os, sys
+data = open(sys.argv[1], "rb").read()
+raw = data.split(b"\n")[:-1]
+open(sys.argv[2], "wb").write(eval(sys.argv[3]))
+' "$work/stream.saved" "$s" "$1"
+}
+stream_bytes 'b"\n".join(raw[:-1] + [b"{\"type\":\"assistant\",\"text\":\"\xff\"}"] + raw[-1:]) + b"\n"'
+rescore
+expect "a C1 whose stream holds invalid UTF-8 inside a JSON string scores INVALID" \
+  '[ "$(outcome "$rt" c1-control)" = INVALID ] && grep -q "^- INVALID: c1-control.jsonl line 5 does not decode" "$rt/out/c1-control.score"'
+stream_bytes 'b"\n".join([os.environ["marker_init"].encode()] + raw[1:-1] + [b"{\"text\":\"\xc3\"}"] + raw[-1:]) + b"\n"'
+rescore
+expect "a C1 with invalid UTF-8 on one line and an init record listing l3-marker: INVALID, with the FAIL" \
+  '[ "$(outcome "$rt" c1-control)" = INVALID ] && grep -q "^- INVALID: c1-control.jsonl line 5 does not decode" "$rt/out/c1-control.score" && grep -q "^- FAIL: the init record lists server l3-marker" "$rt/out/c1-control.score"'
+stream_with '"\n".join(lines[:-1] + ["{\"type\":\"assistant\",\"value\":NaN}"] + lines[-1:]) + "\n"'
+rescore
+expect "a C1 whose stream holds NaN as a value scores INVALID" \
+  '[ "$(outcome "$rt" c1-control)" = INVALID ] && grep -q "^- INVALID: c1-control.jsonl line 5 does not decode" "$rt/out/c1-control.score"'
+stream_with '"\n".join(lines[:-1] + ["{\"type\":\"assistant\",\"value\":[-Infinity]}"] + lines[-1:]) + "\n"'
+rescore
+expect "a C1 whose stream holds -Infinity as a value scores INVALID" \
+  '[ "$(outcome "$rt" c1-control)" = INVALID ] && grep -q "^- INVALID: c1-control.jsonl line 5 does not decode" "$rt/out/c1-control.score"'
 cp -p "$work/stream.saved" "$s"
 rescore
 run_case "$rt" "$tt" c2-outside; rc=$?
@@ -1877,6 +1949,9 @@ all_reasons "a stream cut off, a malformed index record and a listener count gon
   c1-control-listener-before 'echo 99 > "$f"' "the listener count went down during the run"
 all_reasons "a missing before snapshot: INVALID with its one reason, not a second from the diff that reads it" \
   snap-c1-control-before.txt 'rm "$f"' "snap-c1-control-before.txt"
+all_reasons "a missing before snapshot and a missing diff: INVALID with both reasons (the reviewer's fixture)" \
+  snap-c1-control-before.txt 'rm "$f"' "snap-c1-control-before.txt" \
+  c1-control.diff 'rm "$f"' "missing evidence: c1-control.diff"
 rescore
 expect "with every record back, that C1 scores PASS again" '[ "$(outcome "$rt" c1-control)" = PASS ]'
 

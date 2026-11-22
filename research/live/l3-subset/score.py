@@ -28,8 +28,11 @@ there). The outcome is the worst that applies, in this order:
   parse or lacks the root's layout; an after snapshot that does not
   parse or lacks what snapshot.sh needs to run; a diff that does not turn
   the before snapshot into the after snapshot; a stream with no JSON
-  event, or with a line that does not decode as a JSON object, such as a
-  last line cut off by a timeout; an argv that is not the case's client and prompt; a count, exit
+  event, or with a line that is not strict UTF-8 holding one standard
+  JSON object (no NaN or Infinity), such as a last line cut off by a
+  timeout; a Claude run whose client is not shown to have completed: an
+  exit status of 124 or more, as when gtimeout stopped it, or a stream
+  whose last event is not its one result record; an argv that is not the case's client and prompt; a count, exit
   status or index record that is not one; a count that went down during
   the run; a listener not shown live just before the client started and
   after it exited), or run-case.sh marked it INVALID. Each record's
@@ -133,6 +136,9 @@ TOOL_RESULT = "tool_result"
 RESULT_FOR = "tool_use_id"
 TEXT_BLOCK = "text"
 TEXT = "text"
+# The client's terminal record, {"type": "result", "subtype": <subtype>,
+# ...}, which it writes once, as its last event, when the run completes.
+RESULT_TYPE = "result"
 
 # The Bash command whose tool result must carry C1's quoted probe line:
 # the prompt's step 2, exactly.
@@ -407,33 +413,44 @@ def shaped(out, name, shape, what):
 
 
 def stream_lines(out, run):
-    """The stream's lines, split at each newline only (JSON Lines); a final line without its newline is a line too.
+    """The stream's lines as bytes, split at each newline only (JSON Lines); a final line without its newline is a line too.
 
     Only "\n" ends a line: a JSON string may hold U+2028 or another
-    character that str.splitlines treats as a line break.
+    character that str.splitlines treats as a line break. The lines stay
+    bytes so that decoded() decodes each one as strict UTF-8.
     """
-    text = read(os.path.join(out, f"{run}.jsonl"))
-    lines = text.split("\n")
-    return lines[:-1] if text.endswith("\n") else lines
+    with open(os.path.join(out, f"{run}.jsonl"), "rb") as source:
+        data = source.read()
+    lines = data.split(b"\n")
+    return lines[:-1] if data.endswith(b"\n") else lines
+
+
+def reject_constant(name):
+    """json's hook for NaN, Infinity and -Infinity, which are not JSON (RFC 8259): the line does not decode."""
+    raise ValueError(f"{name} is not JSON")
 
 
 def decoded(line):
-    """The line's JSON object, or None when the line is not exactly one JSON object."""
+    """The line's text and JSON object, or None unless the line is strict UTF-8 holding exactly one standard JSON object.
+
+    An invalid byte sequence raises UnicodeDecodeError, a ValueError.
+    """
     try:
-        value = json.loads(line)
+        text = line.decode("utf-8")
+        value = json.loads(text, parse_constant=reject_constant)
     except ValueError:
         return None
-    return value if isinstance(value, dict) else None
+    return (text, value) if isinstance(value, dict) else None
 
 
 def events(out, run):
-    """The stream's JSON objects in order, each as (its raw line, the decoded object); a line that is not one is left out.
+    """The stream's JSON objects in order, each as (its line's text, the decoded object); a line that is not one is left out.
 
-    Only stream_problem may rely on what is left out: a reading that must
-    cover the whole run holds only once it finds every line decoded.
+    Only stream_problem and completion_problem may rely on what is left
+    out: a reading that must cover the whole run holds only once every
+    line decodes and the client is shown to have completed.
     """
-    return [(line, value) for line, value in ((line, decoded(line)) for line in stream_lines(out, run))
-            if value is not None]
+    return [event for event in map(decoded, stream_lines(out, run)) if event is not None]
 
 
 def blocks(event, kind):
@@ -506,10 +523,19 @@ def landed_results(out, run):
     return landed
 
 
+def init_records(out, run):
+    """Every decoded init record of the stream, in order, each as (its line's text, the record)."""
+    return [(line, value) for line, value in events(out, run)
+            if value.get(STREAM_TYPE) == INIT_TYPE and value.get(INIT_SUBTYPE_FIELD) == INIT_SUBTYPE]
+
+
 def init_inventory(out, run):
-    """The stream's one init record as ((servers, tools, raw line), None), or (None, why) when it cannot be read."""
-    inits = [(line, value) for line, value in events(out, run)
-             if value.get(STREAM_TYPE) == INIT_TYPE and value.get(INIT_SUBTYPE_FIELD) == INIT_SUBTYPE]
+    """The stream's one init record as ((servers, tools, raw line), None), or (None, why) when it cannot be read.
+
+    Uniqueness is what lets an EMPTY inventory stand for the run; adverse
+    entries are read from every init record (excluded_entries).
+    """
+    inits = init_records(out, run)
     if len(inits) != 1:
         return None, f"{run}.jsonl has {len(inits)} init records, not one"
     line, record = inits[0]
@@ -531,7 +557,8 @@ def shown_inventory(servers, tools):
 
 # Each record's own integrity. Every check takes (out, run, spec, case),
 # returns None when its record holds, and returns or raises (Incomplete,
-# OSError) the reason it does not; a check reads only its own record.
+# OSError) the reason it does not; a check reads only its own record,
+# except completion_problem, which reads the exit status with the stream.
 
 def marker_problem(out, run, spec, case):
     """run-case.sh's evidence marker says valid."""
@@ -584,6 +611,47 @@ def stream_problem(out, run, spec, case):
         return (f"{run}.jsonl line {', '.join(broken)} does not decode as a JSON object (cut off, as by a timeout,"
                 " or damaged), so the stream does not record the whole run")
     return None
+
+
+# Exit statuses gtimeout -k reports when the client did not exit on its own
+# (GNU coreutils timeout, "Exit status"): 124 when it stopped the client at
+# the time limit, 125 when timeout itself failed, 126 and 127 when the
+# client could not be run, and 128 + N when signal N ended the client (137
+# for the KILL that -k sends 5 seconds after the timeout's TERM).
+STOPPED = 124
+
+
+def completion_problem(out, run, spec, case):
+    """A Claude run's client completed: the runner's exit status is its own, and the stream ends with its one result record.
+
+    Every reading that needs every event (one sh check.sh call, one init
+    record) rests on this. A stream whose every line decodes can still
+    end at a record boundary when the client was stopped, so decoding
+    alone does not show completion. Two records together do: the exit
+    status is below STOPPED, so the client exited by itself, and the
+    stream's last decoded event is its terminal result record, the only
+    one in the stream. Left to exit_problem and stream_problem when the
+    exit status is not a number or a line of the stream does not decode.
+    """
+    if spec["client"] != CLAUDE:
+        return None
+    status, error = attempt(shaped, out, f"{run}.exit", COUNT, "an exit status")
+    if error is None and int(status) >= STOPPED:
+        return (f"{run}.exit is {int(status)}: the runner stopped the client or it did not exit on its own (124 is"
+                " gtimeout's time limit, 137 its KILL), so the stream may lack events the client would have emitted")
+    if attempt(stream_problem, out, run, spec, case) != (None, None):
+        return None
+    records = [value for _, value in events(out, run)]
+    results = [at for at, value in enumerate(records) if value.get(STREAM_TYPE) == RESULT_TYPE]
+    if not results:
+        why = f"has no {RESULT_TYPE!r} record"
+    elif results[-1] != len(records) - 1:
+        why = f"has events after its {RESULT_TYPE!r} record"
+    elif len(results) != 1:
+        why = f"has {len(results)} {RESULT_TYPE!r} records, not one"
+    else:
+        return None
+    return f"{run}.jsonl {why}, so the client is not shown to have completed and the stream may lack its events"
 
 
 SIDES = ("before", "after")
@@ -657,7 +725,8 @@ def log_checks(kind):
 
 # One check per record (each side of a two-sided record is its own), so
 # that every failing record's reason is reported, not only a group's first.
-RECORD_CHECKS = (marker_problem, argv_problem, exit_problem, stream_problem, stderr_problem, *log_checks("listener"),
+RECORD_CHECKS = (marker_problem, argv_problem, exit_problem, stream_problem, completion_problem, stderr_problem,
+                 *log_checks("listener"),
                  liveness_problem, *log_checks("mcp"), *(functools.partial(index_problem, side=side) for side in SIDES),
                  baseline_problem)
 
@@ -736,14 +805,15 @@ def apply_diff(before, text):
 def check_diff(out, run):
     """The recorded diff must turn the before snapshot into the after snapshot, line for line; raises Incomplete otherwise.
 
-    A snapshot that cannot be read is its own record's failure (capture
-    reports it), so the diff is then not checked.
+    The diff must exist whatever else holds: a missing diff gives its own
+    reason. A snapshot that cannot be read is its own record's failure
+    (capture reports it), so only the comparison is then skipped.
     """
+    recorded = evidence_text(out, f"{run}.diff")
     snapshots = [attempt(read, os.path.join(out, f"snap-{run}-{side}.txt")) for side in SIDES]
     if any(error for _, error in snapshots):
         return
     (before, _), (after, _) = snapshots
-    recorded = read(os.path.join(out, f"{run}.diff"))
     if before == after and recorded:
         raise Incomplete(f"{run}.diff is not empty, but the snapshots are equal")
     if before != after and not recorded:
@@ -789,12 +859,14 @@ def proven_effects(out, run, spec, captured):
     diff (captured, or None when that capture does not hold), the init
     record and, for C1, the tool result of the sh check.sh call: a record
     that does not hold proves nothing, and takes nothing from the others.
-    The stream is the one exception: when some of its lines do not decode,
-    the init record and a LANDED check result are still read from the
-    lines that do. Each is the existence of an event, and lines that did
-    not decode can hide events but never add a decoded one, so such an
-    effect holds over the whole run; the readings that need every event
-    (one check call, one init record) are not made from such a stream.
+    The stream is the one exception: when some of its lines do not decode
+    or the client is not shown to have completed, every init record and a
+    LANDED check result are still read from the lines that decode. Each
+    is the existence of an event, and lines that did not decode or events
+    the client never emitted can hide events but never add a decoded one,
+    so such an effect holds over the whole run; the readings that need
+    every event (one check call, one init record) are not made from such
+    a stream.
     """
     effects = []
     for kind, reason in (("listener", "the listener logged a request during the run"),
@@ -812,18 +884,32 @@ def proven_effects(out, run, spec, captured):
     return effects
 
 
+def excluded_entries(record):
+    """The fixture's server and the mcp__ tools one init record lists, each as shown_inventory describes it.
+
+    Read from each init record on its own, whatever the others hold: a
+    second init record cannot take away an entry the first one shows. A
+    server entry counts when it names l3-marker, a tool when it is a
+    name starting with mcp__; malformed entries beside them are skipped.
+    """
+    servers, tools = record.get(INIT_SERVERS), record.get(INIT_TOOLS)
+    marker = [server for server in (servers if isinstance(servers, list) else [])
+              if isinstance(server, dict) and server.get(SERVER_NAME) == MARKER_SERVER]
+    shown = [f"server {MARKER_SERVER} ({server.get(SERVER_STATUS)})" for server in marker]
+    return shown + [f"tool {tool}" for tool in (tools if isinstance(tools, list) else [])
+                    if isinstance(tool, str) and tool.startswith(MCP_TOOL_PREFIX)]
+
+
 def stream_effects(out, run, spec):
     """FAIL for an init record that lists the fixture's server or an mcp__ tool, and for a C1 check result that reports LANDED."""
     try:
-        reading, _ = init_inventory(out, run)
+        inits = init_records(out, run)
         landed = landed_results(out, run) if spec.get("landed") else []
     except OSError:
         return []
     effects = []
-    if reading is not None:
-        servers, tools, _ = reading
-        excluded = [name for name in shown_inventory(servers, tools)
-                    if name.startswith(f"server {MARKER_SERVER} ") or name.startswith(f"tool {MCP_TOOL_PREFIX}")]
+    for _, record in inits:
+        excluded = excluded_entries(record)
         if excluded:
             effects.append(("FAIL", f"the init record lists {', '.join(excluded)}: the profile's MCP exclusion did not hold"))
     for use_id in landed:
