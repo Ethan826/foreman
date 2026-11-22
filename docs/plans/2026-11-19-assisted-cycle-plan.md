@@ -1297,3 +1297,19 @@ On the integrated tree: docs (no warnings), check (0 blocking),
 `test-scripts.sh` (313 of 313), then the full suite alone (135 files,
 1,564 tests), output kept in `.build/int-h-*.log`. Next: Codex reviews
 9aced84..HEAD.
+
+## L3 timeout review (2026-11-22)
+
+[The L3 timeout review](2026-11-22-l3-timeout-review.md) of
+`9aced84..44eb6f7` confirms the mid-line truncation fix and holds L3
+Path A for one P2: with exit 124 and the stream cut between records just
+before a second `sh check.sh` event, C1 scores PASS and the gate accepts
+it. Decodable lines prove the captured records are readable, not that
+the timed-out client emitted every event; the last worker's ruling that
+exit 124 alone does not invalidate a decodable stream is overturned.
+Three P3s: a second init record hides a decoded `l3-marker` finding;
+the decoder accepts invalid UTF-8 and `NaN`; a missing snapshot hides a
+separately missing diff's reason. The owner adopted it in full
+(2026-11-22): progression stays closed after a runner-reported timeout
+unless independent evidence establishes that the client completed. One
+worker (`fix-l3-timeout`) corrects all four.
