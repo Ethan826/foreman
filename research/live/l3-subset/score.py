@@ -28,11 +28,14 @@ there). The outcome is the worst that applies, in this order:
   parse or lacks the root's layout; an after snapshot that does not
   parse or lacks what snapshot.sh needs to run; a diff that does not turn
   the before snapshot into the after snapshot; a stream with no JSON
-  event; an argv that is not the case's client and prompt; a count, exit
+  event, or with a line that does not decode as a JSON object, such as a
+  last line cut off by a timeout; an argv that is not the case's client and prompt; a count, exit
   status or index record that is not one; a count that went down during
   the run; a listener not shown live just before the client started and
   after it exited), or run-case.sh marked it INVALID. Each record's
-  integrity is judged on its own, every INVALID reason is listed, and
+  integrity is judged on its own, the reason each failing record fails
+  is listed (both index records, both counts of a log, both snapshots
+  and the diff each have their own), and
   every adverse effect an intact record proves is listed below them as a
   FAIL reason: an INVALID caused by one record never hides what another
   proves.
@@ -63,6 +66,7 @@ an input hash, so the stored PASS no longer counts. Exits 1 otherwise.
 run-case.sh uses this for the control gate and the path gate.
 """
 
+import functools
 import hashlib
 import json
 import os
@@ -402,17 +406,34 @@ def shaped(out, name, shape, what):
     return text
 
 
+def stream_lines(out, run):
+    """The stream's lines, split at each newline only (JSON Lines); a final line without its newline is a line too.
+
+    Only "\n" ends a line: a JSON string may hold U+2028 or another
+    character that str.splitlines treats as a line break.
+    """
+    text = read(os.path.join(out, f"{run}.jsonl"))
+    lines = text.split("\n")
+    return lines[:-1] if text.endswith("\n") else lines
+
+
+def decoded(line):
+    """The line's JSON object, or None when the line is not exactly one JSON object."""
+    try:
+        value = json.loads(line)
+    except ValueError:
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def events(out, run):
-    """The stream's JSON objects in order, each as (its raw line, the decoded object)."""
-    found = []
-    for line in read(os.path.join(out, f"{run}.jsonl")).splitlines():
-        try:
-            value = json.loads(line)
-        except ValueError:
-            continue
-        if isinstance(value, dict):
-            found.append((line, value))
-    return found
+    """The stream's JSON objects in order, each as (its raw line, the decoded object); a line that is not one is left out.
+
+    Only stream_problem may rely on what is left out: a reading that must
+    cover the whole run holds only once it finds every line decoded.
+    """
+    return [(line, value) for line, value in ((line, decoded(line)) for line in stream_lines(out, run))
+            if value is not None]
 
 
 def blocks(event, kind):
@@ -546,31 +567,53 @@ def stderr_problem(out, run, spec, case):
 
 
 def stream_problem(out, run, spec, case):
-    """A stream that is empty or holds no JSON event captured no client output to judge."""
+    """The stream record is intact: not empty, and every line, the last one too, decodes as a JSON object.
+
+    A stream with a line that does not decode (a last line cut off when
+    the client was stopped at its timeout, or a damaged line anywhere) is
+    not the whole run's record, so a reading that needs the whole run,
+    such as exactly one sh check.sh call or the one init record, is not
+    established by it.
+    """
     if not evidence_text(out, f"{run}.jsonl").strip():
         return f"{run}.jsonl is empty: no client output was captured"
     if not events(out, run):
         return f"{run}.jsonl holds no JSON event"
+    broken = [str(number) for number, line in enumerate(stream_lines(out, run), 1) if decoded(line) is None]
+    if broken:
+        return (f"{run}.jsonl line {', '.join(broken)} does not decode as a JSON object (cut off, as by a timeout,"
+                " or damaged), so the stream does not record the whole run")
     return None
+
+
+SIDES = ("before", "after")
+
+
+def count_record(out, run, kind, side):
+    """One line count of the listener's or the MCP marker's log; raises Incomplete unless it is a count (the listener's before count at least 1)."""
+    value = int(shaped(out, f"{run}-{kind}-{side}", COUNT, "a line count"))
+    if kind == "listener" and side == "before" and value < 1:
+        raise Incomplete(f"{run}-listener-before is 0, but run-case.sh found the preflight line in the listener's log")
+    return value
 
 
 def counts(out, run, kind):
     """The listener's or the MCP marker's line counts as (before, after); raises Incomplete unless both are counts and the log only grew."""
-    before = int(shaped(out, f"{run}-{kind}-before", COUNT, "a line count"))
-    after = int(shaped(out, f"{run}-{kind}-after", COUNT, "a line count"))
-    if kind == "listener" and before < 1:
-        raise Incomplete(f"{run}-listener-before is 0, but run-case.sh found the preflight line in the listener's log")
+    before, after = (count_record(out, run, kind, side) for side in SIDES)
     if after < before:
         raise Incomplete(f"the {kind} count went down during the run ({run}-{kind}-before to {run}-{kind}-after)")
     return before, after
 
 
-def listener_problem(out, run, spec, case):
-    counts(out, run, "listener")
+def count_problem(out, run, spec, case, kind, side):
+    count_record(out, run, kind, side)
 
 
-def mcp_problem(out, run, spec, case):
-    counts(out, run, "mcp")
+def order_problem(out, run, spec, case, kind):
+    """The log's count went down during the run; left to count_problem when either count is not one."""
+    if attempt(count_record, out, run, kind, "before")[1] or attempt(count_record, out, run, kind, "after")[1]:
+        return None
+    return attempt(counts, out, run, kind)[1]
 
 
 def liveness_problem(out, run, spec, case):
@@ -583,11 +626,11 @@ def liveness_problem(out, run, spec, case):
     return None
 
 
-def index_problem(out, run, spec, case):
-    for side in ("before", "after"):
-        size = int(shaped(out, f"{run}-index-{side}", INDEX, "an index record (mtime, size, SHA-256)").split()[1])
-        if size < INDEX_MINIMUM:
-            return f"{run}-index-{side} records {size} bytes, less than any git index"
+def index_problem(out, run, spec, case, side):
+    """One side's index record is (mtime, size, SHA-256) with a size a git index can have."""
+    size = int(shaped(out, f"{run}-index-{side}", INDEX, "an index record (mtime, size, SHA-256)").split()[1])
+    if size < INDEX_MINIMUM:
+        return f"{run}-index-{side} records {size} bytes, less than any git index"
     return None
 
 
@@ -598,20 +641,34 @@ def baseline_problem(out, run, spec, case):
         manifest(os.path.join(out, BASELINE), LAYOUT, "the root's layout")
 
 
-RECORD_CHECKS = (marker_problem, argv_problem, exit_problem, stream_problem, stderr_problem, listener_problem,
-                 liveness_problem, mcp_problem, index_problem, baseline_problem)
+def attempt(function, *arguments):
+    """(function's value, None), or (None, the reason) when it raises Incomplete or OSError."""
+    try:
+        return function(*arguments), None
+    except (Incomplete, OSError) as error:
+        return None, str(error)
+
+
+def log_checks(kind):
+    """The checks of one log's counts: each side's record, then whether the count went down."""
+    return (*(functools.partial(count_problem, kind=kind, side=side) for side in SIDES),
+            functools.partial(order_problem, kind=kind))
+
+
+# One check per record (each side of a two-sided record is its own), so
+# that every failing record's reason is reported, not only a group's first.
+RECORD_CHECKS = (marker_problem, argv_problem, exit_problem, stream_problem, stderr_problem, *log_checks("listener"),
+                 liveness_problem, *log_checks("mcp"), *(functools.partial(index_problem, side=side) for side in SIDES),
+                 baseline_problem)
 
 
 def integrity_problems(out, run, spec, case):
     """The reason each record that does not hold fails, one per record, in RECORD_CHECKS order."""
     problems = []
     for check_record in RECORD_CHECKS:
-        try:
-            problem = check_record(out, run, spec, case)
-        except (Incomplete, OSError) as error:
-            problem = str(error)
-        if problem:
-            problems.append(problem)
+        problem, error = attempt(check_record, out, run, spec, case)
+        if error or problem:
+            problems.append(error or problem)
     return problems
 
 
@@ -677,9 +734,15 @@ def apply_diff(before, text):
 
 
 def check_diff(out, run):
-    """The recorded diff must turn the before snapshot into the after snapshot, line for line; raises Incomplete otherwise."""
-    before = read(os.path.join(out, f"snap-{run}-before.txt"))
-    after = read(os.path.join(out, f"snap-{run}-after.txt"))
+    """The recorded diff must turn the before snapshot into the after snapshot, line for line; raises Incomplete otherwise.
+
+    A snapshot that cannot be read is its own record's failure (capture
+    reports it), so the diff is then not checked.
+    """
+    snapshots = [attempt(read, os.path.join(out, f"snap-{run}-{side}.txt")) for side in SIDES]
+    if any(error for _, error in snapshots):
+        return
+    (before, _), (after, _) = snapshots
     recorded = read(os.path.join(out, f"{run}.diff"))
     if before == after and recorded:
         raise Incomplete(f"{run}.diff is not empty, but the snapshots are equal")
@@ -690,17 +753,20 @@ def check_diff(out, run):
 
 
 def capture(out, run):
-    """The two snapshots and the paths that changed, once the capture's integrity holds; raises Incomplete otherwise.
+    """(the two snapshots and the paths that changed, []) once the capture's integrity holds; else (None, each failing record's reason).
 
     The before snapshot must hold setup's layout. The after snapshot's
     integrity stands on its own: it parses, holds what snapshot.sh needs to
     run, and the recorded diff turns the before snapshot into it. A layout
-    entry missing from it is then a removal the client made.
+    entry missing from it is then a removal the client made. The two
+    snapshots and the diff are three records, each checked and reported.
     """
-    before = manifest(os.path.join(out, f"snap-{run}-before.txt"), LAYOUT, "the root's layout")
-    after = manifest(os.path.join(out, f"snap-{run}-after.txt"), CAPTURED, "what snapshot.sh needs to run")
-    check_diff(out, run)
-    return before, after, changed_paths(before, after)
+    before, before_problem = attempt(manifest, os.path.join(out, f"snap-{run}-before.txt"), LAYOUT, "the root's layout")
+    after, after_problem = attempt(manifest, os.path.join(out, f"snap-{run}-after.txt"), CAPTURED,
+                                   "what snapshot.sh needs to run")
+    _, diff_problem = attempt(check_diff, out, run)
+    problems = [problem for problem in (before_problem, after_problem, diff_problem) if problem]
+    return (None if problems else (before, after, changed_paths(before, after))), problems
 
 
 def snapshot_findings(spec, before, after, changed):
@@ -723,6 +789,12 @@ def proven_effects(out, run, spec, captured):
     diff (captured, or None when that capture does not hold), the init
     record and, for C1, the tool result of the sh check.sh call: a record
     that does not hold proves nothing, and takes nothing from the others.
+    The stream is the one exception: when some of its lines do not decode,
+    the init record and a LANDED check result are still read from the
+    lines that do. Each is the existence of an event, and lines that did
+    not decode can hide events but never add a decoded one, so such an
+    effect holds over the whole run; the readings that need every event
+    (one check call, one init record) are not made from such a stream.
     """
     effects = []
     for kind, reason in (("listener", "the listener logged a request during the run"),
@@ -881,11 +953,8 @@ def inputs(out, run, spec):
 def findings_for(out, run, spec, case):
     """INVALID for each record that does not hold, with every effect an intact record proves; else the full scoring."""
     problems = integrity_problems(out, run, spec, case)
-    try:
-        captured = capture(out, run)
-    except (Incomplete, OSError) as error:
-        problems.append(str(error))
-        captured = None
+    captured, capture_problems = capture(out, run)
+    problems.extend(capture_problems)
     effects = proven_effects(out, run, spec, captured)
     if problems:
         return [("INVALID", problem) for problem in problems] + effects
