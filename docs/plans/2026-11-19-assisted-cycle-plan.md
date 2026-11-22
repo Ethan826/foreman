@@ -1313,3 +1313,28 @@ separately missing diff's reason. The owner adopted it in full
 (2026-11-22): progression stays closed after a runner-reported timeout
 unless independent evidence establishes that the client completed. One
 worker (`fix-l3-timeout`) corrects all four.
+
+`fix-l3-timeout` integrated (7b9a9a1), 160,474 tokens. A Claude run's
+stream holds only when the client is shown to have completed: a
+recorded exit status below 124 (gtimeout gives 124 on timeout, 137 on
+its KILL, 125 to 127 when the client could not run, 128+N on signal N)
+and the stream's one `result` record as its last decoded event;
+otherwise INVALID, and `--check` refuses. Every decoded init record is
+scanned on its own for an `l3-marker` entry or an `mcp__` tool, while an
+EMPTY inventory still needs exactly one init record. Stream lines are
+strict UTF-8 and standard JSON (`NaN`, `Infinity` rejected). A missing
+diff reports its own reason. Against 920bd24 all 14 new cases fail; 8 of
+8 mutants are killed.
+
+Worker rulings of note: a run not shown to have completed is INVALID
+rather than INCONCLUSIVE; any exit status of 124 or more counts as not
+completed; exactly one `result` record, last. The completion
+requirement covers Claude runs only: X1 and X2 (Codex) keep the old
+behaviour, since no Codex reading needs every event and no Codex
+terminal record name is known, so a timed-out Codex run whose judged
+events look right could still score PASS. Open for the owner.
+
+On the integrated tree: docs (no warnings), check (0 blocking),
+`test-scripts.sh` (327 of 327), then the full suite alone (135 files,
+1,564 tests), output kept in `.build/int-i-*.log`. Next: Codex reviews
+920bd24..HEAD.
