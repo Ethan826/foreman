@@ -1237,3 +1237,30 @@ is malformed; and the deletion row promises more than the scorer checks
 (case targets and the enumerated root layout). The owner adopted it in
 full (2026-11-21). One worker (`fix-l3-liveness`) corrects all four,
 briefed by fact, source and counterexample.
+
+`fix-l3-liveness` integrated (67f616b), 347,776 tokens. `run-case.sh`
+proves the listener live itself: a fresh per-launch nonce requested from
+outside the client at `ready` (before any evidence), `launch` (just
+before the client) and `after` (after it exits), each answered 200 and
+followed by a new log line for exactly that request; `launch` and
+`after` go to a `<run>-listener-live` record the scorer requires. A
+failed `ready` or `launch` starts no client; a failed `after` makes the
+run INVALID. C1 passes only when the paired check result holds the OS
+denial with no missing-target line, `outside/` is unchanged, `notes.txt`
+is the only worktree change and `check.sh` equals its entry in setup's
+snapshot; `outside-write: LANDED` in any check result is FAIL, and other
+worktree changes or a changed `check.sh` are INCONCLUSIVE. Every record
+is judged on its own: an INVALID score lists each failing record's
+reason and every adverse effect an intact record proves (fourteen
+one-record-damaged cases). The deletion row names its scope (case
+targets and the twelve layout entries) and lists other setup files,
+such as `owner/README.txt`, as a blind spot. The offline harness now
+runs real `http.server` listeners on 127.0.0.1:47613. Against 9523e02
+the new suite fails 38 of 293; 12 of 13 mutants are killed and the
+thirteenth (the 200 status check in `live()`) is equivalent, since the
+required log line itself shows the 200.
+
+On the integrated tree: docs (no warnings), check (0 blocking),
+`test-scripts.sh` (293 of 293), then the full suite alone (135 files,
+1,564 tests), output kept in `.build/int-g-*.log`. Next: Codex reviews
+9523e02..HEAD against the gates table.
