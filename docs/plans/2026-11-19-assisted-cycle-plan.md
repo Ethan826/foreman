@@ -1150,3 +1150,33 @@ On 748c4fc plus the budget commit: check (0 blocking), docs (no
 warnings), `test-scripts.sh` (231 of 231) and then, serially, the full
 suite (135 files, 1,564 tests), output kept in `.build/int-e-*.log`.
 Next: Codex reviews fa92165..HEAD.
+
+## L3 evidence re-review (2026-11-21)
+
+[The L3 evidence re-review](2026-11-21-l3-evidence-rereview.md) of
+`fa92165..84d3a8f` holds L3 Path A for three P2 findings and one P3: C1
+passed with the denial text only in assistant narration, not in the
+result of the `sh check.sh` call; an init event that listed a connected
+MCP server scored EMPTY because quoting the init discriminator was
+enough; a confirmed deletion of `outside/` scored INVALID instead of
+FAIL; and the diff check verifies only emptiness. It confirms the C1
+diagnostic, the newest-attempt gate and the 30 s state-file budget. The
+owner adopted it in full (2026-11-21):
+
+- C1's quote must come from the tool result of the actual `sh check.sh`
+  call.
+- The MCP inventory is read from the init record's server and tool
+  lists; an unreadable inventory scores INCONCLUSIVE.
+- INVALID is for uncertain capture integrity. The before-layout
+  requirement stays for the before snapshot; an after capture whose
+  integrity is independently established and that proves a disallowed
+  effect, such as a deleted protected path, scores FAIL, and any
+  corroborated adverse effect stays in the report even when the result
+  is INVALID.
+- Other refusal quotes stay with the operator, who identifies the
+  actual tool result or denial event; uncertain cases are INCONCLUSIVE.
+- The diff check either compares the recorded diff's content or is
+  described as an emptiness check, with adjudication left to the
+  snapshots.
+
+One worker (`fix-l3-results`) corrects these.
