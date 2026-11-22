@@ -430,14 +430,28 @@ def reject_constant(name):
     raise ValueError(f"{name} is not JSON")
 
 
+def unique_names(pairs):
+    """json's hook for every object, at any depth: a name given twice raises ValueError, so the line does not decode.
+
+    A standard JSON object has unique names (RFC 8259 says SHOULD, RFC
+    7493 MUST); json.loads alone keeps the last value of a repeated name,
+    which would let a forged line hide an earlier value from every reading.
+    """
+    names = [name for name, _ in pairs]
+    if len(set(names)) != len(names):
+        raise ValueError("an object repeats a name")
+    return dict(pairs)
+
+
 def decoded(line):
     """The line's text and JSON object, or None unless the line is strict UTF-8 holding exactly one standard JSON object.
 
-    An invalid byte sequence raises UnicodeDecodeError, a ValueError.
+    An invalid byte sequence raises UnicodeDecodeError, a ValueError; so
+    do NaN, Infinity and -Infinity, and an object that repeats a name.
     """
     try:
         text = line.decode("utf-8")
-        value = json.loads(text, parse_constant=reject_constant)
+        value = json.loads(text, parse_constant=reject_constant, object_pairs_hook=unique_names)
     except ValueError:
         return None
     return (text, value) if isinstance(value, dict) else None
@@ -448,7 +462,10 @@ def events(out, run):
 
     Only stream_problem and completion_problem may rely on what is left
     out: a reading that must cover the whole run holds only once every
-    line decodes and the client is shown to have completed.
+    line decodes and the client is shown to have completed. By design,
+    stream_effects, landed_results and init_records also read a damaged
+    stream: what its decoded lines show (a landed write, an adverse init
+    entry) is listed even when the run is INVALID.
     """
     return [event for event in map(decoded, stream_lines(out, run)) if event is not None]
 
@@ -622,23 +639,27 @@ STOPPED = 124
 
 
 def completion_problem(out, run, spec, case):
-    """A Claude run's client completed: the runner's exit status is its own, and the stream ends with its one result record.
+    """The client completed: the runner's exit status is its own, and a Claude run's stream ends with its one result record.
 
     Every reading that needs every event (one sh check.sh call, one init
     record) rests on this. A stream whose every line decodes can still
     end at a record boundary when the client was stopped, so decoding
-    alone does not show completion. Two records together do: the exit
-    status is below STOPPED, so the client exited by itself, and the
-    stream's last decoded event is its terminal result record, the only
-    one in the stream. Left to exit_problem and stream_problem when the
-    exit status is not a number or a line of the stream does not decode.
+    alone does not show completion. For a Claude run two records together
+    do: the exit status is below STOPPED, so the client exited by itself,
+    and the stream's last decoded event is its terminal result record,
+    the only one in the stream. A Codex run needs the exit status only:
+    the name of its terminal record is unknown, so a Codex stream cut at
+    a record boundary with an exit status below STOPPED goes unseen.
+    Left to exit_problem and stream_problem when the exit status is not
+    a number or a line of the stream does not decode.
     """
-    if spec["client"] != CLAUDE:
-        return None
     status, error = attempt(shaped, out, f"{run}.exit", COUNT, "an exit status")
     if error is None and int(status) >= STOPPED:
-        return (f"{run}.exit is {int(status)}: the runner stopped the client or it did not exit on its own (124 is"
-                " gtimeout's time limit, 137 its KILL), so the stream may lack events the client would have emitted")
+        return (f"{run}.exit is {int(status)}: the runner stopped the client or the client did not run to its own exit"
+                " (124 is gtimeout's time limit, 125 a failure of gtimeout itself, 126 and 127 a client that could not"
+                " be run, 137 the KILL), so the stream may lack events the client would have emitted")
+    if spec["client"] != CLAUDE:
+        return None
     if attempt(stream_problem, out, run, spec, case) != (None, None):
         return None
     records = [value for _, value in events(out, run)]
