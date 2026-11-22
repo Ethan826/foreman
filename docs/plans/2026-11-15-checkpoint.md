@@ -88,12 +88,14 @@ slice does not authorize it.
   runs) after the profile change, attribute read failures keep the
   waiver, a damaged gitfile stays `GitCommandFailed`, `status` works
   without HOME.
-- Open: Codex's review of 920bd24..HEAD against the runbook's gates table; the L3 Path A live run
-  (separate authorization); landing (a fast-forward of `main`) and
-  push; then the first real cycle on foreman (decision P10) with
-  [the dogfood-1 task](2026-11-21-dogfood-1-task.md). The state-file
-  large-binary test timed out once under concurrent load (recorded at
-  the end of the plan).
+- 2026-11-22: after seven Codex rounds and one low-context Opus review
+  (no P1 or P2), the L3 package is ready: `test-scripts.sh` 335 of 335,
+  every gate in the runbook's table with its fact, source,
+  counterexamples and blind spot.
+- Open: the owner's authorization of the L3 Path A live run (P and X,
+  eight runs); landing (a fast-forward of `main`) and push; then the
+  first real cycle on foreman (decision P10) with
+  [the dogfood-1 task](2026-11-21-dogfood-1-task.md).
 - The rest of B11 (the protected digest, the commit procedure and the
   review worktree) and B12 to B18 remain unauthorized. L4 waits on B13 to
   B15. Each push needs the owner's OK.

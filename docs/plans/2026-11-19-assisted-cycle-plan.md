@@ -1353,3 +1353,22 @@ line itself; the exit-status threshold is tested only at 124 and 137;
 Codex runs have no completion requirement (open for the owner); and two
 wording corrections. Under the stopping rule (only P1 or P2 blocks), the
 package is ready for the owner's decision on the L3 Path A live run.
+
+`fix-l3-p3` integrated (7b43c01), 113,423 tokens, on the owner's
+instruction to do the best solution. A repeated JSON name at any depth
+makes a stream line undecodable, so the review's three forged lines are
+INVALID and `--check` refuses them. Exit 130 (INVALID) and 123 (PASS)
+bound the threshold. Every client, Codex included, is INVALID with an
+exit status of 124 or more; only Claude runs also need the terminal
+`result` record, Codex's terminal record being unknown (its blind spot:
+a Codex stream cut between records with exit below 124). The runbook
+gives 125 as `gtimeout`'s own failure and 126 or 127 as a client that
+could not run, and states that an init line that does not decode proves
+nothing. New cases fail against db640a8; the combined mutant is killed
+on each guard.
+
+On the integrated tree: docs (no warnings), check (0 blocking),
+`test-scripts.sh` (335 of 335), then the full suite (135 files, 1,564
+tests), output kept in `.build/int-j-*.log`. The L3 package awaits the
+owner's decision on the Path A live run; landing and push remain
+separate decisions.
