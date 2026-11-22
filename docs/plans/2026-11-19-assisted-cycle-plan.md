@@ -1180,3 +1180,18 @@ owner adopted it in full (2026-11-21):
   snapshots.
 
 One worker (`fix-l3-results`) corrects these.
+
+Owner direction (2026-11-21), on why the L3 reviews kept finding
+defects beside a green offline suite: the scripts checked a convenient
+proxy for the fact the runbook claims (denial words anywhere in the
+stream; the operator's quote in an init line; setup directories present
+afterwards). From this correction on, each gate that can unblock a live
+run records the fact it must establish, the source that can establish
+it, at least one counterexample that carries the expected signal without
+proving the fact, and the blind spot left for the live trial; each
+counterexample is an offline acceptance case. Other refusal cases stay
+with operator judgment, uncertainty scored INCONCLUSIVE. That is the
+loop's stopping point: verify the few gates that authorize progress,
+account for their blind spots, and let the disposable live trial answer
+what offline fixtures cannot establish about the pinned clients. The
+direction was sent to `fix-l3-results` while it ran.
