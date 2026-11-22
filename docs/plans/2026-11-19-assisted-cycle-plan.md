@@ -1277,3 +1277,23 @@ group (both index records malformed shows one reason); and the listener
 suite does not distinguish a logged 200 from a 200 curl received (the
 committed guard is right; a case is missing). The owner adopted it in
 full (2026-11-22). One worker (`fix-l3-stream`) corrects all three.
+
+`fix-l3-stream` integrated (36a1644), 196,066 tokens. The stream record
+holds only when every line, split at newlines and counting a last line
+without its newline, decodes as a JSON object; a line cut off by a
+timeout or damaged anywhere makes the run INVALID, so C1 cannot pass and
+`--check` refuses its stored score. The two stream effects (an init
+record listing `l3-marker` or an `mcp__` tool, and `outside-write:
+LANDED` in a check result) stay listed from the decoded lines, since an
+undecodable line can hide an event but never add one. Every side of a
+two-sided record (index records, each log's counts, snapshots) and the
+diff report their own INVALID reason. A stand-in listener that logs the
+fresh 200 line but sends curl no response is refused, which kills the
+last surviving listener mutant. Worker rulings of note: blank or
+non-object lines inside a stream are not intact; exit 124 alone does not
+invalidate a stream whose every line decodes.
+
+On the integrated tree: docs (no warnings), check (0 blocking),
+`test-scripts.sh` (313 of 313), then the full suite alone (135 files,
+1,564 tests), output kept in `.build/int-h-*.log`. Next: Codex reviews
+9aced84..HEAD.
