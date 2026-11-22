@@ -1338,3 +1338,18 @@ On the integrated tree: docs (no warnings), check (0 blocking),
 `test-scripts.sh` (327 of 327), then the full suite alone (135 files,
 1,564 tests), output kept in `.build/int-i-*.log`. Next: Codex reviews
 920bd24..HEAD.
+
+## L3 completion review (2026-11-22)
+
+On the owner's request a fresh, low-context Opus review agent reviewed
+`920bd24..c8aee3f` against the runbook's gate table
+([the L3 completion review](2026-11-22-l3-completion-review.md),
+117,255 tokens). It found no P1 and no P2 that a real client could
+produce, confirmed the completion, init-scan, strict-decoding and
+missing-diff fixes, and passed the offline suite (327 of 327). Five P3s:
+duplicate JSON keys let a forged line pass C1 and the MCP gate; strict
+decoding drops the FAIL diagnosis when the bad bytes are on the init
+line itself; the exit-status threshold is tested only at 124 and 137;
+Codex runs have no completion requirement (open for the owner); and two
+wording corrections. Under the stopping rule (only P1 or P2 blocks), the
+package is ready for the owner's decision on the L3 Path A live run.
