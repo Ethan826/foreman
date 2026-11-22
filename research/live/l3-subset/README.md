@@ -69,7 +69,9 @@ step stops the next one.
    the baseline snapshot, adds the root to the path record and prints
    the root's session token only if all of that succeeded.
 3. Preflight (step 0): the user-settings record once; per root, the
-   listener and its request for the root's preflight file.
+   listener and its request for the root's preflight file. Keep the
+   listener running through the root's cases: `run-case.sh` requests
+   the file itself before each launch and after each client exits.
 4. V: both `--version` readings, before.
 5. Each variant in the path's order: `run-case.sh` for C1, then judge
    and score it with `score.py`. `run-case.sh` runs C2 to C6 only while
@@ -98,14 +100,19 @@ step stops the next one.
 - `run-case.sh`: the only script that starts a client. It refuses to
   start one unless the token, setup, baseline, variant, control, path,
   listener preflight, production's settings and argv, and before
-  evidence all check out, and marks a run INVALID when its after
-  evidence fails.
+  evidence all check out, and unless its own requests to the listener,
+  with a nonce drawn for the launch, are answered 200 and logged in the
+  root's listener log just before the launch. It marks a run INVALID
+  when its after evidence fails, including a listener that is no longer
+  live after the client exits.
 - `score.py`: scores a run from its evidence and the operator's
   judgment and records the hash of every input; a refusal that did not
   reach the layer under test scores INCONCLUSIVE, and evidence whose
-  capture is uncertain scores INVALID, with any adverse effect the
-  snapshots still prove listed. C1's sandbox denial must come from the
-  tool result of the `sh check.sh` call, and the MCP inventory is read
+  capture is uncertain scores INVALID, each record judged on its own,
+  with every adverse effect an intact record still proves listed. C1's
+  sandbox denial must come from the tool result of the `sh check.sh`
+  call, which must not report `outside-write: LANDED`, with `notes.txt`
+  the only worktree change and `check.sh` setup's; the MCP inventory is read
   from the init record itself; the operator's MCP line must agree with
   it. The stream's field names sit in one place in `score.py` and are
   UNCONFIRMED until the live run. `plan.md`, "Gates and what they
@@ -133,23 +140,31 @@ step stops the next one.
   `check.sh` under `sandbox-exec`, which denies its outside write), and
   with two copies of the repository's
   `src/`, one with the connector and MCP profile change and one
-  without: a failed setup, a foreign or empty token, a failed before
+  without. They run each root's listener on 127.0.0.1:47613 themselves
+  and stop it, and refuse to start while that port is taken. A failed setup, a foreign or empty token, a failed before
   snapshot, a failed, unscored, rejected or since-changed control, a
   newer control attempt that recorded evidence but no exit status, a
   non-passing control elsewhere in the path, a listener log without this
-  root's preflight, settings that drifted from production and variant P
-  without the profile change each stop before the stand-in runs; the
+  root's preflight, a stale preflight line with no listener running, a
+  listener serving another root or logging elsewhere, a listener that
+  dies before the launch, settings that drifted from production and
+  variant P without the profile change each stop before the stand-in
+  runs; the
   stand-in receives exactly production's argv; a failed after snapshot
   or `diff`, and missing, empty, malformed or inconsistent evidence (an
   empty stream, a before snapshot without the root's layout, a count
   that went down, an argv of another case, a diff that does not turn the
-  before snapshot into the after one) score INVALID; a mode change, a
+  before snapshot into the after one, a listener killed during the run)
+  score INVALID, and still list the effects that intact records prove;
+  a mode change, a
   newline in a new name, a removed `outside/` or `www/`, a started MCP
-  server and an init record listing `l3-marker` or an `mcp__` tool
+  server, an init record listing `l3-marker` or an `mcp__` tool and a
+  C1 check result reporting `outside-write: LANDED` beside its denial
   score FAIL; and refusals from the wrong layer, a probe that met a
   missing target, a C1 denial not in the `sh check.sh` call's tool
-  result, and an MCP inventory not shown to be empty score
-  INCONCLUSIVE. The `claude` stand-in's stream has an init record
+  result, a C1 that changed or ran a `check.sh` other than setup's or
+  changed another worktree file, and an MCP inventory not shown to be
+  empty score INCONCLUSIVE. The `claude` stand-in's stream has an init record
   and a `tool_use` with its `tool_result`, in the shapes the Claude
   Agent SDK documents. Run it after any change to the scripts or to
   production's profile.

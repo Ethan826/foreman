@@ -17,15 +17,27 @@
 # current PASS: score.py --check), the path gate (every other Claude root
 # in the root's path record whose C1 has begun holds a current PASS for
 # that newest attempt), the
-# listener's preflight (the first line of out/listener.log is this root's
-# nonce request, answered 200), the commands on PATH, for Claude the
-# root's settings equal to production's current rendering and the argv
-# production builds (profile.sh), then the before evidence (snapshot,
-# argv, index state, listener and MCP-marker counts). After the
-# client, whatever its exit: the after evidence and the snapshot diff.
-# Any failure there marks the run INVALID in out/<run>.evidence and exits
-# 3; score.py then scores it INVALID. Exits 0 when the evidence is
-# complete, whatever the client did.
+# listener's setup-time preflight (the first line of out/listener.log is
+# this root's nonce request, answered 200), a live request to the
+# listener (below), the commands on PATH, for Claude the root's settings
+# equal to production's current rendering and the argv production builds
+# (profile.sh), then the before evidence (snapshot, argv, index state, a
+# second live request, listener and MCP-marker counts). After the client,
+# whatever its exit: the after evidence (with a third live request) and
+# the snapshot diff. Any failure there marks the run INVALID in
+# out/<run>.evidence and exits 3; score.py then scores it INVALID. Exits
+# 0 when the evidence is complete, whatever the client did.
+#
+# A live request is this script's own request, from outside the client,
+# for the root's preflight file with a query holding a nonce drawn for
+# this launch. It holds only when the listener answers 200 and a new line
+# for exactly that request, answered 200, appears in out/listener.log. A
+# 200 for the file shows a listener serving this root's www/; the new
+# line with this launch's nonce shows that it logs to this root's log
+# now, not only earlier. The request just before the client starts and
+# the one after it exits are recorded in out/<run>-listener-live: a
+# listener down or replaced by then makes the run INVALID, since a
+# request the agent made could have gone unlogged.
 #
 # The Claude argv is production's claudeEditingArgv for the case's prompt
 # and the root's settings file, followed by --max-turns. Variant P takes
@@ -110,7 +122,7 @@ fi
 # recording evidence; a later file shows the same even if the earlier ones
 # are gone.
 run_files() {
-  printf '%s\n' "snap-$1-before.txt" "$1.argv" "$1-index-before" "$1-listener-before" "$1-mcp-before" \
+  printf '%s\n' "snap-$1-before.txt" "$1.argv" "$1-index-before" "$1-listener-live" "$1-listener-before" "$1-mcp-before" \
     "$1.jsonl" "$1.stderr" "$1-last.txt" "$1.exit" "snap-$1-after.txt" "$1-index-after" \
     "$1-listener-after" "$1-mcp-after" "$1.diff" "$1.evidence"
 }
@@ -173,11 +185,13 @@ while read -r tag other_variant other_root; do
   fi
 done <<< "$members"
 
-# The listener's preflight: the first line of its log is this root's
-# nonce request, answered 200 by a listener serving this root's www/
-# (plan.md, step 0). A bind error, another root's request or a request for
-# another file is not a preflight. A listener started again truncates its
-# log, so it needs a new preflight.
+# The listener's setup-time preflight: the first line of its log is this
+# root's nonce request, answered 200 by a listener serving this root's
+# www/ (plan.md, step 0). A bind error, another root's request or a
+# request for another file is not a preflight. A listener started again
+# truncates its log, so it needs a new preflight. The line was written
+# when the operator checked the listener and does not show that it is
+# still up; the live requests below establish that.
 nonce=$(sed -n 's/^preflight //p' "$session")
 case "$nonce" in
   ""|*[!0-9a-f]*) stop "this root's session has no preflight nonce" ;;
@@ -189,6 +203,51 @@ fi
 preflight="^127\\.0\\.0\\.1 - - \\[[^]]*\\] \"GET /preflight-$nonce HTTP/1\\.[01]\" 200 [-0-9]+\$"
 grep -qE "$preflight" <<< "$first" ||
   stop "the listener's log does not start with this root's preflight request answered 200 (plan.md, step 0)"
+
+# The listener's port, which the prompts name, and a nonce for this launch.
+port=47613
+launch=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n') || stop "no launch nonce could be drawn"
+[ ${#launch} -eq 32 ] || stop "no launch nonce could be drawn"
+
+# live <stage>: this script's own request to the listener for the root's
+# preflight file, with "?<launch>-<stage>" as its query, from outside the
+# client and to localhost only (no proxy). Returns 0 only when the
+# listener answers 200 and a line of out/listener.log past those it held
+# before the request is exactly that request, answered 200. Sets
+# live_why to the reason otherwise. http.server writes the line before
+# the response's body, so it is normally there when curl returns; the
+# loop allows two seconds for the write.
+live() {
+  live_why=
+  log="$out/listener.log"
+  if [ -L "$log" ] || [ ! -f "$log" ]; then
+    live_why="out/listener.log is missing or not a regular file"
+    return 1
+  fi
+  held=$(wc -l < "$log" | tr -d ' ') || { live_why="out/listener.log could not be read"; return 1; }
+  code=$(/usr/bin/curl -g -s --noproxy '*' --max-time 5 -o /dev/null -w '%{http_code}' \
+    "http://127.0.0.1:$port/preflight-$nonce?$launch-$1") || true
+  if [ "$code" != 200 ]; then
+    live_why="the listener on 127.0.0.1:$port answered ${code:-nothing}, not 200, for this root's preflight file"
+    return 1
+  fi
+  line="^127\\.0\\.0\\.1 - - \\[[^]]*\\] \"GET /preflight-$nonce\\?$launch-$1 HTTP/1\\.[01]\" 200 [-0-9]+\$"
+  tries=0
+  while [ "$tries" -lt 20 ]; do
+    if tail -n +"$((held + 1))" "$log" | grep -qE "$line"; then
+      return 0
+    fi
+    sleep 0.1
+    tries=$((tries + 1))
+  done
+  live_why="the listener answered 200, but out/listener.log gained no line for this request, so it is not the listener logging there"
+  return 1
+}
+
+# The first live request, before any evidence is written: a listener that
+# is down, serves another root or logs elsewhere stops here, and the run
+# id stays unused.
+live ready || stop "the listener is not live for this root: $live_why"
 
 needed="gtimeout $client"
 if [ "$client" = claude ]; then
@@ -282,6 +341,15 @@ fi
 "$here/snapshot.sh" "$root" "$run-before" > /dev/null || stop "the before snapshot failed"
 printf '%s\0' "${client_argv[@]}" > "$out/$run.argv" || stop "the argv could not be recorded"
 index_state > "$out/$run-index-before" || stop "the index state could not be recorded"
+# The live request just before the client starts, recorded with the one
+# after it exits. It comes after the before snapshot, so a failure here
+# uses up the run id: the next attempt takes the next number.
+if live launch; then
+  printf 'launch %s 200\n' "$launch" > "$out/$run-listener-live" || stop "the listener's live request could not be recorded"
+else
+  printf 'launch %s failed: %s\n' "$launch" "$live_why" > "$out/$run-listener-live" || true
+  stop "the listener is not live for this root just before launch: $live_why"
+fi
 listener_lines > "$out/$run-listener-before" || stop "the listener count could not be recorded"
 mcp_lines > "$out/$run-mcp-before" || stop "the MCP marker count could not be recorded"
 
@@ -310,6 +378,14 @@ echo "$client_exit" > "$out/$run.exit" || fail_after "the exit status could not 
 index_state > "$out/$run-index-after" || fail_after "the index state could not be recorded"
 listener_lines > "$out/$run-listener-after" || fail_after "the listener count could not be recorded"
 mcp_lines > "$out/$run-mcp-after" || fail_after "the MCP marker count could not be recorded"
+# The live request after the client, past the counts, so its own line is
+# not counted as the agent's.
+if live after; then
+  printf 'after %s 200\n' "$launch" >> "$out/$run-listener-live" || fail_after "the listener's live request could not be recorded"
+else
+  printf 'after %s failed: %s\n' "$launch" "$live_why" >> "$out/$run-listener-live" || true
+  fail_after "the listener was not live after the client: $live_why"
+fi
 diff_status=0
 diff "$out/snap-$run-before.txt" "$out/snap-$run-after.txt" > "$out/$run.diff" || diff_status=$?
 [ "$diff_status" -le 1 ] || fail_after "diff failed with status $diff_status"
