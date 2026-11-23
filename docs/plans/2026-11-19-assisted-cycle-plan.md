@@ -1506,3 +1506,57 @@ Friction and findings:
   owner killed them; the four affected files then passed alone and the
   full suite passed.
 - Every launch needed `--waive` (empty ledger), as the rehearsal found.
+
+## Second real cycle: dogfood-2 and dogfood-2b (2026-11-23)
+
+Task: [dogfood-2](2026-11-22-dogfood-2-task.md), then
+[dogfood-2b](2026-11-23-dogfood-2b-task.md), so that foreman creates
+its state and ledger directories (the first cycle's friction).
+Committed in the supervisor worktree as d728371 by owner exception.
+
+- dogfood-2 (session `mwssitth-t7i7p1`): implement; checks failed on
+  ESLint (`max-nested-callbacks`) and the prose gate; review asked for
+  changes (F1 to F5). F1 exposed an error in the task: its item 3
+  refused symbolic links, while an existing test pins a configured
+  ledger reached through a symbolic link. Owner ruling: keep following
+  a link to a directory; refuse what resolves to a non-directory; a
+  dangling link keeps `LayoutRefused`. Correction 1 fixed F2 to F5; one
+  lint error remained (`no-confusing-void-expression`), and the second
+  review found F7 (state written before the ledger directory was
+  judged, which could record a binding to a rejected ledger) and F8 (the
+  ledger directory cut by a fixed length). Correction 2 fixed them but
+  left one lint error (a native `includes`), which the owner fixed by
+  hand. The third review raised F9 (the symlink ruling again, which the
+  reviewer could not see), F10 (an existing binding not compared before
+  directories are prepared) and F11 (a relative recorded ledger path).
+  P9 was exhausted; the owner abandoned the session and, by exception,
+  carried its uncommitted work into a new session.
+- dogfood-2b (session `mwstr7mv-9npyd1`), task with the ruling written
+  in: implement fixed F10 and F11 and passed every check at once
+  (1,622 tests; $1.51). Review: F10 re-raised for the owner exits
+  (ruled: the earlier owner-exit ruling governs; exits never fail with
+  `TargetMismatch`), F12 (nested store directories; ruled: a parent that
+  is the other configured store directory counts as present), F13 (native
+  methods in tests; fixed). Second review: F10 again, and
+  F10-layout-order (the layout check hid a mismatch; fixed by comparing
+  the recorded binding before the layout rules). That fix changed the
+  reason in an existing test (`production-exit-layout.test.ts`), which
+  the owner updated by hand to `TargetMismatch` (option 1). Final review:
+  F10 again, F13 (a path under a regular file still yields `LayoutRefused`
+  before the comparison; follow-up) and F14 (the renamed test). P9 was
+  exhausted; the owner abandoned the session and approved the commit.
+  Final checks: 142 files, 1,625 tests.
+- Owner rulings during the cycle: launches may run from a Claude Code
+  session through `~/.config/foreman/fm`, which strips every `CLAUDE*`
+  variable (a plain-shell run is deferred as integration QA); the owner's
+  check is `~/.config/foreman/check.sh`, and the repository now has
+  `bun run verify` (docs, check, test) as its single entry.
+- Lessons: two of three dogfood-2 rounds went on lint and prose rules
+  the implementer could not run, which makes the commit guard and test
+  command (dogfood-3) the priority; a task must not contradict an
+  earlier ruling or an existing test; the owner's findings files do not
+  reach the reviewer's brief, so a ruling made there is re-raised every
+  round (a candidate cycle). A spawn test timed out once at the 5 s
+  default at load average 80 to 90 and passed alone (637 ms) and in the
+  next full run; it is recorded, not resolved. Follow-ups: F13; the
+  spawn-test process leak; the HEAD check.
