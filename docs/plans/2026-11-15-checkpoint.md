@@ -101,9 +101,16 @@ slice does not authorize it.
   foreman's checks notice a moved supervisor branch ref. The plan's
   record of these rulings is pending (the plan was open in the owner's
   editor).
-- Next: the first real cycle on foreman (decision P10) with
-  [the dogfood-1 task](2026-11-21-dogfood-1-task.md), run from a plain
-  terminal under the first cycle's procedure.
+- 2026-11-22: CI on `main` failed on Linux after landing; fixed
+  portably (process group 0, SQLite persistent WAL) and landed after a
+  green CI branch. The first real cycle on foreman (dogfood-1) ran end
+  to end: the implementer split `admission.test.ts`, Codex requested no
+  changes, the owner committed (635584e). Findings in the plan: foreman
+  does not create its state or ledger directory, and interrupted spawn
+  tests leak processes.
+- Next: the owner's choice of the next cycle or follow-ups (state and
+  ledger directory creation, the spawn-test leak, the moved-ref check,
+  the commit guard before any test command).
 - The rest of B11 (the protected digest, the commit procedure and the
   review worktree) and B12 to B18 remain unauthorized. L4 waits on B13 to
   B15. Each push needs the owner's OK.

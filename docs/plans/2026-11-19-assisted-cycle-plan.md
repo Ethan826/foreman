@@ -1472,3 +1472,37 @@ both platforms, as ruled. Reproduced and verified in a Linux container
 (15 failing tests before, 1,568 passing after); on macOS docs, check
 and the full suite (136 files, 1,568 tests) pass; CI on the pushed
 branch `ci-linux-fix` passed before `main` moved.
+
+## First real cycle: dogfood-1 on foreman (2026-11-22)
+
+The owner ran the first assisted cycle with foreman as its own target
+(decision P10) from a plain terminal, config
+`~/.config/foreman/dogfood-1.json` (state `~/Desktop/foreman-state`,
+supervisor worktree `~/Desktop/foreman-wt/dogfood-1` on
+`foreman/dogfood-1`, ledger `~/.foreman`, pins claude 2.1.330 and codex
+0.170.0), with [the dogfood-1 task](2026-11-21-dogfood-1-task.md).
+Sequence: `worktree create`, `session open`, `implement` (QuotaHeld
+claude, then `--waive`), owner checks, `review --attest` (QuotaHeld
+codex, then `--waive`), `session close --finished --attest`, owner
+commit 635584e. The implementer split `test/program/admission.test.ts`
+(261 lines) into `admission.test.ts` (103), `grant-lifecycle.test.ts`
+(92) and `admission-fixtures.ts` (85), with the same `describe` blocks
+and ten test names; 15 turns, $0.54, one permission denial (a Bash
+heredoc it tried before using the Edit and Write tools). Codex requested
+no changes (`[]`); 243,119 input tokens (203,520 cached), 2,413 output.
+
+Friction and findings:
+- foreman creates neither the state directory nor the ledger directory;
+  `worktree create` failed with `TargetBindingUnreadable` naming the
+  binding's temporary file, not the missing directory. The owner created
+  both with `mkdir -m 700`. The rehearsal missed this because its scratch
+  directories existed.
+- The owner's first full suite in the worktree timed out two
+  repository-harness tests (`handoff-refusals`, `handoff-crash`) at the
+  5 s default; load average was 127. Six orphaned `/bin/sh` loops from
+  foreman's spawn tests (`foreman-spawn-*` temp directories, parent 1,
+  about 70 to 87 percent CPU each) had run for two to two and a half
+  days: interrupted test runs leave the processes those tests start. The
+  owner killed them; the four affected files then passed alone and the
+  full suite passed.
+- Every launch needed `--waive` (empty ledger), as the rehearsal found.
