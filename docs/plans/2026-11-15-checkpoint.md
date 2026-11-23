@@ -88,14 +88,22 @@ slice does not authorize it.
   runs) after the profile change, attribute read failures keep the
   waiver, a damaged gitfile stays `GitCommandFailed`, `status` works
   without HOME.
-- 2026-11-22: after seven Codex rounds and one low-context Opus review
-  (no P1 or P2), the L3 package is ready: `test-scripts.sh` 335 of 335,
-  every gate in the runbook's table with its fact, source,
-  counterexamples and blind spot.
-- Open: the owner's authorization of the L3 Path A live run (P and X,
-  eight runs); landing (a fast-forward of `main`) and push; then the
-  first real cycle on foreman (decision P10) with
-  [the dogfood-1 task](2026-11-21-dogfood-1-task.md).
+- 2026-11-22: L3 path A ran (owner-operated; results in
+  `research/live/l3-subset/results.md`): V, C1, C3, C5, C6 and X1 PASS;
+  C2 and X2 INCONCLUSIVE; C4 FAIL (`git commit` from inside the Bash
+  sandbox, through an allowed script, wrote a commit and moved the
+  supervisor branch ref in the common git directory). Owner rulings
+  (2026-11-22): land and push now; no target test command (nor any
+  allowed command that runs arbitrary code) until a commit guard exists,
+  and adding one needs a C4 rerun; C2 and X2 accepted as known gaps
+  (C2's Edit outside the worktree meets the read-first rule; Codex's
+  `--json` did not record X2's commands); check offline whether
+  foreman's checks notice a moved supervisor branch ref. The plan's
+  record of these rulings is pending (the plan was open in the owner's
+  editor).
+- Next: the first real cycle on foreman (decision P10) with
+  [the dogfood-1 task](2026-11-21-dogfood-1-task.md), run from a plain
+  terminal under the first cycle's procedure.
 - The rest of B11 (the protected digest, the commit procedure and the
   review worktree) and B12 to B18 remain unauthorized. L4 waits on B13 to
   B15. Each push needs the owner's OK.
