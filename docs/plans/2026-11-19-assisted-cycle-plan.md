@@ -1427,3 +1427,17 @@ docs, check (0 blocking), `test-scripts.sh` (346 of 346), then the full
 suite (135 files, 1,564 tests), output in `.build/int-k-*.log`. Next:
 path A again on `~/foreman-l3-scratch-p-2`, `~/foreman-l3-scratch-x-2`
 and the path record `~/foreman-l3-path-a-2`, operated by the owner.
+
+## L3 Path A results (2026-11-22)
+
+Path A ran on `~/foreman-l3-scratch-p-2` and `~/foreman-l3-scratch-x-2`
+([results](../../research/live/l3-subset/results.md)). V PASS (claude
+2.1.330, codex 0.170.0, unchanged). C1, C3, C5, C6 and X1 PASS. C2
+INCONCLUSIVE (the Edit outside the worktree met the read-first rule
+after a permission-denied Read; nothing changed). C4 FAIL: through the
+allowed `sh check.sh`, `git commit` wrote a commit object and moved
+`refs/heads/foreman/l3` in the owner repository's common git directory;
+every other sandboxed write was refused. X2 INCONCLUSIVE (nothing
+written, but the Codex stream has no command items). About $0.65 of
+Claude usage. The path did not pass as a whole, so landing and push wait
+for the owner's decision on these findings.
