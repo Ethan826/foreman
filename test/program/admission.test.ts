@@ -1,121 +1,15 @@
-// Admission, the lost-race cancel and the settle step against a real
-// ledger file (plan Task B3; design "Admission rule", "Grant lifecycle").
+// Admission against a real ledger file (plan Task B3; design "Admission
+// rule"). The lost-race cancel and the settle step are in
+// `grant-lifecycle.test.ts`.
 import { describe, expect, it } from "@effect/vitest"
-import { Database } from "bun:sqlite"
-import { Array as Arr, Effect, Option, Schema } from "effect"
-import type { Scope } from "effect"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { type Client, Clients } from "../../src/domain/clients.ts"
-import { BootId } from "../../src/domain/clock.ts"
-import { Finished, Intended, type ProjectEvent } from "../../src/domain/events.ts"
-import { GrantId, OpId, PeriodSeq, ProjectId, Revision, TrancheId, WaiverId } from "../../src/domain/ids.ts"
-import {
-  Charged,
-  Grant,
-  GrantCanceled,
-  LedgerBusy,
-  type LedgerStore,
-  ReadingRow,
-  SpendDown,
-  SpendDownCanceled,
-} from "../../src/domain/ledger.ts"
-import { Success } from "../../src/domain/outcomes.ts"
-import { defaultPolicy } from "../../src/domain/policy.ts"
-import { Roles } from "../../src/domain/roles.ts"
+import { Array as Arr, Effect, Schema } from "effect"
+import { Clients } from "../../src/domain/clients.ts"
+import { PeriodSeq } from "../../src/domain/ids.ts"
+import { Grant, type LedgerStore, SpendDown, SpendDownCanceled } from "../../src/domain/ledger.ts"
 import { Windows } from "../../src/domain/window.ts"
-import { ownerOnly } from "../../src/features/counting.ts"
-import {
-  type AdmissionRequest,
-  allocationsInFallback,
-  Refused,
-} from "../../src/features/admission.ts"
-import { admit, Admitted, applySettle, cancelLostRace } from "../../src/program/admission.ts"
-import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
-
-const busyMillis = 50
-const boot = BootId.make("boot-a")
-const minuteMicros = 60_000_000
-const now = 1_000_000
-const nowMono = { bootId: boot, micros: 30 * minuteMicros }
-const context = {
-  policy: defaultPolicy,
-  retirement: ownerOnly,
-  allocations: allocationsInFallback,
-}
-const estimate = [
-  { window: Windows.FiveHour, points: 15 },
-  { window: Windows.Weekly, points: 15 },
-]
-const request = (
-  n: number,
-  project = "alpha",
-  waiver = false,
-  waiverProvider: Client = Clients.Claude,
-): AdmissionRequest => ({
-  project: ProjectId.make(project),
-  opId: OpId.make(`op-${String(n)}`),
-  grantId: GrantId.make(`g-${String(n)}`),
-  provider: Clients.Claude,
-  estimate,
-  now,
-  nowMono: Option.some(nowMono),
-  waiver: waiver ? Option.some({ waiverId: WaiverId.make("w-1"), provider: waiverProvider }) : Option.none(),
-})
-const readingRow = (window: (typeof Windows)[keyof typeof Windows], usedPercent: number) =>
-  new ReadingRow({
-    provider: Clients.Claude,
-    window,
-    usedPercent,
-    resetsAt: Option.some(now + 3_600_000),
-    observedAt: now,
-    observedMono: Option.some({ bootId: boot, micros: 29 * minuteMicros }),
-    source: "claudeRateLimitEvent",
-  })
-const intended = (n: number) =>
-  new Intended({
-    opId: OpId.make(`op-${String(n)}`),
-    tranche: TrancheId.make("t-1"),
-    step: { role: Roles.Implementer, round: 0 },
-    baseRevision: Revision.make("a".repeat(40)),
-    grantId: GrantId.make(`g-${String(n)}`),
-    client: Clients.Claude,
-    waiverId: Option.none(),
-  })
-const finished = (n: number) =>
-  new Finished({ opId: OpId.make(`op-${String(n)}`), outcome: new Success(), endedAt: 700 })
-
-const removeDir = (dir: string) =>
-  Effect.sync(() => {
-    rmSync(dir, { recursive: true, force: true })
-  })
-const withLedger = <A, E>(
-  use: (store: LedgerStore, path: string) => Effect.Effect<A, E, Scope.Scope>,
-) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-admit-`)
-  const path = `${dir}/ledger.sqlite`
-  return Effect.ensuring(
-    Effect.scoped(Effect.flatMap(openLedger(path, busyMillis), (store) => use(store, path))),
-    removeDir(dir),
-  )
-}
-const holdWriteLock = (path: string) =>
-  Effect.acquireRelease(
-    Effect.sync(() => {
-      const db = new Database(path)
-      db.exec("BEGIN IMMEDIATE")
-      return db
-    }),
-    (db) =>
-      Effect.sync(() => {
-        db.exec("ROLLBACK")
-        db.close()
-      }),
-  )
-const rowsOf = (store: LedgerStore) =>
-  store.transact((tx) => Effect.map(tx.read, (s) => Arr.map(s.entries, (e) => e.row)))
-const seedReadings = (store: LedgerStore, fiveHour: number) =>
-  store.transact((tx) => tx.append([readingRow(Windows.FiveHour, fiveHour), readingRow(Windows.Weekly, 0)]))
+import { Refused } from "../../src/features/admission.ts"
+import { admit, Admitted } from "../../src/program/admission.ts"
+import { context, estimate, now, request, rowsOf, seedReadings, withLedger } from "./admission-fixtures.ts"
 
 const admitsAndAppendsGrant = (store: LedgerStore) =>
   Effect.gen(function* () {
@@ -188,48 +82,6 @@ const spendDownExpiryIsDurable = (store: LedgerStore) =>
     expect(Schema.is(Refused)(yield* admit(store, clockSetBack, context))).toBe(true)
   })
 
-const lostRaceCanceledAtOnce = (store: LedgerStore) =>
-  Effect.gen(function* () {
-    yield* seedReadings(store, 0)
-    yield* admit(store, request(1), context)
-    yield* cancelLostRace(store, GrantId.make("g-1"))
-    expect(Arr.filter(yield* rowsOf(store), Schema.is(GrantCanceled))).toEqual([
-      new GrantCanceled({ grantId: GrantId.make("g-1"), cause: "lostRace" }),
-    ])
-  })
-
-const settleLifecycle = (store: LedgerStore) =>
-  Effect.gen(function* () {
-    yield* seedReadings(store, 0)
-    yield* Effect.forEach([1, 2, 3], (n) => admit(store, request(n), context))
-    const log: ReadonlyArray<ProjectEvent> = [intended(2), finished(2), intended(3)]
-    yield* applySettle(store, log, ProjectId.make("alpha"))
-    const rows = yield* rowsOf(store)
-    expect(Arr.filter(rows, Schema.is(GrantCanceled))).toEqual([
-      new GrantCanceled({ grantId: GrantId.make("g-1"), cause: "orphan" }),
-    ])
-    expect(Arr.map(Arr.filter(rows, Schema.is(Charged)), (c) => [c.grantId, c.endedAt])).toEqual([
-      ["g-2", 700],
-    ])
-    const before = Arr.length(rows)
-    yield* applySettle(store, log, ProjectId.make("alpha"))
-    expect(Arr.length(yield* rowsOf(store))).toBe(before)
-  })
-
-const settleBusyWritesNothing = (store: LedgerStore, path: string) =>
-  Effect.gen(function* () {
-    yield* seedReadings(store, 0)
-    yield* admit(store, request(1), context)
-    const before = yield* rowsOf(store)
-    const failure = yield* Effect.scoped(
-      Effect.flatMap(holdWriteLock(path), () =>
-        Effect.flip(applySettle(store, [], ProjectId.make("alpha"))),
-      ),
-    )
-    expect(failure).toEqual(new LedgerBusy())
-    expect(yield* rowsOf(store)).toEqual(before)
-  })
-
 describe("admission", () => {
   it.effect("admits within the cap and appends a grant at the estimate", () =>
     withLedger(admitsAndAppendsGrant),
@@ -247,15 +99,5 @@ describe("admission", () => {
   )
   it.effect("writes a loosening spend-down's expiry so a clock set back cannot revive it", () =>
     withLedger(spendDownExpiryIsDurable),
-  )
-})
-
-describe("grant lifecycle", () => {
-  it.effect("cancels a lost race at once", () => withLedger(lostRaceCanceledAtOnce))
-  it.effect("settles orphans and finished steps once, leaving in-flight grants open", () =>
-    withLedger(settleLifecycle),
-  )
-  it.effect("writes nothing when the settle cannot get the lock", () =>
-    withLedger(settleBusyWritesNothing),
   )
 })
