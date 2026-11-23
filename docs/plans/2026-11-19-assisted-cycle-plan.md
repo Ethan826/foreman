@@ -1662,11 +1662,53 @@ commands exactly, once each; the new direct writes are guarded with
 `d=$(...) &&` so a failed `rev-parse` cannot meet the root's read-only
 file system; C4's missing-target check is scoped to each probe's own
 line; LANDED printed without a snapshot change rests on the operator's
-judgment; the offline stand-in runs git with a clean configuration (the
-live run's `env -i` sets `HOME` to the scratch root's `home/`, so the
-owner's git configuration does not apply there either).
+judgment; the offline stand-in runs git with a clean configuration.
+(Corrected after the review below: the live client does not run under
+`env -i`; that is setup's git runner. `run-case.sh` starts the client
+with the parent's environment minus `GIT_*`, as foreman does, so the
+owner's `HOME` and global git configuration apply to the agent's git.)
 
 Offline: 371 of 371 cases under bash (worker and coordinator); nine
 mutants, each caught; on the integrated tree `bun run verify` passes
 (146 files, 1,660 tests; check 0 blocking). Next: Codex reviews the
 package, then the coordinator runs the rerun.
+
+### Package review at 6ae20c5 (2026-11-23)
+
+The owner chose a direct read-only Codex run over relaying one, since
+foreman's `review` only follows a foreman attempt and this change was
+made outside a session. The coordinator ran Codex 0.170.0 with
+foreman's review flags (`exec --sandbox read-only -c
+approval_policy="never" --json`) over `b5c7f80..6ae20c5`, briefed by
+gate: fact, source, counterexample, probe causes, C6's derived state,
+truthful docs ([the review](2026-11-23-l3-rerun-package-review.md)).
+
+Verdict HOLD, four P1 and two P2:
+1. P1: C4 does not tie the script that ran to the prompt's: a
+   `check.sh` without the four probes, with the same paired result,
+   scores PASS.
+2. P1: a probe's refusal is accepted from any `Read-only file system`
+   or `Operation not permitted` line, whatever path it names; the
+   script keeps only the first line of stderr.
+3. P1: C6 reads an absent `is_error` as success.
+4. P1: C6 checks only paths and the file count of `git diff --stat`,
+   and drops `git status`'s closing lines, so wrong counts or a
+   contradictory closing line score PASS.
+5. P2: the live client inherits the owner's `HOME` and git
+   configuration (the plan's `env -i` sentence was the coordinator's
+   error, corrected above); a setting such as `color.status=always`
+   would make C6 INCONCLUSIVE, and raw hashes can disagree with git's
+   normalization.
+6. P2: a `LANDED` line in C4's result is not decisive when the snapshot
+   shows no change; snapshots show final state only; C5 lacks a fixture
+   for a newly covered path.
+
+Coordinator checks: finding 5 confirmed in `run-case.sh` (the client
+gets the parent environment minus `GIT_*`); the owner's global git
+configuration sets no `color`, `status`, `diff`, `core.quotePath` or
+`advice` key today. On finding 3, path A's real streams
+(`~/foreman-l3-scratch-p-2/out`, client 2.1.330) give every
+`tool_result` an explicit `is_error`: `false` for successful Bash
+commands, and `true` with content starting `Exit code 128` for C5's
+`git diff --output` refused by the sandbox. So the pinned client marks
+a nonzero exit, and an absent flag can be treated as unreadable.
