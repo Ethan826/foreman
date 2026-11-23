@@ -1579,3 +1579,39 @@ exact `Bash(...)` rules, but none sets `checkCommands` until a C4 rerun
 passes; the work is split into dogfood-3a, the guard
 ([task](2026-11-23-dogfood-3a-task.md)), then the live rerun, then
 dogfood-3b, `checkCommands`.
+
+### dogfood-3a run (2026-11-23)
+
+Session `mwtelk04-z117sw`, launches run from this Claude Code session
+through `~/.config/foreman/fm`. Implement ($6.78) built the denials, the
+`HeadMoved` refusal, the narrow HEAD read for `close --finished`, the
+status field and the authorized test changes. Checks: tsc, ESLint and
+the suite passed; the prose gate blocked once. The L3 script tests
+first showed 106 failures: the task told the owner to run them with
+`sh`, but `test-scripts.sh` is a bash script; under `bash` they passed
+347 of 347 (the coordinator's error, not the implementer's).
+
+- Review 1: F1 (a `close --finished` refused for a moved HEAD leaves
+  armed waivers; ruled: a refused close expires no waiver, as no other
+  close refusal does; the task's "as any refusal does" meant launches),
+  F2 (an attribute refusal discarded the HEAD reading), F3 (native
+  methods in tests). Correction 1 ($2.12) fixed F2, F3 and the prose,
+  and introduced a type error (`mkdirSync` with an options object).
+- Review 2: the type error, F2 (a failed HEAD read lost beside an
+  attribute refusal, which expired waivers against the R01 ruling), F3
+  (status lost a moved HEAD beside an unread attribute source), F4
+  (native `slice` in the L3 scripts). Correction 2 ($1.91) fixed all
+  four; two prose blocks remained, which the coordinator rewrote by
+  hand.
+- Review 3 raised two minor items (native methods in rewritten tests; a
+  README sentence saying L3 never ran). With corrections exhausted, the
+  coordinator fixed both by hand, every check passed (146 files, 1,660
+  tests; L3 script tests all passing), the session was abandoned, and
+  the owner approved committing by exception (5e7bd8b).
+
+Lesson: round 1's F2 fix (keep the HEAD beside the attribute judgment)
+opened the two error-precedence findings of round 2; precedence between
+coexisting failures is where these cycles spend their corrections.
+Next: the live rerun of C4 with git-directory probes, `git status` and
+`git diff` under the denials and the client artifacts (owner
+authorization), then dogfood-3b (`checkCommands`).
