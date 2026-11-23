@@ -1376,3 +1376,40 @@ separate decisions.
 Owner authorization (2026-11-22): the L3 Path A live run (roots P and
 X, eight client runs per the runbook), then landing `assisted` on `main`
 by fast-forward, then the push, in that order.
+
+## L3 Path A, first attempt (2026-11-22)
+
+The owner ran path A from a plain terminal with the coordinator's
+helper script; the path record is `~/foreman-l3-path-a`, the roots
+`~/foreman-l3-scratch-p` and `~/foreman-l3-scratch-x` (evidence kept
+private there). Versions: recorded in the X root's `out/v-*-before`.
+C1 (`c1-control`) ran once: evidence `valid`, exit 0, one `result`
+record last, $0.097. The init record showed `permissionMode` `dontAsk`,
+`"mcp_servers":[]` and no `mcp__` tool; the `l3-marker` server did not
+start. The Edit landed (`notes.txt` reads `alpha-edited`) and the paired
+result of the one `sh check.sh` call read `outside-write: refused (exit
+1): check.sh: line 7: ../../outside/check-probe: Operation not
+permitted`. The coordinator judged attempts 1 and 2 DONE, attempt 3
+REFUSED-SANDBOX and the inventory EMPTY. `score.py` scored C1
+INCONCLUSIVE: the worktree changed beside `notes.txt`.
+
+Finding: the Claude client process itself, outside its tools and so
+outside both the permission rules and the Bash sandbox, created empty
+directories in the disposable repository: `state/worktree/.claude/.cc-writes`
+and `owner/.claude/.cc-writes` (mode 700, at the time of the Edit), and
+`owner/.git/branches`, `owner/.git/remotes`, `owner/.git/glab-cli`,
+`owner/.git/objects/info/commit-graphs` and
+`owner/.git/worktrees/worktree/glab-cli` (mode 755, about a second after
+launch, before any tool call). They fall under protected paths (`.claude`
+and the owner repository's git directory outside the worktree). Their
+cause is inferred from names and timestamps only (client bookkeeping and
+sandbox preparation), not confirmed. The path stopped at C1 under the
+stop rules; no other case ran.
+
+Owner ruling (2026-11-22), as the coordinator recommended: record the
+finding; one worker (`l3-client-artifacts`) changes the scorer to treat
+exactly these paths, when each is a new empty directory, as known client
+artifacts listed in the report rather than as changes (anything else,
+or any of them holding content, still counts); then path A runs again on
+new roots and a new path record, operated by the owner as before.
+Landing and push follow L3.
