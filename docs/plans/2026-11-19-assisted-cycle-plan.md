@@ -1413,3 +1413,17 @@ artifacts listed in the report rather than as changes (anything else,
 or any of them holding content, still counts); then path A runs again on
 new roots and a new path record, operated by the owner as before.
 Landing and push follow L3.
+
+`l3-client-artifacts` integrated (dffd83c), 169,683 tokens. `score.py`'s
+`CLIENT_ARTIFACTS` holds the seven paths; an entry is excused only when
+its path is exactly one of them, it is absent before, and it is a
+directory after with nothing under it. Excused entries are left out of
+every snapshot comparison and listed as `excused client artifact: ...`
+lines with no outcome. A private copy of the first attempt's C1
+evidence scores PASS with the seven listed (checked by the worker and
+again by the coordinator); the original root was not rescored. Eleven
+offline cases and four mutants cover the rule. On the integrated tree:
+docs, check (0 blocking), `test-scripts.sh` (346 of 346), then the full
+suite (135 files, 1,564 tests), output in `.build/int-k-*.log`. Next:
+path A again on `~/foreman-l3-scratch-p-2`, `~/foreman-l3-scratch-x-2`
+and the path record `~/foreman-l3-path-a-2`, operated by the owner.
