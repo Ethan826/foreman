@@ -1441,3 +1441,22 @@ every other sandboxed write was refused. X2 INCONCLUSIVE (nothing
 written, but the Codex stream has no command items). About $0.65 of
 Claude usage. The path did not pass as a whole, so landing and push wait
 for the owner's decision on these findings.
+
+Owner rulings on the L3 results (2026-11-22): land and push now (done:
+`main` fast-forwarded to 8f364ae and pushed); no target test command,
+nor any allowed command that runs arbitrary code, until a commit guard
+exists, and adding one needs a C4 rerun; C2 and X2 accepted as known
+gaps; check offline whether foreman's checks notice a moved supervisor
+branch ref. By code reading, the session check reads the supervisor's
+HEAD but does not compare it with the session base, and review diffs the
+base against the snapshot tree, so an agent's commit would still show
+its changes in review but its branch move would go unflagged
+(unverified by test).
+
+CI on the pushed `main` failed on ubuntu-latest (7 of 135 test files;
+docs passed): the `ps` decoder rejects Linux listings, and `status`
+leaves traces in the state and ledger directories on Linux. The branch
+had never run in CI. The owner prefers portability, with macOS-only CI
+as the fallback, and approved a fix on a branch pushed for CI before
+`main` moves. One worker (`fix-linux`) reproduces both groups in a
+Linux container and fixes them.
