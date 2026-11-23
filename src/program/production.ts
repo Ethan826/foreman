@@ -2,6 +2,13 @@
 // capabilities"; decision P3). It settles the target first
 // (production-target.ts): the configuration decoded, the layout checked
 // (batch review B05) and the target bound to the state directory (B04).
+// A recorded binding is compared with the configuration first, before the
+// layout rules, so a mismatch touches no directory and is reported as a
+// mismatch (owner finding F10, dogfood-2b round 2). Then the state
+// directory and the ledger directory are both judged, then each is made,
+// mode 0700, when it is missing and its parent exists, and only then is a
+// first binding recorded (dogfood-1 finding; owner finding F7;
+// store-directory.ts).
 // Then it prepares git's private HOME (B02), opens the project log and
 // lock in the state directory and the owner's shared ledger (B09), and
 // builds every capability from Runtime. Nothing here decides; the facade
@@ -39,9 +46,10 @@ import { readOwnerHeadWith, revParseArgs } from "../runtime/worktree.ts"
 import { publishClaudeProfileWith } from "./claude-profile.ts"
 import { gitHomePath, preparedGitHome } from "./git-home.ts"
 import { handoffGitWith } from "./handoff-git.ts"
-import { settledTarget } from "./production-target.ts"
+import { ledgerDirOfTarget, settledTarget } from "./production-target.ts"
 import { type SessionContext, WorktreeUnready } from "./session-context.ts"
-import { requireBound } from "./target-binding.ts"
+import { preparedStoreDirectories } from "./store-directory.ts"
+import { requireBound, type TargetPolicy } from "./target-binding.ts"
 import { worktreeProgramWith, type WorktreeProgram } from "./worktree.ts"
 
 /** How long a log or ledger write waits for another writer, in milliseconds. */
@@ -86,15 +94,22 @@ export type ProductionFactory = (
  * and fails with `TargetMismatch` when the configuration names another
  * target (batch review B04). `environment` is foreman's own, from which a
  * client gets everything but `GIT_*` (decision P2). It settles the target
- * (production-target.ts), then prepares git's HOME, opens the stores and
- * wires every capability; nothing is opened, made or run before the
- * target is settled. `status` and the owner's exits have their own
- * constructions, which never prepare git's HOME (production-status.ts,
- * production-exits.ts; re-review R02).
+ * (production-target.ts): a recorded binding compared first, so a
+ * mismatch creates nothing (owner finding F10), then the state and ledger
+ * directories judged, then a missing one made, then a first binding
+ * recorded. It then prepares git's HOME, opens the stores and wires every
+ * capability; nothing else is opened, made or run before the target is
+ * settled. A link to a
+ * directory is followed, as the layout check follows it. A store
+ * directory whose parent is missing, or whose resolved path is not a
+ * directory, fails with `StoreDirectoryParentMissing` or
+ * `StoreDirectoryRefused` (store-directory.ts). `status` and the owner's
+ * exits have their own constructions, which never prepare git's HOME
+ * (production-status.ts, production-exits.ts; re-review R02).
  */
 export const production: ProductionFactory = (configPath, environment) =>
   Effect.gen(function* () {
-    const { config, target } = yield* settledTarget(requireBound, configPath, environment)
+    const { config, target } = yield* settledTarget(boundInPreparedState, configPath, environment)
     const { stateDir } = config
     const home = yield* preparedGitHome(gitHomePath(stateDir))
     const worktree = worktreeProgramWith(startGit, target.attributeAllowance)(home)
@@ -126,6 +141,25 @@ export const production: ProductionFactory = (configPath, environment) =>
       },
     }
     return { config, target, context, worktree } satisfies Production
+  })
+
+/**
+ * `requireBound` with the store directories prepared, in the order owner
+ * finding F10 (dogfood-2) requires. It runs after `settledTarget` refused
+ * a state directory that is not a directory (owner finding F2), compared
+ * a recorded binding with the configured target and then checked the
+ * configured layout, so a mismatch fails with `TargetMismatch`, and a
+ * refused layout with `LayoutRefused`, before any directory is read for
+ * creation or created. Here the state directory and the configured ledger
+ * directory are both judged, and only then is a missing one whose parent
+ * exists made, mode 0700 (dogfood-1 finding; owner finding F7). Last the
+ * binding is recorded at first use, or compared again. A refused ledger
+ * directory so leaves no state directory, binding or git HOME.
+ */
+const boundInPreparedState: TargetPolicy = (stateDir, configured) =>
+  Effect.gen(function* () {
+    yield* preparedStoreDirectories([stateDir, ledgerDirOfTarget(configured)])
+    return yield* requireBound(stateDir, configured)
   })
 
 /**

@@ -60,6 +60,10 @@ These reads have a limit (review L02). `lstat`, `readlink` and `O_NOFOLLOW` guar
 
 [`git-home.ts`](git-home.ts) reads what is at git's `HOME` path without following a link (`readHome`) and creates the directory (`createHome`, batch review B02). Creation makes one directory with mode 0700 and sets that mode again, so the umask cannot change it. Nothing here removes, empties or changes an existing entry.
 
+## State and ledger directories
+
+[`store-directory.ts`](store-directory.ts) reads what is at the state directory's or the ledger directory's path without following a link (`readStoreDirectory`) and creates the directory (`createStoreDirectory`, dogfood-1 finding). When nothing is at the path, the reading also says whether the parent is a directory. Program passes the resolved path, so a link is seen here only when one appeared after the path was resolved. Creation makes only the last component, with mode 0700, and sets that mode again, so the umask cannot change it; a missing parent makes creation fail. A failed `mkdir` is `StoreDirectoryUnreadable`, and a failed `chmod` after it is `StoreDirectoryModeUnset`, which Program never discards. Nothing here removes or changes an existing entry.
+
 ## Canonical paths
 
 [`canonical-path.ts`](canonical-path.ts) holds `canonicalPathOf` (batch review B05). It resolves a path's nearest existing ancestor with `realpath` and appends the components below it as given, so a path not made yet still resolves through any link above it. An entry that exists but cannot be resolved, such as a dangling link, fails with `PathUnreadable` and is never read as absent.

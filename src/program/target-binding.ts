@@ -41,6 +41,24 @@ export const requireBound: TargetPolicy = (stateDir, configured) =>
   })
 
 /**
+ * Compares `configured` with the binding recorded in `stateDir`, when one
+ * is recorded, and records nothing; reads only. A command that acts on
+ * the target runs it before it reads a store directory for creation or
+ * creates one, so a changed configuration fails with `TargetMismatch`
+ * having touched nothing (owner finding F10, dogfood-2). Passes when no
+ * binding is recorded. Fails with `TargetMismatch` or
+ * `TargetBindingUnreadable`.
+ */
+export const matchedRecord = (stateDir: string, configured: TargetBinding) =>
+  Effect.flatMap(
+    recordedTarget(stateDir),
+    Option.match({
+      onNone: () => Effect.void,
+      onSome: (recorded) => Effect.fromResult(compareTarget(bindingPath(stateDir), recorded, configured)),
+    }),
+  )
+
+/**
  * The binding recorded in `stateDir`, if any; reads only. Fails with
  * `TargetBindingUnreadable` when the file cannot be read or decoded,
  * including when its bytes are not UTF-8, which are never read with

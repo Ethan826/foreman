@@ -3,7 +3,8 @@
 // `spawn` from "bun", the Bun executable's path (added to the `process`
 // global that src/facade/process.d.ts declares with the child's
 // arguments and the environment the git hazard tests set and restore),
-// and `import.meta.dirname` for paths relative to a test file.
+// `process.umask` for the store directory tests, and `import.meta.dirname`
+// for paths relative to a test file.
 declare module "bun" {
   /** A running child process started by {@link spawn}. */
   export interface Subprocess {
@@ -36,6 +37,12 @@ declare module "bun" {
 interface Process {
   /** The path of the running Bun executable. */
   readonly execPath: string
+  /**
+   * Sets the process umask to `mask` and returns the previous one. The
+   * store directory tests set a restrictive and a permissive umask and
+   * restore the previous one afterwards.
+   */
+  umask(mask: number): number
 }
 
 interface ImportMeta {

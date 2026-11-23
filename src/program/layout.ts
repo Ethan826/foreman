@@ -27,15 +27,20 @@ export const checkedLayout = (configured: CanonicalLayout) =>
  * recorded target through this (re-review R03).
  */
 export const resolvedLayout = (configured: CanonicalLayout): Effect.Effect<CanonicalLayout, LayoutRefused> =>
-  Effect.mapError(
-    Effect.all({
-      stateDir: canonicalPathOf(configured.stateDir),
-      ownerCheckout: canonicalPathOf(configured.ownerCheckout),
-      supervisor: canonicalPathOf(configured.supervisor),
-      ledgerDir: canonicalPathOf(configured.ledgerDir),
-    }),
-    unresolved,
-  )
+  Effect.all({
+    stateDir: resolvedPath(configured.stateDir),
+    ownerCheckout: resolvedPath(configured.ownerCheckout),
+    supervisor: resolvedPath(configured.supervisor),
+    ledgerDir: resolvedPath(configured.ledgerDir),
+  })
+
+/**
+ * One configured path resolved as the layout check resolves it: its
+ * canonical path, or `LayoutRefused` when it cannot be resolved, such as
+ * a dangling symbolic link. Reads only.
+ */
+export const resolvedPath = (path: string): Effect.Effect<string, LayoutRefused> =>
+  Effect.mapError(canonicalPathOf(path), unresolved)
 
 /** A path that could not be resolved, as a refusal. */
 const unresolved = (failed: PathUnreadable) =>

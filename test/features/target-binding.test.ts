@@ -57,4 +57,17 @@ describe("the binding file", () => {
     expect(decodeTargetBinding(encodeTargetBinding(recorded))).toEqual(Result.succeed(recorded))
     expect(Result.isFailure(decodeTargetBinding('{"extra": 1}'))).toBe(true)
   })
+
+  it("refuses a ledger path that is not absolute, saying so (owner finding F11)", () => {
+    for (const ledger of ["usage.sqlite", "ledger/ledger.sqlite", ""]) {
+      expect(decodeTargetBinding(encodeTargetBinding({ ...recorded, ledger }))).toEqual(
+        Result.fail(`the ledger path ${JSON.stringify(ledger)} is not absolute`),
+      )
+    }
+  })
+
+  it("accepts an absolute ledger path, the top level included", () => {
+    const topLevel = { ...recorded, ledger: "/ledger.sqlite" }
+    expect(decodeTargetBinding(encodeTargetBinding(topLevel))).toEqual(Result.succeed(topLevel))
+  })
 })

@@ -4,9 +4,10 @@
 // recorded target when one is recorded, as `status` does, so a configured
 // layout that breaks a rule blocks none of them. With no binding recorded
 // the configured target is the one in force, and its layout is still
-// checked. Every command that acts on the target still refuses the
-// configured layout. `step-ended` opens the log and the lock only, never
-// the ledger.
+// checked. A command that acts on the target refuses a configured target
+// that differs from the recorded one with `TargetMismatch`, compared
+// before the layout rules (owner ruling, dogfood-2b). `step-ended` opens
+// the log and the lock only, never the ledger.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs"
@@ -138,7 +139,7 @@ const targetCommandsStillRefused = () =>
         yield* cli(layout, ["implement", "--waive"], { config }),
         yield* cli(layout, ["session", "close", "--finished", "--attest"], { config }),
       ]
-      expect(runs.map(outcome)).toEqual(runs.map(() => [1, "LayoutRefused"]))
+      expect(runs.map(outcome)).toEqual(runs.map(() => [1, "TargetMismatch"]))
     }),
   )
 
@@ -149,5 +150,5 @@ describe("the owner's exits in production with a refused configured layout", () 
   it.effect("with no binding recorded, the configured layout is still refused", unboundStillChecked, endToEndMillis)
   it.effect("a recorded target whose layout is refused is still refused", recordedLayoutStillChecked, endToEndMillis)
   it.effect("a damaged binding still withholds every exit", damagedBindingWithholds, endToEndMillis)
-  it.effect("a command that acts on the target still refuses the layout", targetCommandsStillRefused, endToEndMillis)
+  it.effect("a command that acts on a changed target is refused by the mismatch", targetCommandsStillRefused, endToEndMillis)
 })
