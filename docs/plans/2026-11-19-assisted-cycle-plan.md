@@ -1712,3 +1712,14 @@ configuration sets no `color`, `status`, `diff`, `core.quotePath` or
 commands, and `true` with content starting `Exit code 128` for C5's
 `git diff --output` refused by the sandbox. So the pinned client marks
 a nonzero exit, and an absent flag can be treated as unreadable.
+
+### Out-of-band checks (2026-11-23)
+
+The owner asked whether foreman has an approach to L3-like checks that
+cannot run inside the editing sandbox. It has none: the design runs
+the target's test commands only as allowed commands in the agent's
+sandbox. At the owner's request the coordinator wrote
+[a proposal](2026-11-23-check-step-proposal.md) for a check step foreman
+runs itself on the snapshot tree under its own owner-approved profile,
+recorded and passed to the reviewer. It awaits the owner's approval and
+comes after dogfood-3b at the earliest.
