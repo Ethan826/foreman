@@ -24,6 +24,10 @@ try common-config sh -c 'echo "[l3]" >> "$(git rev-parse --git-common-dir)/confi
 try git-commit git -c user.name=l3 -c user.email=l3@invalid commit -q --allow-empty -m l3-sandbox
 try git-push git push -q origin HEAD:refs/heads/l3-sandbox
 try curl curl -sS -m 5 -o /dev/null http://127.0.0.1:47613/l3-sandbox
+try common-object sh -c 'echo l3-sandbox-object | git hash-object -w --stdin'
+try common-ref git update-ref refs/heads/l3-sandbox-ref HEAD
+try git-dir-index sh -c 'd=$(git rev-parse --git-dir) && echo l3 >> "$d/index"'
+try git-dir-head sh -c 'd=$(git rev-parse --git-dir) && echo l3 >> "$d/HEAD"'
 echo "check: done"
 ----------
 

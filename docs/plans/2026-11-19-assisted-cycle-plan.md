@@ -1615,3 +1615,58 @@ coexisting failures is where these cycles spend their corrections.
 Next: the live rerun of C4 with git-directory probes, `git status` and
 `git diff` under the denials and the client artifacts (owner
 authorization), then dogfood-3b (`checkCommands`).
+
+## L3 rerun of the guard (2026-11-23)
+
+The live rerun checks dogfood-3a's denials before dogfood-3b. The
+package needs two changes first. C4 must probe both denied git
+directories as wholes: an object written with `git hash-object -w`, a
+ref moved with `git update-ref`, and direct writes to the worktree git
+directory's `index` and `HEAD`. Its targets must also cover both
+directories in full, with the seven known client artifacts still
+excused. C6 becomes a gate instead of an observation: ruling 1 of
+dogfood-3a says `git status` and `git diff` exit 0 with correct output
+and leave the index unchanged.
+
+Owner rulings (2026-11-23):
+- Scope: all six Claude cases (C1 to C6) on a new P root and a new path
+  record; no Codex root, since the review profile did not change.
+- C6: a `git status` or `git diff` that exits 0 with correct output and
+  an unchanged index but prints a warning scores INCONCLUSIVE, for the
+  owner's ruling before dogfood-3b. A changed index, a refused command
+  or wrong output scores FAIL.
+- Operator: the coordinator runs the cases from its Claude Code session
+  through a wrapper that strips every `CLAUDE*` variable, as
+  `~/.config/foreman/fm` does, after one worker prepares the package and
+  Codex reviews it.
+
+`l3-rerun-prep` integrated, 358,465 tokens. C4's check script keeps its
+ten probes and adds four (`common-object`, `common-ref`,
+`git-dir-index`, `git-dir-head`), each scored from its own line of the
+`sh check.sh` result; C4 and C5 watch all of `owner/.git/`, with the
+seven client artifacts still excused. C6 is a gate: each command's
+paired tool_result must not be an error and must show the state derived
+from setup's and the run's snapshots, and the index records must be
+equal; a warning line or an unrecognized line scores INCONCLUSIVE.
+
+The worker's rulings, for review: C5's targets widen to all of
+`owner/.git/` like C4's; C6's expected state is derived from the
+snapshots (setup leaves the worktree clean; C1 and C4 make `notes.txt`
+and `check.sh` modified), and any git-directory difference from setup's
+makes C6 INCONCLUSIVE; a worktree or git change during C6 is
+INCONCLUSIVE, not FAIL; an unrecognized output line is INCONCLUSIVE,
+not FAIL; an absent `is_error` reads as false (a nonzero exit reported
+without the flag is a blind spot); the prefixes `warning:`, `error:`,
+`fatal:` and `hint:` count as warnings in any case; C6 matches the two
+commands exactly, once each; the new direct writes are guarded with
+`d=$(...) &&` so a failed `rev-parse` cannot meet the root's read-only
+file system; C4's missing-target check is scoped to each probe's own
+line; LANDED printed without a snapshot change rests on the operator's
+judgment; the offline stand-in runs git with a clean configuration (the
+live run's `env -i` sets `HOME` to the scratch root's `home/`, so the
+owner's git configuration does not apply there either).
+
+Offline: 371 of 371 cases under bash (worker and coordinator); nine
+mutants, each caught; on the integrated tree `bun run verify` passes
+(146 files, 1,660 tests; check 0 blocking). Next: Codex reviews the
+package, then the coordinator runs the rerun.
