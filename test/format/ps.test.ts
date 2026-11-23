@@ -12,6 +12,8 @@ const mail = "  282   282 Wed Nov 18 13:37:37 2026     /System/Applications/Mail
 const spaced = " 2846  2846 Fri Oct  9 14:06:29 2026     /bin/sh -c echo  two  spaces\n"
 const linuxHeader = "    PID    PGID                  STARTED COMMAND\n"
 const linuxRow = "      1       1 Wed Nov 19 10:00:00 2026 /sbin/init splash\n"
+/** A Linux kernel thread: procps lists it in process group 0. */
+const kernelThread = "      2       0 Mon Nov 23 03:37:46 2026 [kthreadd]\n"
 
 describe("decodePs", () => {
   it("decodes each row in listing order", () => {
@@ -39,6 +41,15 @@ describe("decodePs", () => {
   it("decodes procps's header and columns", () => {
     expect(decodePs(`${linuxHeader}${linuxRow}`)).toEqual(
       Result.succeed([{ pid: 1, pgid: 1, startedAt: "Wed Nov 19 10:00:00 2026", command: "/sbin/init splash" }]),
+    )
+  })
+
+  it("decodes a Linux kernel thread, whose process group is 0", () => {
+    expect(decodePs(`${linuxHeader}${linuxRow}${kernelThread}`)).toEqual(
+      Result.succeed([
+        { pid: 1, pgid: 1, startedAt: "Wed Nov 19 10:00:00 2026", command: "/sbin/init splash" },
+        { pid: 2, pgid: 0, startedAt: "Mon Nov 23 03:37:46 2026", command: "[kthreadd]" },
+      ]),
     )
   })
 
@@ -80,6 +91,12 @@ describe("decodePs", () => {
 
   it("fails on a pid of zero", () => {
     expect(Result.isFailure(decodePs(`${header}    0     1 Wed Sep 30 11:32:26 2026     /sbin/launchd\n`))).toBe(
+      true,
+    )
+  })
+
+  it("fails on a negative process group", () => {
+    expect(Result.isFailure(decodePs(`${header}    1    -1 Wed Sep 30 11:32:26 2026     /sbin/launchd\n`))).toBe(
       true,
     )
   })

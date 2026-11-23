@@ -7,7 +7,9 @@
 // consistent snapshot while another connection writes (WAL readers do
 // not block writers, sqlite.org/wal.html). As in every WAL reader, SQLite
 // records the reader's mark in the shared-memory index (`-shm`); the
-// database and its WAL file are not written.
+// database and its WAL file are not written. No file is created either,
+// because every writer keeps the WAL and `-shm` files when it closes
+// (`keepWalFiles` in `sqlite.ts`).
 import { Database } from "bun:sqlite"
 import { Effect, Option } from "effect"
 import type { Scope } from "effect"

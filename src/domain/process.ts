@@ -6,10 +6,24 @@
 // client, so nothing here describes stopping one.
 import { type Result, Schema } from "effect"
 
-/** A process or process group id as `ps` prints it: a positive integer. */
+/**
+ * A process id as `ps` prints it, or the id of a group that a process
+ * leads: a positive integer.
+ */
 export const ProcessId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))
-/** A process or process group id; see {@link ProcessId}. */
+/** A process id or a leader's group id; see {@link ProcessId}. */
 export type ProcessId = typeof ProcessId.Type
+
+/**
+ * The process group of a listed process as `ps` prints it: a non-negative
+ * integer. It is 0 for a process the kernel started outside any group:
+ * procps on Linux lists kernel threads such as `kthreadd` in group 0, and
+ * in some containers and VMs pid 1 as well. No client foreman starts is in
+ * group 0, since each leads its own group, so such a row is never a member.
+ */
+export const ProcessGroupId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+/** A listed process's group id; see {@link ProcessGroupId}. */
+export type ProcessGroupId = typeof ProcessGroupId.Type
 
 /**
  * A process's start time as `ps -o lstart` prints it, kept as text, such
@@ -27,7 +41,7 @@ export type StartTime = typeof StartTime.Type
  */
 export const ProcessRow = Schema.Struct({
   pid: ProcessId,
-  pgid: ProcessId,
+  pgid: ProcessGroupId,
   startedAt: StartTime,
   command: Schema.String,
 })
@@ -79,7 +93,7 @@ export class GroupIdReused extends Schema.TaggedClass<GroupIdReused>()("GroupIdR
  */
 export class LeaderIdReused extends Schema.TaggedClass<LeaderIdReused>()("LeaderIdReused", {
   startedAt: StartTime,
-  pgid: ProcessId,
+  pgid: ProcessGroupId,
 }) {}
 
 /**

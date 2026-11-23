@@ -1,10 +1,24 @@
 // What the Runtime's SQLite stores share: recognizing a lock timeout and
 // reading an error's message without `instanceof` (bun:sqlite throws a
-// SQLiteError with a `code` and a `message`).
+// SQLiteError with a `code` and a `message`), and opening a writer in WAL
+// mode whose WAL files stay on close.
+import { constants, type Database } from "bun:sqlite"
 import { Effect, Exit, Option, Schema } from "effect"
 
 /** SQLite's result code for a lock held past `busy_timeout`. */
 const SqliteCodes = { Busy: "SQLITE_BUSY" } as const
+
+/** SQLite's numeric result code for success, `SQLITE_OK`. */
+const sqliteOk = 0
+
+/** The value that switches a boolean file control on. */
+const switchedOn = 1
+
+/** The refusal when SQLite keeps another journal mode. */
+const walModeNotTaken = "WAL journal mode did not take effect"
+
+/** The refusal when SQLite will not keep the WAL files on close. */
+const walFilesNotKept = "SQLite refused to keep the WAL files on close"
 
 /** Whether a thrown error is SQLite's SQLITE_BUSY (a lock held too long). */
 export const isSqliteBusy = Schema.is(
@@ -76,3 +90,31 @@ const walMode = "wal"
  */
 export const isWal = (row: unknown): boolean =>
   Option.exists(decodeJournalMode(row), (r) => r.journal_mode === walMode)
+
+/**
+ * Asks SQLite to keep the WAL and shared-memory (`-shm`) files when this
+ * connection closes (`SQLITE_FCNTL_PERSIST_WAL`,
+ * sqlite.org/c3ref/c_fcntl_begin_atomic_write.html); true when SQLite
+ * accepted. Every writer sets it, so the last one to close checkpoints
+ * the WAL but leaves both files in place. Without it, the WAL files are
+ * deleted on close, and a later read-only connection (`status`) creates
+ * both and cannot delete them, which writes to the state directory
+ * (review item B11). Apple's system SQLite, which Bun uses on macOS,
+ * already keeps them; Bun's bundled SQLite on Linux does not.
+ */
+export const keepWalFiles = (db: Database): boolean =>
+  db.fileControl(constants.SQLITE_FCNTL_PERSIST_WAL, switchedOn) === sqliteOk
+
+/**
+ * Why a newly opened writer cannot be used: none when its journal mode is
+ * WAL (`mode` is the `PRAGMA journal_mode=WAL` row) and SQLite agreed to
+ * keep the WAL files ({@link keepWalFiles}), otherwise the reason.
+ */
+export const walRefusal = (mode: unknown, walKept: boolean): Option.Option<string> =>
+  isWal(mode)
+    ? keptRefusal(walKept)
+    : Option.some(walModeNotTaken)
+
+/** None when SQLite keeps the WAL files, otherwise the refusal. */
+const keptRefusal = (walKept: boolean): Option.Option<string> =>
+  walKept ? Option.none() : Option.some(walFilesNotKept)

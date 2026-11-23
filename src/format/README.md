@@ -79,7 +79,7 @@ classDiagram
 
 ## Process listing
 
-[`ps.ts`](ps.ts) decodes `ps -A -o pid,pgid,lstart,command` as BSD ps and procps print it under `LC_ALL=C` with `decodePs`. The start time keeps the fixed `lstart` layout as text, and the command is the rest of the line. Decoding is strict: a missing final newline, another header or any row that does not decode fails the whole listing with `ProcessListingUndecodable`, because a skipped row would hide a process from the evidence. `startTimeOf` reads one pid's start time, or none, which is how the leader's start is read right after spawn.
+[`ps.ts`](ps.ts) decodes `ps -A -o pid,pgid,lstart,command` as BSD ps and procps print it under `LC_ALL=C` with `decodePs`. The start time keeps the fixed `lstart` layout as text, and the command is the rest of the line. A process group of 0 decodes, since procps on Linux lists kernel threads such as `kthreadd` there; a pid of 0 does not. Decoding is strict: a missing final newline, another header or any row that does not decode fails the whole listing with `ProcessListingUndecodable`, because a skipped row would hide a process from the evidence. `startTimeOf` reads one pid's start time, or none, which is how the leader's start is read right after spawn.
 
 ## Findings and briefs
 

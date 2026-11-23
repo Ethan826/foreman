@@ -4,7 +4,7 @@
 // in one `BEGIN IMMEDIATE` transaction that refuses it, writing nothing,
 // if another writer appended first.
 import { Database } from "bun:sqlite"
-import { Array as Arr, Effect, Schema, Semaphore } from "effect"
+import { Array as Arr, Effect, Option, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
 import {
   type LoggedEvent,
@@ -14,7 +14,7 @@ import {
   type ProjectLog,
   ProjectLogError,
 } from "../domain/events.ts"
-import { isSqliteBusy, isWal, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
+import { isSqliteBusy, keepWalFiles, sqliteReason, transaction, type TxConnection, walRefusal } from "./sqlite.ts"
 
 const toError = (error: unknown) =>
   new ProjectLogError({
@@ -118,27 +118,35 @@ const logOf = (db: Database, lock: Semaphore.Semaphore): ProjectLog => ({
   readFrom: (position) => readFromDb(db, position),
 })
 
+/**
+ * Opens the database, sets `busy_timeout`, keeps the WAL files on close
+ * ({@link keepWalFiles}), takes WAL mode and creates any missing table.
+ */
 const open = (path: string, busyTimeoutMillis: number) =>
   Effect.flatMap(
     withDb(() => {
       const db = new Database(path, { create: true })
       db.exec(`PRAGMA busy_timeout=${String(busyTimeoutMillis)}`)
-      return { db, mode: db.query("PRAGMA journal_mode=WAL").get() }
+      const walKept = keepWalFiles(db)
+      return { db, refusal: walRefusal(db.query("PRAGMA journal_mode=WAL").get(), walKept) }
     }),
-    ({ db, mode }) =>
-      isWal(mode)
-        ? withDb(() => {
+    ({ db, refusal }) =>
+      Option.match(refusal, {
+        onNone: () =>
+          withDb(() => {
             Arr.forEach(schemaSql, (sql) => {
               db.exec(sql)
             })
             return db
-          })
-        : Effect.andThen(
+          }),
+        onSome: (reason) =>
+          Effect.andThen(
             Effect.sync(() => {
               db.close()
             }),
-            Effect.fail(new ProjectLogError({ reason: "WAL journal mode did not take effect" })),
+            Effect.fail(new ProjectLogError({ reason })),
           ),
+      }),
   )
 
 /**

@@ -7,9 +7,10 @@
 // are taken as the separator). Decoding is strict: a missing final
 // newline, another header or any row that does not decode fails the whole
 // listing, because a skipped row would hide a process from the evidence.
-// A command containing a newline therefore fails the listing too.
+// A command containing a newline therefore fails the listing too. A
+// process group of 0 decodes: procps lists Linux kernel threads there.
 import { Array as Arr, Option, Result, Schema, String } from "effect"
-import { ProcessId, ProcessListingUndecodable, StartTime, type ProcessRow } from "../domain/process.ts"
+import { ProcessGroupId, ProcessId, ProcessListingUndecodable, StartTime, type ProcessRow } from "../domain/process.ts"
 
 /** The newline that ends every line of the listing. */
 const lineEnd = "\n"
@@ -27,7 +28,7 @@ const rowPattern =
 /** A row's captured columns, with the ids decoded from their digits. */
 const RowColumns = Schema.Struct({
   pid: Schema.NumberFromString.pipe(Schema.decodeTo(ProcessId)),
-  pgid: Schema.NumberFromString.pipe(Schema.decodeTo(ProcessId)),
+  pgid: Schema.NumberFromString.pipe(Schema.decodeTo(ProcessGroupId)),
   startedAt: StartTime,
   command: Schema.String,
 })

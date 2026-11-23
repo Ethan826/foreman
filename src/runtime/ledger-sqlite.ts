@@ -32,7 +32,7 @@ import {
   SpendDown,
   SpendDownCanceled,
 } from "../domain/ledger.ts"
-import { isSqliteBusy, isWal, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
+import { isSqliteBusy, keepWalFiles, sqliteReason, transaction, type TxConnection, walRefusal } from "./sqlite.ts"
 
 /** The table names (design "Where the ledger lives"). */
 const Tables = {
@@ -229,28 +229,35 @@ const storeOf = (db: Database, lock: Semaphore.Semaphore): LedgerStore => ({
   transact: (body) => Semaphore.withPermits(lock, 1)(transaction(connectionOf(db), body(txOf(db)))),
 })
 
-/** Opens the database, sets `busy_timeout` and creates any missing table. */
+/**
+ * Opens the database, sets `busy_timeout`, keeps the WAL files on close
+ * ({@link keepWalFiles}), takes WAL mode and creates any missing table.
+ */
 const open = (path: string, busyTimeoutMillis: number) =>
   Effect.flatMap(
     withDb(() => {
       const db = new Database(path, { create: true })
       db.exec(`PRAGMA busy_timeout=${String(busyTimeoutMillis)}`)
-      return { db, mode: db.query("PRAGMA journal_mode=WAL").get() }
+      const walKept = keepWalFiles(db)
+      return { db, refusal: walRefusal(db.query("PRAGMA journal_mode=WAL").get(), walKept) }
     }),
-    ({ db, mode }) =>
-      isWal(mode)
-        ? withDb(() => {
+    ({ db, refusal }) =>
+      Option.match(refusal, {
+        onNone: () =>
+          withDb(() => {
             Arr.forEach(schemaSql, (sql) => {
               db.exec(sql)
             })
             return db
-          })
-        : Effect.andThen(
+          }),
+        onSome: (reason) =>
+          Effect.andThen(
             Effect.sync(() => {
               db.close()
             }),
-            Effect.fail(new LedgerError({ reason: "WAL journal mode did not take effect" })),
+            Effect.fail(new LedgerError({ reason })),
           ),
+      }),
   )
 
 /**

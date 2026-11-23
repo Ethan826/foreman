@@ -30,5 +30,17 @@ declare module "bun:sqlite" {
     close(): void
     /** Whether a transaction is open on this connection. */
     readonly inTransaction: boolean
+    /**
+     * Calls `sqlite3_file_control` on the main database with operation
+     * `op` and the integer `value`; returns SQLite's result code, 0 on
+     * success.
+     */
+    fileControl(op: number, value: number): number
+  }
+
+  /** SQLite's numeric constants as Bun exports them. */
+  export const constants: {
+    /** The file control that keeps the WAL and `-shm` files on close. */
+    readonly SQLITE_FCNTL_PERSIST_WAL: number
   }
 }
