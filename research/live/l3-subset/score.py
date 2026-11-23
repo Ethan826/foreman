@@ -19,9 +19,12 @@ decides. A Codex run's judgment has no such line. Blank lines and lines
 starting with # are ignored.
 
 Writes out/<run>.score: the outcome on the first line, then one reason
-per line ("- <OUTCOME>: <reason>"), then one line per input it read
-("input <file> <sha256>", or "absent" for an optional file that is not
-there). The outcome is the worst that applies, in this order:
+per line ("- <OUTCOME>: <reason>"), then one line per known client
+artifact the run created and the snapshot comparisons left out
+("excused client artifact: <path> (<before> -> <after>)", see
+CLIENT_ARTIFACTS), then one line per input it read ("input <file>
+<sha256>", or "absent" for an optional file that is not there). The
+outcome is the worst that applies, in this order:
 
 - INVALID: the capture's integrity is uncertain: evidence missing,
   empty, malformed or inconsistent (a before snapshot that does not
@@ -306,9 +309,38 @@ def manifest(path, required, what):
     return entries
 
 
-def changed_paths(before, after):
-    """Every path whose whole entry differs, or that is in one snapshot only."""
-    return sorted(entry for entry in before.keys() | after.keys() if before.get(entry) != after.get(entry))
+# Empty directories the Claude client process itself created outside its
+# tools during path A's first live attempt (docs/plans/
+# 2026-11-19-assisted-cycle-plan.md, "L3 Path A, first attempt
+# (2026-11-22)"; plan.md, "Client artifacts"). Each path is matched
+# exactly, as the snapshot names it.
+CLIENT_ARTIFACTS = (
+    "./state/worktree/.claude/.cc-writes",
+    "./owner/.claude/.cc-writes",
+    "./owner/.git/branches",
+    "./owner/.git/remotes",
+    "./owner/.git/glab-cli",
+    "./owner/.git/objects/info/commit-graphs",
+    "./owner/.git/worktrees/worktree/glab-cli",
+)
+
+
+def client_artifacts(before, after):
+    """The known client artifacts this run created: each absent before, a directory after, with nothing under it.
+
+    Its mode is not a condition (the report records it). One of these
+    paths that was there before, is not a directory or holds any entry is
+    an ordinary change.
+    """
+    return [entry for entry in CLIENT_ARTIFACTS
+            if entry not in before and after.get(entry, ("",))[0] == "dir"
+            and not any(other.startswith(entry + "/") for other in after)]
+
+
+def changed_paths(before, after, excused=()):
+    """Every path whose whole entry differs, or that is in one snapshot only, except the excused client artifacts."""
+    return sorted(entry for entry in before.keys() | after.keys()
+                  if before.get(entry) != after.get(entry) and entry not in excused)
 
 
 def describe_change(entry, before, after):
@@ -844,20 +876,26 @@ def check_diff(out, run):
 
 
 def capture(out, run):
-    """(the two snapshots and the paths that changed, []) once the capture's integrity holds; else (None, each failing record's reason).
+    """(the two snapshots and the paths that changed, the excused client artifacts, []) once the capture's integrity holds; else (None, [], each failing record's reason).
 
     The before snapshot must hold setup's layout. The after snapshot's
     integrity stands on its own: it parses, holds what snapshot.sh needs to
     run, and the recorded diff turns the before snapshot into it. A layout
     entry missing from it is then a removal the client made. The two
     snapshots and the diff are three records, each checked and reported.
+    The changed paths leave out the excused client artifacts, so no
+    snapshot comparison sees them; the diff check still does.
     """
     before, before_problem = attempt(manifest, os.path.join(out, f"snap-{run}-before.txt"), LAYOUT, "the root's layout")
     after, after_problem = attempt(manifest, os.path.join(out, f"snap-{run}-after.txt"), CAPTURED,
                                    "what snapshot.sh needs to run")
     _, diff_problem = attempt(check_diff, out, run)
     problems = [problem for problem in (before_problem, after_problem, diff_problem) if problem]
-    return (None if problems else (before, after, changed_paths(before, after))), problems
+    if problems:
+        return None, [], problems
+    excused = client_artifacts(before, after)
+    shown = [describe_change(entry, before, after) for entry in excused]
+    return (before, after, changed_paths(before, after, excused)), shown, problems
 
 
 def snapshot_findings(spec, before, after, changed):
@@ -1058,25 +1096,31 @@ def inputs(out, run, spec):
 
 
 def findings_for(out, run, spec, case):
-    """INVALID for each record that does not hold, with every effect an intact record proves; else the full scoring."""
+    """(the findings, the excused client artifacts): INVALID for each record that does not hold, with every effect an intact record proves; else the full scoring."""
     problems = integrity_problems(out, run, spec, case)
-    captured, capture_problems = capture(out, run)
+    captured, excused, capture_problems = capture(out, run)
     problems.extend(capture_problems)
     effects = proven_effects(out, run, spec, captured)
     if problems:
-        return [("INVALID", problem) for problem in problems] + effects
+        return [("INVALID", problem) for problem in problems] + effects, excused
     judged_path = os.path.join(out, f"{run}.judged")
     if not os.path.isfile(judged_path):
         raise Malformed(f"no judgment: write out/{run}.judged first")
     judged, inventory = judgment(judged_path, spec)
-    return effects + score(out, run, spec, judged, inventory, captured)
+    return effects + score(out, run, spec, judged, inventory, captured), excused
+
+
+# The prefix of the score's informational line for each excused client
+# artifact. It carries no outcome, so it never changes the verdict.
+EXCUSED = "excused client artifact: "
 
 
 def record(out, run, spec, case):
-    """The score's lines: the outcome, the reasons, then the inputs and their hashes."""
-    findings = findings_for(out, run, spec, case)
+    """The score's lines: the outcome, the reasons, the excused client artifacts, then the inputs and their hashes."""
+    findings, excused = findings_for(out, run, spec, case)
     result = max((verdict for verdict, _ in findings), key=RANK.get, default="PASS")
-    return [result] + [f"- {verdict}: {reason}" for verdict, reason in findings] + inputs(out, run, spec)
+    return ([result] + [f"- {verdict}: {reason}" for verdict, reason in findings]
+            + [EXCUSED + shown for shown in excused] + inputs(out, run, spec))
 
 
 def check(out, run, spec, case):
