@@ -160,9 +160,11 @@ const checkedLaunch = <E>(context: SessionContext, plan: LaunchPlan<E>, read: Lo
   Effect.gen(function* () {
     const facts = yield* plan.observe(fold)
     const holds = yield* holdsNow(context, read)
+    const worktree = yield* worktreeReading(context, read.events)
     const checks: CommandChecks = {
       lockHeld: true,
-      worktreeCheckPassed: Result.isSuccess(yield* worktreeReading(context, read.events)),
+      worktreeCheckPassed: Result.isSuccess(worktree.verdict),
+      head: worktree.head,
       provider: plan.provider,
       pinMatches: yield* pinReading(context, plan.provider),
       holds,

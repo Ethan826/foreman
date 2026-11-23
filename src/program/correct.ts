@@ -82,7 +82,7 @@ const prepared = (context: SessionContext, options: CorrectOptions, input: Prepa
     const reviewedTree = yield* Effect.fromOption(session.reviewedTree)
     const findings = yield* ownerFindings(context, session, review.opId, options.findingsFile)
     const edit = yield* Effect.fromOption(lastEdit(session))
-    yield* context.capabilities.publishClaudeProfile(session.opened.worktree.path)
+    yield* context.capabilities.publishClaudeProfile(session.opened.worktree)
     const brief = correctBrief({
       task: yield* recordedTask(context, session),
       findingsFile: findings.text,

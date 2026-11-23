@@ -13,6 +13,7 @@ import { AttributeSourcesRefused } from "../../src/domain/attributes.ts"
 import { type Client, Clients } from "../../src/domain/clients.ts"
 import { type ProjectEvent, SessionOpened, Waived, WaiverExpired } from "../../src/domain/events.ts"
 import { WaiverId } from "../../src/domain/ids.ts"
+import type { RecordedGitIdentity } from "../../src/domain/session.ts"
 import { SnapshotPreflightRefused } from "../../src/domain/snapshot.ts"
 import { ProfilePathUnsafe } from "../../src/format/claude-settings.ts"
 import { correct } from "../../src/program/correct.ts"
@@ -79,7 +80,7 @@ const unsafeProfile = (harness: Harness) => ({
   ...harness.context,
   capabilities: {
     ...harness.context.capabilities,
-    publishClaudeProfile: (worktree: string) => Effect.fail(new ProfilePathUnsafe({ path: worktree })),
+    publishClaudeProfile: (identity: RecordedGitIdentity) => Effect.fail(new ProfilePathUnsafe({ path: identity.path })),
   },
 })
 

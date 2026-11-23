@@ -72,8 +72,8 @@ export const openSession = (context: SessionContext, options: OpenOptions) =>
       const read = yield* readLog(capabilities.log)
       const worktree = yield* worktreeReading(context, read.events)
       const holds = yield* holdsNow(context, read)
-      yield* requireAllowed(new SessionOpen(), foldSession(read.events).state, ownerChecks(Result.isSuccess(worktree), holds))
-      const head = yield* Effect.mapError(Effect.fromResult(worktree), (reason) => new WorktreeUnready({ reason }))
+      yield* requireAllowed(new SessionOpen(), foldSession(read.events).state, ownerChecks(Result.isSuccess(worktree.verdict), holds))
+      const head = yield* Effect.mapError(Effect.fromResult(worktree.verdict),(reason) => new WorktreeUnready({ reason }))
       const recorded = yield* Effect.fromOption(recordedWorktree(read.events))
       const sessionId = SessionId.make(yield* capabilities.newId)
       const taskPath = `${settings.stateDir}/${sessionId}.task.md`

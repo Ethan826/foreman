@@ -2,13 +2,13 @@
 // capabilities"): the capabilities Program receives, never chooses by a
 // flag, and the settings from the configuration. Production builds them
 // in production.ts; a test passes its own, such as a fake `StartClient`.
-import { Schema } from "effect"
-import type { Effect, Option, Scope } from "effect"
-import type { AttributeSourcesRefused, AttributeSourcesUnread } from "../domain/attributes.ts"
+import { Effect, Option, Schema } from "effect"
+import type { Scope } from "effect"
+import { type AttributeSourcesRefused, AttributeSourcesUnread } from "../domain/attributes.ts"
 import type { Client } from "../domain/clients.ts"
 import type { MonoStamp } from "../domain/clock.ts"
 import type { LockHeld, ProjectLog, ProjectLogError, WorktreeCreated } from "../domain/events.ts"
-import type { ProjectId, Revision } from "../domain/ids.ts"
+import { type ProjectId, Revision } from "../domain/ids.ts"
 import type { LedgerStore } from "../domain/ledger.ts"
 import type { Role } from "../domain/roles.ts"
 import type { RecordedGitIdentity } from "../domain/session.ts"
@@ -32,11 +32,14 @@ import type { PublishClaudeProfile } from "./claude-profile.ts"
  * The startup worktree check (plans B11a to B11d) judged the recorded
  * worktree unready: it is not listed, locked and identified as recorded,
  * its record is invalid, or its attribute sources are refused; `reason`
- * says why. A check that could not run is a {@link WorktreeCheckUnrun}
- * instead (review item R01).
+ * says why. `head` is the worktree's HEAD when the check read it beside a
+ * refusal of the attribute sources, so a moved HEAD is still seen (owner
+ * finding F2, dogfood-3a round 1). It is none by default. A check that
+ * could not run is a {@link WorktreeCheckUnrun} instead (review item R01).
  */
 export class WorktreeUnready extends Schema.TaggedError<WorktreeUnready>()("WorktreeUnready", {
   reason: Schema.String,
+  head: Schema.Option(Revision).pipe(Schema.withConstructorDefault(Effect.succeed(Option.none()))),
 }) {}
 
 /**
@@ -51,18 +54,30 @@ export class WorktreeUnready extends Schema.TaggedError<WorktreeUnready>()("Work
 export type WorktreeCheckUnrun = AttributeSourcesUnread | GitCommandFailed | GitOutputUndecodable | PathUnreadable
 
 /**
+ * The startup check read the worktree's HEAD and then could not read an
+ * attribute source (`unread`). Only `status` keeps `head` from it, so it
+ * still reports a moved HEAD (owner finding F3, dogfood-3a round 2). Every
+ * other command stops with `unread` itself, so a launch keeps its waivers.
+ */
+export class UnreadAtHead extends Schema.TaggedError<UnreadAtHead>()("UnreadAtHead", {
+  unread: AttributeSourcesUnread,
+  head: Revision,
+}) {}
+
+/**
  * Runs the startup worktree check on the recorded supervisor worktree and
  * returns its HEAD. Fails with `WorktreeUnready` when it judges the
  * worktree unready and with a {@link WorktreeCheckUnrun} when it could
  * not run. Production runs `identifyWorktree`, then `git
  * rev-parse HEAD` through the runner pinned to the record, then the
  * attribute check on `base`, the open session's base, or on that HEAD
- * when no session is open (batch review B07).
+ * when no session is open (batch review B07). An attribute source it
+ * could not read after a successful HEAD read is {@link UnreadAtHead}.
  */
 export type CheckWorktree = (
   recorded: WorktreeCreated,
   base: Option.Option<Revision>,
-) => Effect.Effect<Revision, WorktreeUnready | WorktreeCheckUnrun>
+) => Effect.Effect<Revision, WorktreeUnready | WorktreeCheckUnrun | UnreadAtHead>
 
 /**
  * Why a snapshot was not taken: refused before staging
@@ -89,6 +104,12 @@ export type HandoffGitFailure = AttributeSourcesRefused | AttributeSourcesUnread
  */
 export interface HandoffGit {
   /**
+   * The worktree's HEAD, by `git rev-parse HEAD` alone: no identity or
+   * attribute check (owner ruling of 2026-11-23, for `close --finished`).
+   * A failed or undecodable read keeps its own failure.
+   */
+  readonly readHead: () => Effect.Effect<Revision, GitCommandFailed | GitOutputUndecodable>
+  /**
    * The attribute-source check (plan B11c) again, against `base`: refused
    * when a source that was read is refused, unread when the only reason
    * to stop is a failed read.
@@ -112,7 +133,7 @@ export interface SessionCapabilities {
   readonly readProcesses: ReadProcesses
   readonly readClientVersion: ReadClientVersion
   readonly stateFiles: StateFiles
-  /** Publishes Claude's editing profile for a worktree, before admission (batch review B03). */
+  /** Publishes Claude's editing profile for a session's recorded git identity, before admission (batch review B03). */
   readonly publishClaudeProfile: PublishClaudeProfile
   readonly checkWorktree: CheckWorktree
   /** The handoff's git work for a session's recorded worktree. */

@@ -236,13 +236,15 @@ cleangit -C "$owner" push --quiet origin main
 base=$(cleangit -C "$owner" rev-parse HEAD)
 cleangit -C "$owner" worktree add --quiet --lock --reason foreman -b "$branch" "$worktree" "$base"
 
-# Production's settings for this worktree, with the one stand-in plan.md
-# lists (profile.sh). The file is created new; an existing one fails.
-claim claude-settings.json
-l3_production_settings "$worktree" "$settings"
-
 git_dir=$(cleangit -C "$worktree" rev-parse --absolute-git-dir)
 common_dir=$(cleangit -C "$worktree" rev-parse --path-format=absolute --git-common-dir)
+
+# Production's settings for this worktree and its two git directories,
+# which the sandbox denies (owner ruling of 2026-11-23), with the one
+# stand-in plan.md lists (profile.sh). The file is created new; an
+# existing one fails.
+claim claude-settings.json
+l3_production_settings "$worktree" "$git_dir" "$common_dir" "$settings"
 
 # layout.env is sourced by a shell, so every value is single-quoted: a
 # quote inside becomes '\'' and nothing else is special there, newlines

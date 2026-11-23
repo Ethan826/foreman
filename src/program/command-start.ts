@@ -21,7 +21,14 @@ import { holdsInPlace, pinMatches } from "../features/launch-facts.ts"
 import type { LedgerSnapshot } from "../domain/ledger.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
-import type { SessionCapabilities, SessionContext, SessionSettings, WorktreeCheckUnrun, WorktreeUnready } from "./session-context.ts"
+import type {
+  SessionCapabilities,
+  SessionContext,
+  SessionSettings,
+  UnreadAtHead,
+  WorktreeCheckUnrun,
+  WorktreeUnready,
+} from "./session-context.ts"
 import { CommandRefused } from "./session-errors.ts"
 
 /** The log as one command read it: every event and the position after the last. */
@@ -54,16 +61,29 @@ export const recordedWorktree = (events: ReadonlyArray<ProjectEvent>): Option.Op
  * passes, or the reason it judged the worktree unready. The attribute
  * check judges the open session's base, or the worktree's HEAD when no
  * session is open, never the base the worktree was created at (batch
- * review B07). A judgment never fails, so a command that does not need
+ * review B07). The HEAD is only read here: whether it moved from the
+ * session's base is the command rules' `HeadMoved` decision (owner
+ * ruling of 2026-11-23). A judgment never fails, so a command that does not need
  * the check still runs; a check that could not run fails with its own
- * `WorktreeCheckUnrun`, never turned into a judgment (review item R01).
+ * `WorktreeCheckUnrun`, never turned into a judgment (review item R01);
+ * an `UnreadAtHead` fails with its `AttributeSourcesUnread`.
  */
 export const worktreeReading = (
   context: { readonly capabilities: Pick<SessionCapabilities, "checkWorktree"> },
   events: ReadonlyArray<ProjectEvent>,
-): Effect.Effect<Result.Result<Revision, string>, WorktreeCheckUnrun> =>
+): Effect.Effect<WorktreeReading, WorktreeCheckUnrun> =>
+  Effect.catchTag(headedReading(context, events), "UnreadAtHead", (failure) => Effect.fail(failure.unread))
+
+/**
+ * {@link worktreeReading}, with an `UnreadAtHead` kept: `status` reads
+ * its HEAD beside the unread attribute source (owner finding F3, dogfood-3a).
+ */
+export const headedReading = (
+  context: { readonly capabilities: Pick<SessionCapabilities, "checkWorktree"> },
+  events: ReadonlyArray<ProjectEvent>,
+): Effect.Effect<WorktreeReading, WorktreeCheckUnrun | UnreadAtHead> =>
   Option.match(recordedWorktree(events), {
-    onNone: () => Effect.succeed(Result.fail("no supervisor worktree is recorded; run `worktree create`")),
+    onNone: () => Effect.succeed(unreadReading("no supervisor worktree is recorded; run `worktree create`")),
     onSome: (recorded) =>
       Effect.catchTag(
         Effect.map(context.capabilities.checkWorktree(recorded, sessionBase(events)), passedReading),
@@ -72,11 +92,26 @@ export const worktreeReading = (
       ),
   })
 
-/** A check that passed, read as its HEAD. */
-const passedReading = (head: Revision): Result.Result<Revision, string> => Result.succeed(head)
+/**
+ * The startup check as a command reads it: its verdict, the HEAD when it
+ * passed or the reason it judged the worktree unready, and the HEAD it
+ * read, which an unready worktree whose attribute sources alone were
+ * refused keeps too (owner finding F2, dogfood-3a round 1).
+ */
+export interface WorktreeReading {
+  readonly verdict: Result.Result<Revision, string>
+  readonly head: Option.Option<Revision>
+}
 
-/** A check that judged the worktree unready, read as its reason. */
-const unreadyReading = (unready: WorktreeUnready) => Effect.succeed(Result.fail(unready.reason))
+/** A check that passed, read as its HEAD. */
+const passedReading = (head: Revision): WorktreeReading => ({ verdict: Result.succeed(head), head: Option.some(head) })
+
+/** A worktree judged unready before any HEAD was read, with `reason`. */
+const unreadReading = (reason: string): WorktreeReading => ({ verdict: Result.fail(reason), head: Option.none() })
+
+/** A check that judged the worktree unready, read as its reason and the HEAD it read, if any. */
+const unreadyReading = (unready: WorktreeUnready) =>
+  Effect.succeed<WorktreeReading>({ verdict: Result.fail(unready.reason), head: unready.head })
 
 /** The open session's base revision, if a session is open. */
 const sessionBase = (events: ReadonlyArray<ProjectEvent>) =>
@@ -124,11 +159,13 @@ export const holdsFrom = (context: HoldsContext, read: LogRead, snapshot: Ledger
 
 /**
  * The checks of a command that launches nothing: the lock is held, the
- * worktree check passed or not, and these holds are in place.
+ * worktree check passed or not, these holds are in place, and no HEAD
+ * was read. `close --finished` adds its own HEAD read (handoff.ts).
  */
 export const ownerChecks = (worktreePassed: boolean, holds: CommandChecks["holds"]): CommandChecks => ({
   lockHeld: true,
   worktreeCheckPassed: worktreePassed,
+  head: Option.none(),
   provider: Clients.Claude,
   pinMatches: true,
   holds,

@@ -1,7 +1,14 @@
 // The settings file of Claude's editing profile (batch review B03; owner
 // ruling of 2026-11-20; design "Permissions"; the L3 subset renders its
 // settings from this module through research/live/l3-subset/profile.sh):
-// one fixed template, bound to the recorded supervisor worktree's path.
+// one fixed template, bound to the session's recorded git identity: the
+// supervisor worktree's path, its own git directory and the repository's
+// common git directory. The Bash sandbox denies writes to both git
+// directories as wholes (owner ruling of 2026-11-23, dogfood-3a), because
+// the L3 run's case C4 showed that code run in the sandbox could commit
+// and move the supervisor branch in the common git directory. With them
+// denied, `git status` and `git diff` cannot refresh the index; git skips
+// that silently and still exits 0 with correct output.
 // foreman writes it itself; the configuration cannot supply a settings
 // file. A rule's `//` starts an absolute path, and `Edit(path)` governs Edit, Write and NotebookEdit,
 // so writes are allowed by one `Edit(...)` rule (L3 plan, settings table).
@@ -17,10 +24,12 @@
 // a second guard against claude.ai connectors: the 2.1.328 client honors
 // it when any loaded source, `--settings` included, sets it, and then
 // skips fetching the connectors.
-import { Array as Arr, Formatter, Result, Schema } from "effect"
+import { Array as Arr, Formatter, Option, Result, Schema } from "effect"
+import type { RecordedGitIdentity } from "../domain/session.ts"
 
 /**
- * A worktree path the template will not bind: not absolute, a doubled or
+ * A path the template will not bind (the worktree's, its git directory
+ * or the common git directory): not absolute, a doubled or
  * trailing slash, or a character outside letters, digits, `.`, `_`, `+`,
  * `-` and `/`, which a permission rule or a sandbox path could read as
  * syntax (a glob, a space, a parenthesis, a backslash, a line break).
@@ -54,17 +63,29 @@ const deniedCommands = ["git commit", "git push", "git config", "curl"] as const
 const allowedCommands = ["git status", "git diff"] as const
 
 /**
- * The settings file's text for the worktree at `worktree`, with a final
- * newline; the same path always gives the same bytes. Fails with
- * {@link ProfilePathUnsafe} for a path the template will not bind.
+ * The settings file's text for the session's recorded worktree
+ * `identity`, with a final newline; the same identity always gives the
+ * same bytes. Fails with {@link ProfilePathUnsafe} naming the first of
+ * the worktree path, its git directory and the common git directory that
+ * the template will not bind.
  */
-export const claudeEditingSettings = (worktree: string): Result.Result<string, ProfilePathUnsafe> =>
-  plainAbsolutePath.test(worktree)
-    ? Result.succeed(`${Formatter.formatJson(profileFor(worktree), { space: jsonIndent })}\n`)
-    : Result.fail(new ProfilePathUnsafe({ path: worktree }))
+export const claudeEditingSettings = (identity: RecordedGitIdentity): Result.Result<string, ProfilePathUnsafe> =>
+  Option.match(Arr.findFirst([identity.path, identity.gitDir, identity.commonDir], isUnsafe), {
+    onNone: () => Result.succeed(`${Formatter.formatJson(profileFor(identity), { space: jsonIndent })}\n`),
+    onSome: (path) => Result.fail(new ProfilePathUnsafe({ path })),
+  })
 
-/** The template's value for one worktree. */
-const profileFor = (worktree: string) => ({
+/** Whether the template refuses to bind `path`; see {@link ProfilePathUnsafe}. */
+const isUnsafe = (path: string): boolean => !plainAbsolutePath.test(path)
+
+/**
+ * The template's value for one recorded worktree. The sandbox denies
+ * writes to the common git directory and the worktree's own git
+ * directory as wholes, after the worktree's own entries, so code run in
+ * the sandbox cannot write an object, a ref, a hook or the index (owner
+ * ruling of 2026-11-23, dogfood-3a; L3 case C4).
+ */
+const profileFor = ({ path: worktree, gitDir, commonDir }: RecordedGitIdentity) => ({
   permissions: {
     defaultMode: "dontAsk",
     disableBypassPermissionsMode: "disable",
@@ -82,7 +103,9 @@ const profileFor = (worktree: string) => ({
     failIfUnavailable: true,
     allowUnsandboxedCommands: false,
     autoAllowBashIfSandboxed: false,
-    filesystem: { denyWrite: [`${worktree}/.git`, ...Arr.map(protectedNames, topLevelPathIn(worktree))] },
+    filesystem: {
+      denyWrite: [`${worktree}/.git`, ...Arr.map(protectedNames, topLevelPathIn(worktree)), commonDir, gitDir],
+    },
     network: { allowedDomains: [] },
   },
   autoMemoryEnabled: false,

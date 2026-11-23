@@ -47,7 +47,7 @@ const implementPlan = (
   prepare: ({ session }) =>
     Effect.gen(function* () {
       const task = yield* recordedTask(context, session)
-      yield* context.capabilities.publishClaudeProfile(session.opened.worktree.path)
+      yield* context.capabilities.publishClaudeProfile(session.opened.worktree)
       return { brief: implementBrief({ task }), round: 0, consent: [] }
     }),
   argv: (brief) => claudeEditingArgv({ brief, settingsFile: claudeSettingsPath(context.settings.stateDir) }),

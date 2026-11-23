@@ -6,8 +6,9 @@
 // name a settings file. A file planted at the published path beforehand,
 // empty or with the sandbox off, is replaced before the launch.
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Array as Arr, Effect } from "effect"
 import { readFileSync, writeFileSync } from "node:fs"
+import { git } from "../runtime/git-repo.ts"
 import {
   cli,
   configOf,
@@ -24,8 +25,26 @@ import {
 /** The protected names the profile denies writing at the worktree's top level and below. */
 const protectedNames = ["CLAUDE.md", "CLAUDE.local.md", "AGENTS.md", ".claude", ".codex", ".mcp.json", ".gitattributes", ".gitmodules"]
 
-/** The fixed editing profile for the worktree at `worktree` (design "Permissions"; L3 subset template). */
-const expectedProfile = (worktree: string) => ({
+/** The supervisor worktree's git directories as git reports them, which `worktree create` records. */
+interface GitDirectories {
+  readonly gitDir: string
+  readonly commonDir: string
+}
+
+/** The layout's recorded git directories, read from the supervisor worktree. */
+const gitDirectoriesOf = (layout: Layout) =>
+  Effect.gen(function* () {
+    const gitDir = yield* git(layout.supervisor, "rev-parse", "--absolute-git-dir")
+    const commonDir = yield* git(layout.supervisor, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    return { gitDir, commonDir } satisfies GitDirectories
+  })
+
+/**
+ * The fixed editing profile for the worktree at `worktree` with the
+ * recorded git directories `directories` (design "Permissions"; L3 subset
+ * template; owner ruling of 2026-11-23 for the two git directories).
+ */
+const expectedProfile = (worktree: string, directories: GitDirectories) => ({
   permissions: {
     defaultMode: "dontAsk",
     disableBypassPermissionsMode: "disable",
@@ -64,7 +83,14 @@ const expectedProfile = (worktree: string) => ({
     failIfUnavailable: true,
     allowUnsandboxedCommands: false,
     autoAllowBashIfSandboxed: false,
-    filesystem: { denyWrite: [`${worktree}/.git`, ...protectedNames.map((name) => `${worktree}/${name}`)] },
+    filesystem: {
+      denyWrite: [
+        `${worktree}/.git`,
+        ...Arr.map(protectedNames, (name) => `${worktree}/${name}`),
+        directories.commonDir,
+        directories.gitDir,
+      ],
+    },
     network: { allowedDomains: [] },
   },
   autoMemoryEnabled: false,
@@ -95,7 +121,7 @@ const launchedWithProfile = (planted: string) => () =>
       const received = recorded(layout, "claude-settings-received")
       expect(settingsArgument(layout)).toBe(publishedPath(layout))
       expect(received).toBe(readFileSync(publishedPath(layout), "utf8"))
-      expect(JSON.parse(received ?? "")).toEqual(expectedProfile(layout.supervisor))
+      expect(JSON.parse(received ?? "")).toEqual(expectedProfile(layout.supervisor, yield* gitDirectoriesOf(layout)))
     }),
   )
 
@@ -123,7 +149,8 @@ const correctionUsesProfile = () =>
       writeFileSync(publishedPath(layout), '{"sandbox": {"enabled": false}}')
       yield* succeeded(layout, ["correct", "--findings", `${layout.root}/findings.md`, "--waive", "--attest"])
       expect(recorded(layout, "claude-launches")).toBe("ran\nran\n")
-      expect(JSON.parse(recorded(layout, "claude-settings-received") ?? "")).toEqual(expectedProfile(layout.supervisor))
+      const directories = yield* gitDirectoriesOf(layout)
+      expect(JSON.parse(recorded(layout, "claude-settings-received") ?? "")).toEqual(expectedProfile(layout.supervisor, directories))
     }),
   )
 

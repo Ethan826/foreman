@@ -21,20 +21,24 @@ l3_require_repo() {
   fi
 }
 
-# Writes production's settings for the worktree $1 to the new file $2,
-# with the L3 stand-in for the target's test command, Bash(sh check.sh),
-# right after Bash(git diff *) (plan.md, "Settings and production"). Fails
-# if production refuses the path, if the anchor rule is missing or
-# repeated, if the stand-in is already there, or if $2 exists.
+# Writes production's settings for the worktree $1, whose own git
+# directory is $2 and whose common git directory is $3 (the git identity
+# production records; the sandbox denies writes to both, owner ruling of
+# 2026-11-23), to the new file $4, with the L3 stand-in for the target's
+# test command, Bash(sh check.sh), right after Bash(git diff *) (plan.md,
+# "Settings and production"). Fails if production refuses a path, if the
+# anchor rule is missing or repeated, if the stand-in is already there, or
+# if $4 exists.
 l3_production_settings() {
   l3_require_repo || return 1
   l3_rendered=$(cd "$l3_repo" && bun -e '
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
-const rendered = claudeEditingSettings(process.argv[1])
+const [, path, gitDir, commonDir] = process.argv
+const rendered = claudeEditingSettings({ path, gitDir, commonDir })
 if (Result.isFailure(rendered)) process.exit(3)
 process.stdout.write(rendered.success)
-' "$1") || return 1
+' "$1" "$2" "$3") || return 1
   printf '%s\n' "$l3_rendered" | /usr/bin/python3 -I -c '
 import json
 import sys
@@ -48,7 +52,7 @@ allow.insert(allow.index(anchor) + 1, stand_in)
 with open(sys.argv[1], "x", encoding="utf-8") as target:
     json.dump(data, target, indent=2, ensure_ascii=False)
     target.write("\n")
-' "$2"
+' "$4"
 }
 
 # Writes production's Claude argv for the brief $1 and the settings file

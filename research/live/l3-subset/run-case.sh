@@ -259,6 +259,7 @@ done
 
 worktree="$root/state/worktree"
 git_dir="$root/owner/.git/worktrees/worktree"
+common_dir="$root/owner/.git"
 settings="$root/claude-settings.json"
 prompt=$(cat "$prompt_file")
 
@@ -270,7 +271,7 @@ if [ "$client" = claude ]; then
   fresh="$out/.$run.settings.partial"
   produced="$out/.$run.argv.partial"
   rm -f -- "$fresh" "$produced"
-  l3_production_settings "$worktree" "$fresh" || stop "production's settings could not be rendered"
+  l3_production_settings "$worktree" "$git_dir" "$common_dir" "$fresh" || stop "production's settings could not be rendered"
   same=yes
   cmp -s -- "$fresh" "$settings" || same=no
   rm -f -- "$fresh"

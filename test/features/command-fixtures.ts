@@ -23,6 +23,7 @@ import {
 import { foldSession } from "../../src/features/session.ts"
 import {
   approved,
+  base,
   closed,
   endedByOwner,
   finished,
@@ -39,10 +40,11 @@ export const quota = (provider: Client) =>
 export const approval = new Approval({ tranche: TrancheId.make("t-1"), revision: Revision.make("a".repeat(40)) })
 export const failure = new Failure({ opId: opId(1), outcome: new Unclassified() })
 
-/** Every prerequisite met: the review handed out treeA and the snapshot is treeA. */
+/** Every prerequisite met: HEAD is the session's base, the review handed out treeA and the snapshot is treeA. */
 export const good: CommandChecks = {
   lockHeld: true,
   worktreeCheckPassed: true,
+  head: Option.some(base),
   provider: Clients.Claude,
   pinMatches: true,
   holds: [],
@@ -50,10 +52,11 @@ export const good: CommandChecks = {
   attested: true,
   snapshot: Option.some({ tree: treeA, passedRawChecks: true }),
 }
-/** Every observed fact failing. */
+/** Every observed fact failing; a worktree check that failed read no HEAD. */
 export const broken: CommandChecks = {
   lockHeld: true,
   worktreeCheckPassed: false,
+  head: Option.none(),
   provider: Clients.Claude,
   pinMatches: false,
   holds: [approval, failure, quota(Clients.Claude)],

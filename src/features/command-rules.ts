@@ -3,7 +3,8 @@
 // command checks only its own prerequisites, so the owner's exits
 // (`status`, `step-ended`, `close`) stay reachable when the worktree, a
 // client or a file is broken. Program observes the facts in
-// `CommandChecks`; Features only decides.
+// `CommandChecks`; Features only decides, the moved-HEAD rule included
+// (owner ruling of 2026-11-23, dogfood-3a).
 import { Array as Arr, Match, Option, Schema } from "effect"
 import type { Client } from "../domain/clients.ts"
 import { type Hold, Quota } from "../domain/holds.ts"
@@ -24,6 +25,7 @@ import {
   CorrectionsExhausted,
   HeldBy,
   LockNotHeld,
+  movedHead,
   NotAttested,
   PinMismatch,
   Refusal,
@@ -47,20 +49,9 @@ import {
 
 /** The refusal reasons; see command-refusals.ts. */
 export {
-  LockNotHeld,
-  WrongState,
-  WorktreeCheckFailed,
-  PinMismatch,
-  HeldBy,
-  ReportsNotIntact,
-  NotAttested,
-  SnapshotRefused,
-  TreeChanged,
-  CorrectionsExhausted,
-  NotIncomplete,
-  WrongGrant,
-  AlreadyAttested,
-  Refusal,
+  LockNotHeld, WrongState, WorktreeCheckFailed, PinMismatch, HeldBy, ReportsNotIntact, NotAttested,
+  SnapshotRefused, TreeChanged, CorrectionsExhausted, NotIncomplete, WrongGrant, AlreadyAttested,
+  HeadMoved, Refusal,
 } from "./command-refusals.ts"
 
 /** Corrections allowed per session (plan decision P9). */
@@ -75,13 +66,16 @@ export interface SnapshotCheck {
 /**
  * The facts Program observes before deciding a command. `provider` is
  * the client the command would launch and `pinMatches` its version pin;
- * `holds` are the holds in place, with quota holds released by readings
- * already left out; `snapshot` is the snapshot taken for this command,
- * if one was.
+ * `head` is the supervisor worktree's HEAD, if one was read (none when
+ * the command reads none or the worktree check judged the worktree
+ * unready); `holds` are the holds in place, with quota holds released by
+ * readings already left out; `snapshot` is the snapshot taken for this
+ * command, if one was.
  */
 export interface CommandChecks {
   readonly lockHeld: boolean
   readonly worktreeCheckPassed: boolean
+  readonly head: Option.Option<Revision>
   readonly provider: Client
   readonly pinMatches: boolean
   readonly holds: ReadonlyArray<Hold>
@@ -115,8 +109,10 @@ type Rule = (state: SessionState, checks: CommandChecks) => ReadonlyArray<Refusa
  * {@link maxCorrections} times; `reject` while a usable attempt awaits
  * its handoff; `step-ended` for an incomplete attempt and its grant,
  * once; `close` by the close rules. Every command but `status` needs the
- * lock; the launches also need the worktree check, the pin and no
- * non-quota hold, and each handoff its reports, attestation and snapshot.
+ * lock; the launches also need the worktree check, a HEAD on the
+ * session's base, the pin and no non-quota hold, and each handoff its
+ * reports, attestation and snapshot; `close --finished` also needs the
+ * HEAD on the base.
  */
 export const allowed = (
   command: SessionCommand,
@@ -155,7 +151,7 @@ const closeRules = (close: SessionClose): ReadonlyArray<Rule> =>
   Match.value(close.how).pipe(
     Match.when(CloseKinds.Abandoned, () => [stateIs(openWithoutIncomplete)]),
     Match.when(CloseKinds.Interrupted, () => [stateIs(Schema.is(Interrupted))]),
-    Match.when(CloseKinds.Finished, () => [stateIs(awaitsClose), attest, onReviewedTree]),
+    Match.when(CloseKinds.Finished, () => [stateIs(awaitsClose), attest, headOnBase, onReviewedTree]),
     Match.exhaustive,
   )
 
@@ -198,8 +194,15 @@ const launchHolds: Rule = (_state, checks) =>
 /** The refusal naming one blocking hold. */
 const heldBy = (hold: Hold): Refusal => new HeldBy({ hold })
 
+/**
+ * Refuses a HEAD that was read and is not the open session's base (owner
+ * ruling of 2026-11-23): the launches and `close --finished` use it, the
+ * owner's exits never do. See `movedHead`.
+ */
+const headOnBase: Rule = (state, checks) => Option.toArray(movedHead(state, checks.head))
+
 /** What every launch needs besides the lock and the state. */
-const launch: ReadonlyArray<Rule> = [worktree, pin, launchHolds]
+const launch: ReadonlyArray<Rule> = [worktree, headOnBase, pin, launchHolds]
 
 /** What every launch after an attempt needs: its reports and the owner's attestation. */
 const handoff: ReadonlyArray<Rule> = [reports, attest]

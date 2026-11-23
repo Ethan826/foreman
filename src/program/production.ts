@@ -19,13 +19,13 @@
 // `git-home`, the empty HOME every git command runs with (plan B11b). A
 // handoff's git work runs through the runner pinned to the session's
 // recorded worktree, with the target's attribute allowance.
-import { Clock, Console, Effect, Formatter, Option, Random, Record, Result } from "effect"
+import { Clock, Console, Effect, Formatter, Option, Random, Record, Schema } from "effect"
 import type { Scope } from "effect"
-import type { AttributeSourcesRefused } from "../domain/attributes.ts"
+import { type AttributeSourcesRefused, AttributeSourcesUnread } from "../domain/attributes.ts"
 import type { WorktreeCreated } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
 import type { TargetBinding } from "../domain/target.ts"
-import { GitOutputUndecodable, type WorktreeCheckFailed, type WorktreeRecordInvalid } from "../domain/worktree.ts"
+import type { WorktreeCheckFailed, WorktreeRecordInvalid } from "../domain/worktree.ts"
 import { clientEnvironment } from "../features/client-environment.ts"
 import { allocationsInFallback } from "../features/admission.ts"
 import { ownerOnly } from "../features/counting.ts"
@@ -33,7 +33,6 @@ import { defaultPolicy } from "../domain/policy.ts"
 import { type Role, Roles } from "../domain/roles.ts"
 import type { ForemanConfig } from "../format/foreman-config.ts"
 import { startTimeOf } from "../format/ps.ts"
-import { decodeRevParseRevision } from "../format/rev-parse.ts"
 import { readClientVersionWith } from "../runtime/client-version.ts"
 import { pinnedGitWith, startGit } from "../runtime/git.ts"
 import { openLedger } from "../runtime/ledger-sqlite.ts"
@@ -42,12 +41,11 @@ import { openProjectLog } from "../runtime/project-log.ts"
 import { tryLock } from "../runtime/project-lock.ts"
 import { startClientWith } from "../runtime/spawn.ts"
 import { stateFiles } from "../runtime/state-files.ts"
-import { readOwnerHeadWith, revParseArgs } from "../runtime/worktree.ts"
 import { publishClaudeProfileWith } from "./claude-profile.ts"
 import { gitHomePath, preparedGitHome } from "./git-home.ts"
-import { handoffGitWith } from "./handoff-git.ts"
+import { handoffGitWith, headWith } from "./handoff-git.ts"
 import { ledgerDirOfTarget, settledTarget } from "./production-target.ts"
-import { type SessionContext, WorktreeUnready } from "./session-context.ts"
+import { type SessionContext, UnreadAtHead, WorktreeUnready } from "./session-context.ts"
 import { preparedStoreDirectories } from "./store-directory.ts"
 import { requireBound, type TargetPolicy } from "./target-binding.ts"
 import { worktreeProgramWith, type WorktreeProgram } from "./worktree.ts"
@@ -187,31 +185,61 @@ export interface StartupGit {
  * The startup check (`identifyWorktree`), then the worktree's HEAD read
  * through the runner pinned to the record (plan B11d) and decoded, then
  * the attribute check on `base`, or on that HEAD when `base` is none
- * (batch review B07). `status` runs the same check (production-status.ts).
+ * (batch review B07). It returns the HEAD and never compares it with
+ * `base`: a HEAD that moved from the session's base is the command
+ * rules' `HeadMoved` refusal (owner ruling of 2026-11-23, which replaced
+ * B07's launch on a moved HEAD), and `status` reports it as a finding.
+ * `status` runs the same check (production-status.ts).
  * A judgment that the worktree is unready (`WorktreeCheckFailed`,
  * `WorktreeRecordInvalid`, `AttributeSourcesRefused`) becomes
- * `WorktreeUnready`; a check that could not run keeps its own failure
- * (`WorktreeCheckUnrun`, review item R01), `AttributeSourcesUnread` among
- * them, since a failed read alone judges nothing (owner ruling on B11c and
- * R01, 2026-11-20), and a HEAD that does not decode is
- * `GitOutputUndecodable`.
+ * `WorktreeUnready`. When the worktree was identified and only its
+ * attribute sources are refused, that `WorktreeUnready` keeps the HEAD
+ * read, so the rules and `status` still see a moved HEAD (owner finding
+ * F2, dogfood-3a round 1). A check that could not run keeps its own failure
+ * (`WorktreeCheckUnrun`, review item R01), and a HEAD that does not decode
+ * is `GitOutputUndecodable`. A HEAD read that fails keeps its failure
+ * whatever the attribute check found (owner finding F2, round 2). An
+ * unread attribute source judges nothing (owner ruling on B11c and R01):
+ * after a HEAD read it is `UnreadAtHead`, which every command but `status`
+ * turns back into its `AttributeSourcesUnread` (owner finding F3).
  */
 export const checkedHead = (git: StartupGit, recorded: WorktreeCreated, base: Option.Option<Revision>) =>
+  Effect.gen(function* () {
+    const found = yield* identified(git, recorded)
+    const head = yield* headWith(pinnedGitWith(startGit)(git.home)(recorded), recorded.path)
+    if (Option.isSome(found)) {
+      return yield* besideHead(head)(found.value)
+    }
+    const judged = git.handoffGit(recorded).checkAttributes(Option.getOrElse(base, () => head))
+    yield* Effect.catchTags(judged, { AttributeSourcesRefused: besideHead(head), AttributeSourcesUnread: besideHead(head) })
+    return head
+  })
+
+/**
+ * `identifyWorktree`, with the worktree judged unready when it is not
+ * identified. Attribute sources it refused or could not read are returned,
+ * so `checkedHead` still reads the HEAD (owner findings F2 and F3).
+ */
+const identified = (git: StartupGit, recorded: WorktreeCreated) =>
   Effect.catchTags(
-    Effect.gen(function* () {
-      yield* git.worktree.identifyWorktree(recorded)
-      const text = yield* readOwnerHeadWith(pinnedGitWith(startGit)(git.home)(recorded))(recorded.path)
-      const head = yield* Effect.fromResult(Result.mapError(decodeRevParseRevision(text), headUndecodable))
-      yield* git.handoffGit(recorded).checkAttributes(Option.getOrElse(base, () => head))
-      return head
-    }),
-    { WorktreeCheckFailed: unready, WorktreeRecordInvalid: unready, AttributeSourcesRefused: unready },
+    Effect.as(git.worktree.identifyWorktree(recorded), Option.none<AttributeSourcesRefused | AttributeSourcesUnread>()),
+    {
+      WorktreeCheckFailed: unready(Option.none()),
+      WorktreeRecordInvalid: unready(Option.none()),
+      AttributeSourcesRefused: (refused) => Effect.succeed(Option.some(refused)),
+      AttributeSourcesUnread: (unread) => Effect.succeed(Option.some(unread)),
+    },
   )
 
-/** A judgment that the worktree is unready, with the judgment as its reason. */
-const unready = (judgment: WorktreeCheckFailed | WorktreeRecordInvalid | AttributeSourcesRefused) =>
-  Effect.fail(new WorktreeUnready({ reason: Formatter.formatJson(judgment) }))
+/** An attribute check that did not pass after `head` was read: `WorktreeUnready` or `UnreadAtHead`, each with `head`. */
+const besideHead =
+  (head: Revision) =>
+  (found: AttributeSourcesRefused | AttributeSourcesUnread): Effect.Effect<never, WorktreeUnready | UnreadAtHead> =>
+    Schema.is(AttributeSourcesUnread)(found)
+      ? Effect.fail(new UnreadAtHead({ unread: found, head }))
+      : unready(Option.some(head))(found)
 
-/** A HEAD read that does not decode as a revision, naming the command. */
-const headUndecodable = (issue: { readonly message: string }) =>
-  new GitOutputUndecodable({ args: revParseArgs.ownerHead, reason: issue.message })
+/** A judgment that the worktree is unready, with the judgment as its reason and the HEAD read, if any. */
+const unready =
+  (head: Option.Option<Revision>) => (judgment: WorktreeCheckFailed | WorktreeRecordInvalid | AttributeSourcesRefused) =>
+    Effect.fail(new WorktreeUnready({ reason: Formatter.formatJson(judgment), head }))

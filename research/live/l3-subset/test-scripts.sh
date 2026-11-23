@@ -228,6 +228,8 @@ odd="$parent/plain-m06_v1.2+x"
 (cd "$work" && setup "$odd"); rc=$?
 expect "setup accepts a plain path of letters, digits, . _ + - and /" '[ "$rc" -eq 0 ] && [ -f "$odd/.l3-setup-done" ]'
 wt="$odd/state/worktree"
+odd_git_dir=$(. "$odd/layout.env" && printf '%s' "$L3_GIT_DIR")
+odd_common_dir=$(. "$odd/layout.env" && printf '%s' "$L3_COMMON_DIR")
 /usr/bin/python3 -I - "$odd/claude-settings.json" "$wt" <<'EOF'
 import json, sys
 settings, worktree = sys.argv[1], sys.argv[2]
@@ -240,17 +242,33 @@ EOF
 rc=$?
 expect "the rendered settings hold the exact worktree path" '[ "$rc" -eq 0 ]'
 
-# The rendered settings equal production's profile for the same worktree,
-# apart from the L3 stand-in Bash(sh check.sh), which production leaves
-# out until a ruling names the target's test command. Order counts.
+# The sandbox denies writes to the common git directory and the
+# worktree's own git directory as wholes, the last two denials, each the
+# path setup recorded in layout.env (owner ruling of 2026-11-23). The
+# owner's L3 run case C4 committed through the common git directory.
+/usr/bin/python3 -I - "$odd/claude-settings.json" "$odd_git_dir" "$odd_common_dir" <<'EOF'
+import json, sys
+settings, git_dir, common_dir = sys.argv[1], sys.argv[2], sys.argv[3]
+deny = json.load(open(settings, encoding="utf-8"))["sandbox"]["filesystem"]["denyWrite"]
+ok = git_dir != "" and common_dir != "" and git_dir != common_dir and deny[-2:] == [common_dir, git_dir]
+sys.exit(0 if ok else 1)
+EOF
+rc=$?
+expect "the rendered settings deny writes to the common and the worktree's git directories" '[ "$rc" -eq 0 ]'
+
+# The rendered settings equal production's profile for the same worktree
+# and git directories, apart from the L3 stand-in Bash(sh check.sh),
+# which production leaves out until a ruling names the target's test
+# command. Order counts.
 prod="$work/production-settings.json"
 (cd "$here/../../.." && bun -e '
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
-const rendered = claudeEditingSettings(process.argv[1])
+const [, path, gitDir, commonDir] = process.argv
+const rendered = claudeEditingSettings({ path, gitDir, commonDir })
 if (Result.isFailure(rendered)) process.exit(3)
 process.stdout.write(rendered.success)
-' "$wt") > "$prod" 2> "$work/production-settings.err"; rc=$?
+' "$wt" "$odd_git_dir" "$odd_common_dir") > "$prod" 2> "$work/production-settings.err"; rc=$?
 expect "production renders the profile for the setup worktree" '[ "$rc" -eq 0 ] && [ -s "$prod" ]'
 /usr/bin/python3 -I - "$odd/claude-settings.json" "$prod" <<'EOF'
 import json, sys
@@ -311,14 +329,18 @@ expect "teardown handles the plain root with odd names inside" '[ "$rc" -eq 0 ] 
 # --- L4: trailing and doubled slashes are accepted and normalized ---------
 # setup.sh drops trailing slashes and resolves the parent, so these
 # spellings name the same new root as the plain one. The worktree path it
-# binds must still meet production's restriction (ProfilePathUnsafe).
+# binds, and the two git directories setup records beside it, must still
+# meet production's restriction (ProfilePathUnsafe).
 
+# production_accepts <worktree> <git-dir> <common-dir>: production renders
+# the profile for that recorded git identity.
 production_accepts() {
   (cd "$here/../../.." && bun -e '
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
-process.exit(Result.isFailure(claudeEditingSettings(process.argv[1])) ? 3 : 0)
-' "$1") > /dev/null 2>&1
+const [, path, gitDir, commonDir] = process.argv
+process.exit(Result.isFailure(claudeEditingSettings({ path, gitDir, commonDir })) ? 3 : 0)
+' "$1" "$2" "$3") > /dev/null 2>&1
 }
 canonical_parent=$(cd -P "$parent" && pwd -P)
 # expect evaluates its test inside its own call, where $1 to $3 are its
@@ -328,10 +350,12 @@ normalized_root() {
   normalized="$canonical_parent/$2"
   expected="$normalized/state/worktree"
   got=$(. "$normalized/layout.env" 2> /dev/null && printf '%s' "$L3_WORKTREE")
+  got_git_dir=$(. "$normalized/layout.env" 2> /dev/null && printf '%s' "$L3_GIT_DIR")
+  got_common_dir=$(. "$normalized/layout.env" 2> /dev/null && printf '%s' "$L3_COMMON_DIR")
   expect "setup accepts $3 and binds the normalized worktree path" \
     '[ "$rc" -eq 0 ] && [ "$got" = "$expected" ] && grep -qF "\"Read(/$expected/**)\"" "$normalized/claude-settings.json"'
   expect "the worktree path from $3 meets production's path restriction" \
-    'case "$got" in *//*|*/) false ;; esac && production_accepts "$got"'
+    'case "$got" in *//*|*/) false ;; esac && production_accepts "$got" "$got_git_dir" "$got_common_dir"'
   teardown "$normalized"
 }
 normalized_root "$parent/trailing-root/" trailing-root "a trailing slash"
@@ -1082,13 +1106,15 @@ expect "variant U takes production's argv less the --setting-sources pair, keepi
 ud="$parent/run-drift"
 tud=$(prepare U "$ud")
 listen "$ud"
+ud_canonical=$(cd "$ud" && pwd -P)
 (cd "$repo" && bun -e '
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
-const rendered = claudeEditingSettings(process.argv[1])
+const [, path, gitDir, commonDir] = process.argv
+const rendered = claudeEditingSettings({ path, gitDir, commonDir })
 if (Result.isFailure(rendered)) process.exit(3)
 process.stdout.write(rendered.success)
-' "$(cd "$ud" && pwd -P)/state/worktree") > "$work/drift-production.json"
+' "$ud_canonical/state/worktree" "$ud_canonical/owner/.git/worktrees/worktree" "$ud_canonical/owner/.git") > "$work/drift-production.json"
 /usr/bin/python3 -I - "$ud/claude-settings.json" "$work/drift-production.json" <<'PY'
 import json, sys
 rendered = json.load(open(sys.argv[1], encoding="utf-8"))

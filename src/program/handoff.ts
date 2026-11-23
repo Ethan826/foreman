@@ -5,8 +5,13 @@
 // its handoff and appends [`HandoffRejected`]; afterwards only `close
 // --abandoned` remains. `close --finished` runs the settle step, checks
 // its rules with the snapshot presumed equal to the reviewed tree, and
-// only then runs the attribute check again and takes the snapshot, so a
-// close refused for its attestation or its state stages nothing. With the
+// only then reads the worktree's HEAD with `git rev-parse HEAD` alone,
+// with no identity or attribute check, through the runner pinned to the
+// session's recorded identity. A HEAD that moved from the session's base
+// is refused (`HeadMoved`, owner ruling of 2026-11-23) before anything is
+// staged; a read that fails keeps its own failure. Then it runs the
+// attribute check again and takes the snapshot, so a close refused for
+// its attestation, its state or its HEAD stages nothing. With the
 // snapshot on the reviewed tree it appends [`ReviewChecked`,
 // `SessionClosed`] and a `WaiverExpired` for every armed waiver; a
 // changed tree refuses and appends nothing.
@@ -75,8 +80,11 @@ export const closeFinished = (context: SessionContext, options: FinishOptions) =
       const checks = { ...ownerChecks(false, []), attested: options.attest, snapshot: presumedOnReviewedTree(fold.state) }
       yield* requireAllowed(command, fold.state, checks)
       const session = yield* Effect.fromOption(openSessionOf(fold.state))
+      const head = Option.some(yield* capabilities.handoffGit(session.opened.worktree).readHead())
+      // A refused close leaves waivers as they are (owner ruling, dogfood-3a round 1).
+      yield* requireAllowed(command, fold.state, { ...checks, head })
       const snapshot = yield* takeSnapshot(context, session)
-      yield* requireAllowed(command, fold.state, { ...checks, snapshot: Option.some(snapshot) })
+      yield* requireAllowed(command, fold.state, { ...checks, head, snapshot: Option.some(snapshot) })
       const { batch, closed } = yield* finishedBatch(fold, session, snapshot.tree, options.note)
       yield* capabilities.log.append(read.position, batch)
       return closed

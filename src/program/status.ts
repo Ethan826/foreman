@@ -1,7 +1,8 @@
 // `status` (plan "Commands and their prerequisites", "Process evidence"):
 // shows the session state, every incomplete attempt with its grant, the
 // holds in place, the armed waivers, the pin check of each client, the
-// worktree check, the integrity of each recorded report and brief, the
+// worktree check, a HEAD that moved from the open session's base (owner
+// ruling of 2026-11-23), the integrity of each recorded report and brief, the
 // snapshot coverage statement, and the advisory process evidence for
 // every attempt of the open session, finished ones included. It runs
 // over a `StatusContext`, which holds reads only: no lock, no ledger
@@ -16,16 +17,17 @@ import { GrantId, OpId } from "../domain/ids.ts"
 import { ProcessEvidence } from "../domain/process.ts"
 import type { ReportRecorded } from "../domain/session-events.ts"
 import { ArmedWaivers, type SessionAttempt, SessionState } from "../domain/session-state.ts"
+import { HeadMoved, movedHead } from "../features/command-refusals.ts"
 import { processEvidence } from "../features/process-evidence.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
 import { snapshotCoverage } from "../format/brief.ts"
 import { decodePs } from "../format/ps.ts"
-import { holdsFrom, pinReading, readLog, worktreeReading } from "./command-start.ts"
+import { headedReading, holdsFrom, pinReading, readLog, type WorktreeReading } from "./command-start.ts"
 import { attemptBriefIntact } from "./brief-files.ts"
 import { fileIntact } from "./recorded-files.ts"
 import type { RecordedFileReader } from "./recorded-files.ts"
-import type { WorktreeCheckUnrun } from "./session-context.ts"
+import { UnreadAtHead, type WorktreeCheckUnrun } from "./session-context.ts"
 import type { StatusContext } from "./status-context.ts"
 
 /** What `status` says about process evidence every time it shows some (plan "Process evidence"). */
@@ -98,6 +100,13 @@ export const StatusReport = Schema.Struct({
   armedWaivers: ArmedWaivers,
   pinsMatch: Schema.Record(Client, Schema.Boolean),
   worktree: WorktreeStatus,
+  /**
+   * The finding that the worktree's HEAD moved from the open session's
+   * base, which refuses the launches and `close --finished` (owner ruling
+   * of 2026-11-23); none on the base, with no session open, or when the
+   * worktree check read no HEAD.
+   */
+  headMoved: Schema.Option(HeadMoved),
   reports: Schema.Array(ReportIntegrity),
   briefs: Schema.Array(BriefIntegrity),
   evidenceCaveat: Schema.String,
@@ -116,7 +125,7 @@ export const status = (context: StatusContext) =>
   Effect.gen(function* () {
     const read = yield* readLog(context.capabilities.log)
     const fold = foldSession(read.events)
-    const worktree = yield* Effect.catch(worktreeReading(context, read.events), unrunCheck)
+    const worktree = yield* Effect.catch(headedReading(context, read.events), unrunCheck)
     const listing = yield* Effect.result(context.capabilities.readProcesses())
     const ledger = yield* context.capabilities.ledgerRows
     return {
@@ -130,10 +139,11 @@ export const status = (context: StatusContext) =>
         [Clients.Claude]: yield* pinReading(context, Clients.Claude),
         [Clients.Codex]: yield* pinReading(context, Clients.Codex),
       },
-      worktree: Result.match(worktree, {
+      worktree: Result.match(worktree.verdict, {
         onSuccess: (head) => ({ passed: true, detail: head }),
         onFailure: (reason) => ({ passed: false, detail: reason }),
       }),
+      headMoved: movedHead(fold.state, worktree.head),
       reports: yield* Effect.forEach(reportsOf(fold.state), (report) => integrityOf(context, report)),
       briefs: yield* Effect.forEach(attemptsOf(fold.state), (attempt) => briefIntegrityOf(context, attempt)),
       evidenceCaveat,
@@ -144,9 +154,15 @@ export const status = (context: StatusContext) =>
 /**
  * A worktree check that could not run, as status reports it: not passed,
  * with the failure as the detail (review item R01). Status still answers.
+ * An attribute source left unread after a HEAD read keeps that HEAD, so a
+ * moved HEAD is still a finding (owner finding F3, dogfood-3a round 2).
  */
-const unrunCheck = (failure: WorktreeCheckUnrun) =>
-  Effect.succeed(Result.fail(Formatter.formatJson(failure)))
+const unrunCheck = (failure: WorktreeCheckUnrun | UnreadAtHead) =>
+  Effect.succeed<WorktreeReading>(
+    Schema.is(UnreadAtHead)(failure)
+      ? { verdict: Result.fail(Formatter.formatJson(failure.unread)), head: Option.some(failure.head) }
+      : { verdict: Result.fail(Formatter.formatJson(failure)), head: Option.none() },
+  )
 
 /** The incomplete attempts a state carries; none outside an incomplete or interrupted session. */
 const incompleteOf = (state: SessionState): ReadonlyArray<SessionAttempt> =>

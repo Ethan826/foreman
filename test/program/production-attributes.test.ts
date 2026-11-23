@@ -6,8 +6,10 @@
 // their contents, before any client gets the candidate; and the startup
 // check judges the session's base, or the worktree's HEAD before a
 // session, not the base the worktree was created at (batch review B07).
+// A HEAD that moved since the session opened refuses the launch (owner
+// ruling of 2026-11-23).
 import { describe, expect, it } from "@effect/vitest"
-import { Effect } from "effect"
+import { Array as Arr, Effect, Schema } from "effect"
 import { existsSync, writeFileSync } from "node:fs"
 import { git } from "../runtime/git-repo.ts"
 import { commitAttributes } from "./attribute-fixtures.ts"
@@ -158,12 +160,28 @@ const openJudgesCurrentHead = () =>
     }),
   )
 
-const launchJudgesSessionBase = () =>
+/** The refusal a failed run printed on stderr: its tag and its reasons. */
+const PrintedRefusal = Schema.fromJsonString(Schema.Struct({ _tag: Schema.String, reasons: Schema.Array(Schema.Unknown) }))
+
+/**
+ * The commit moves HEAD to a tree whose root `.gitattributes` would be
+ * refused. Judged at the session's base, the attribute check passes, so
+ * the only reason is the moved HEAD (owner ruling of 2026-11-23).
+ */
+const launchRefusesMovedHead = () =>
   withLayout((layout) =>
     Effect.gen(function* () {
       yield* openedSession(layout)
+      const base = yield* git(layout.supervisor, "rev-parse", "HEAD")
       yield* commitInWorktree(layout, "* text\n")
-      yield* succeeded(layout, ["implement", "--waive"])
+      const head = yield* git(layout.supervisor, "rev-parse", "HEAD")
+      const run = yield* cli(layout, ["implement", "--waive"])
+      expect([run.status, failureTag(run)]).toEqual([1, "CommandRefused"])
+      const printed = yield* Schema.decodeUnknownEffect(PrintedRefusal)(Arr.join(run.err, "\n"))
+      expect(printed.reasons).toMatchObject([{ _tag: "HeadMoved", base, head }])
+      expect(Arr.join(run.err, "\n")).not.toContain("WorktreeCheckFailed")
+      expect(Arr.join(run.err, "\n")).not.toContain("AttributeSourcesRefused")
+      expect(recorded(layout, "claude-launches")).toBeUndefined()
     }),
   )
 
@@ -182,5 +200,9 @@ describe("the candidate tree's attribute files", () => {
 
 describe("the startup check's base", () => {
   it.effect("session open judges the worktree's HEAD, not the base it was created at", openJudgesCurrentHead, endToEndMillis)
-  it.effect("a launch judges the session's base, not a HEAD that moved since", launchJudgesSessionBase, endToEndMillis)
+  it.effect(
+    "a launch refuses a HEAD that moved since the session opened, while the attribute check still judges the session's base",
+    launchRefusesMovedHead,
+    endToEndMillis,
+  )
 })

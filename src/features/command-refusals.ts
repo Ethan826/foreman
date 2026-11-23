@@ -90,6 +90,17 @@ export class AlreadyAttested extends Schema.TaggedClass<AlreadyAttested>()(
   { opId: OpId },
 ) {}
 
+/**
+ * The supervisor worktree's HEAD, `head`, is not the open session's base
+ * revision, `base`: something committed or moved the branch since the
+ * session opened (owner ruling of 2026-11-23, dogfood-3a). The launches
+ * and `session close --finished` refuse it; the owner's exits do not.
+ */
+export class HeadMoved extends Schema.TaggedClass<HeadMoved>()(
+  "HeadMoved",
+  { base: Revision, head: Revision },
+) {}
+
 /** Schema for any reason a command is refused. */
 export const Refusal = Schema.Union([
   LockNotHeld,
@@ -105,9 +116,28 @@ export const Refusal = Schema.Union([
   NotIncomplete,
   WrongGrant,
   AlreadyAttested,
+  HeadMoved,
 ])
 /** Any reason a command is refused; see {@link Refusal}. */
 export type Refusal = typeof Refusal.Type
+
+/**
+ * The moved HEAD `head` shows while a session is open in `state`: some
+ * when a HEAD was read and differs from the open session's base. None
+ * when no session is open or no HEAD was read, which is how a command
+ * that reads no HEAD, or whose worktree check judged the worktree
+ * unready, passes this rule (owner ruling of 2026-11-23, dogfood-3a).
+ */
+export const movedHead = (
+  state: SessionState,
+  head: Option.Option<Revision>,
+): Option.Option<HeadMoved> =>
+  Option.flatMap(openSessionOf(state), (session) =>
+    Option.map(
+      Option.filter(head, (read) => read !== session.opened.baseRevision),
+      (read) => new HeadMoved({ base: session.opened.baseRevision, head: read }),
+    ),
+  )
 
 /**
  * Why `step-ended` may not record `ended` in `state`: the owner may

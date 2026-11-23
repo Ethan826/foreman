@@ -75,6 +75,7 @@ available when the worktree, a client or a file is broken.
 | Project lock | not taken | required | required | required | required | required | required | required |
 | Session state | any | none open | open, no attempt | awaiting handoff after a usable implement or correct | awaiting handoff after a usable review with changes requested | awaiting handoff | incomplete attempt | open (see close rules) |
 | Startup worktree check (B11a to B11d) | reported | required | required | required | required | not needed | not needed | not needed |
+| HEAD equals the session's base (owner ruling of 2026-11-23) | a moved HEAD is reported as a finding | n/a | required (HEAD from the startup check) | required (HEAD from the startup check) | required (HEAD from the startup check) | not needed | not needed | `--finished`: required, from its own `git rev-parse HEAD` alone; `--abandoned` and `--interrupted`: not needed, no HEAD read |
 | Client version pin | reported | not needed | required (Claude) | required (Codex) | required (Claude) | not needed | not needed | not needed |
 | Holds | reported | no non-quota hold | no non-quota hold; a Claude quota hold goes to the waiver step | no non-quota hold; a Codex quota hold goes to the waiver step | as `implement` | not needed | not needed | not needed |
 | Recorded report files intact | reported | n/a | n/a | required | required | not needed | not needed | not needed |
@@ -90,16 +91,18 @@ Close rules:
 - `--interrupted`: a session whose every incomplete attempt has
   `StepEndedByOwner`.
 - `--finished`: the last attempt is a usable review with no changes
-  requested, `--attest` is given, and the snapshot still equals the
-  reviewed one.
+  requested, `--attest` is given, the worktree's HEAD is still the
+  session's base (read with `git rev-parse HEAD` only, after the other
+  rules pass; owner ruling of 2026-11-23), and the snapshot still equals
+  the reviewed one.
 - Every close runs the settle step and appends `WaiverExpired` for an
   armed waiver. It releases no hold, deletes no file and changes no
   grant except through settlement.
 
 `status` never takes the lock and never writes. It shows the session
 state, every incomplete attempt with its grant, holds, armed waivers, the
-pin check, the worktree check, report integrity and the advisory process
-evidence.
+pin check, the worktree check, a HEAD that moved from the open session's
+base, report integrity and the advisory process evidence.
 
 ## Events
 
