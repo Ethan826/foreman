@@ -1723,3 +1723,10 @@ sandbox. At the owner's request the coordinator wrote
 runs itself on the snapshot tree under its own owner-approved profile,
 recorded and passed to the reviewer. It awaits the owner's approval and
 comes after dogfood-3b at the earliest.
+
+Owner rulings on the proposal (2026-11-23): option B with A; a failed
+check informs `close --finished` and does not block it (put
+tentatively); read-only grants to the owner's toolchain caches are
+allowed per command; the L3 offline tests are the first configured
+check. The rulings are written into the proposal. The design revision
+and each slice need their own authorization, after dogfood-3b.

@@ -1,8 +1,20 @@
 # Proposal: a check step foreman runs itself (awaiting owner approval)
 
-Status: proposal, 2026-11-23. Not authorized. Written at the owner's
-request so the idea has a durable record; it comes after dogfood-3b at
-the earliest.
+Status: direction approved by the owner, 2026-11-23 (rulings below);
+the design revision and every slice still need their own
+authorization. It comes after dogfood-3b at the earliest.
+
+## Owner rulings (2026-11-23)
+
+1. Option B combined with A: the agent keeps its in-sandbox checks
+   (dogfood-3b), and foreman's check step is the recorded result.
+2. A failed check informs `session close --finished`; it does not
+   block it. (The owner put this tentatively; the design revision may
+   bring it back with evidence.)
+3. Check commands may have read-only grants to the owner's toolchain
+   caches, named per command in the binding.
+4. The L3 package's offline tests are the first configured check, so
+   the package becomes developable through foreman.
 
 ## The gap
 
@@ -67,9 +79,10 @@ A `check` step that foreman runs itself, with no model client:
    A check that could not run (profile refused, timeout, crash of the
    runner) is its own hold, distinct from quota, approval and failure,
    as the design requires of holds.
-7. **Owner commands.** `check [--attest]` runs the step by hand;
-   `session close --finished` requires a passing check on the reviewed
-   tree when the target lists any check command.
+7. **Owner commands.** `check [--attest]` runs the step by hand.
+   `session close --finished` does not require a passing check (owner
+   ruling 2); it states the reviewed tree's check outcomes, or that none
+   ran, beside the attestation.
 
 ## Alternatives
 
