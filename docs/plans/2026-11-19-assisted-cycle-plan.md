@@ -1560,3 +1560,19 @@ Committed in the supervisor worktree as d728371 by owner exception.
   default at load average 80 to 90 and passed alone (637 ms) and in the
   next full run; it is recorded, not resolved. Follow-ups: F13; the
   spawn-test process leak; the HEAD check.
+
+## Dogfood-3: the commit guard and the check command (2026-11-23)
+
+The owner put the implementer's ability to run tests and lint first. A
+fresh Opus reviewer read the draft task before any session
+([the review](2026-11-23-dogfood-3-task-review.md)) and found three
+blocking conflicts. Owner rulings (2026-11-23): the sandbox denies the
+recorded `<commonDir>` and `<gitDir>` as wholes; a moved supervisor HEAD
+refuses `implement`, `review`, `correct` and `close --finished`, never
+`reject`, the exits or `status`, replacing B07's ignore-the-moved-HEAD
+behaviour (its test is rewritten; the attribute check still judges the
+base); the named test changes are authorized; the configuration may add
+exact `Bash(...)` rules, but none sets `checkCommands` until a C4 rerun
+passes; the work is split into dogfood-3a, the guard
+([task](2026-11-23-dogfood-3a-task.md)), then the live rerun, then
+dogfood-3b, `checkCommands`.
