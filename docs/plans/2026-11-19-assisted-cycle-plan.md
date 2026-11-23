@@ -1460,3 +1460,15 @@ had never run in CI. The owner prefers portability, with macOS-only CI
 as the fallback, and approved a fix on a branch pushed for CI before
 `main` moves. One worker (`fix-linux`) reproduces both groups in a
 Linux container and fixes them.
+
+`fix-linux` integrated (2728111), 150,078 tokens. Linux's procps lists
+kernel threads in process group 0, which the `ps` decoder rejected; a
+row's group is now `ProcessGroupId` (0 or more) while a pid and a
+client's leader group stay positive. Bun's bundled SQLite on Linux
+deletes `-wal` and `-shm` when the last writer closes, and a read-only
+reader then created both; both writers now set `SQLITE_FCNTL_PERSIST_WAL`
+and refuse to open if it does not take, so status changes only `-shm` on
+both platforms, as ruled. Reproduced and verified in a Linux container
+(15 failing tests before, 1,568 passing after); on macOS docs, check
+and the full suite (136 files, 1,568 tests) pass; CI on the pushed
+branch `ci-linux-fix` passed before `main` moved.
