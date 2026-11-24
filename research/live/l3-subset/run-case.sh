@@ -23,10 +23,11 @@
 # equal to production's current rendering and the argv production builds
 # (profile.sh), then the before evidence (snapshot, argv, index state, a
 # second live request, listener and MCP-marker counts). After the client,
-# whatever its exit: the after evidence (with a third live request) and
-# the snapshot diff. Any failure there marks the run INVALID in
-# out/<run>.evidence and exits 3; score.py then scores it INVALID. Exits
-# 0 when the evidence is complete, whatever the client did.
+# whatever its exit: the after evidence (with a third live request), for
+# C6 the reference run of its two git commands, and the snapshot diff.
+# Any failure there marks the run INVALID in out/<run>.evidence and exits
+# 3; score.py then scores it INVALID. Exits 0 when the evidence is
+# complete, whatever the client did.
 #
 # A live request is this script's own request, from outside the client,
 # for the root's preflight file with a query holding a nonce drawn for
@@ -124,6 +125,8 @@ fi
 run_files() {
   printf '%s\n' "snap-$1-before.txt" "$1.argv" "$1-index-before" "$1-listener-live" "$1-listener-before" "$1-mcp-before" \
     "$1.jsonl" "$1.stderr" "$1-last.txt" "$1.exit" "snap-$1-after.txt" "$1-index-after" \
+    "$1-ref-status.stdout" "$1-ref-status.stderr" "$1-ref-status.exit" \
+    "$1-ref-stat.stdout" "$1-ref-stat.stderr" "$1-ref-stat.exit" \
     "$1-listener-after" "$1-mcp-after" "$1.diff" "$1.evidence"
 }
 # Whether the run $2 in the out/ directory $1 began recording evidence.
@@ -323,6 +326,45 @@ index_state() {
   index_hash=$(shasum -a 256 < "$git_dir/index") || return 1
   printf '%s %s\n' "$index_stat" "${index_hash%% *}"
 }
+# reference_run <name> <git argument>...: one command of the reference run.
+reference_run() {
+  ref_name=$1
+  shift
+  ref_status=0
+  (cd "$worktree" && env ${unset_git[@]+"${unset_git[@]}"} GIT_INDEX_FILE="$copy" git "$@" \
+    > "$out/$run-ref-$ref_name.stdout" 2> "$out/$run-ref-$ref_name.stderr") || ref_status=$?
+  if ! echo "$ref_status" > "$out/$run-ref-$ref_name.exit"; then
+    reference_why="the reference run of git $* could not be recorded"
+    return 1
+  fi
+}
+# C6's reference (plan.md, C6): git status and git diff --stat run by this
+# script in the worktree after the client exits, in the environment the
+# client got (this script's, minus GIT_*, as the launch below builds it;
+# not setup's clean runner), so the owner's git configuration and locale
+# apply as they did to the agent's git. GIT_INDEX_FILE points at a fresh
+# copy of the worktree's index in out/, so the reference never writes the
+# real index; the copy is removed after. Each command's stdout, stderr and
+# exit status are evidence (out/<run>-ref-status.* and -ref-stat.*); a
+# nonzero exit is recorded, not a failure here. Fails, with reference_why
+# set, when a record cannot be written or the real index changed.
+reference() {
+  reference_why=
+  copy="$out/.$run-ref-index"
+  rm -f -- "$copy" "$copy.lock"
+  if ! cp -- "$git_dir/index" "$copy"; then
+    reference_why="the index could not be copied for the reference run"
+    return 1
+  fi
+  reference_run status status || return 1
+  reference_run stat diff --stat || return 1
+  rm -f -- "$copy" "$copy.lock"
+  now=$(index_state) || { reference_why="the index state could not be read after the reference run"; return 1; }
+  if [ "$now" != "$(cat "$out/$run-index-after")" ]; then
+    reference_why="the worktree's index changed during the reference run"
+    return 1
+  fi
+}
 listener_lines() {
   wc -l < "$out/listener.log" | tr -d ' '
 }
@@ -356,7 +398,7 @@ mcp_lines > "$out/$run-mcp-before" || stop "the MCP marker count could not be re
 
 # The client, with every GIT_* variable removed from its environment
 # (assisted plan 320, decision P2). Its exit status is evidence, not a
-# reason to stop.
+# reason to stop. C6's reference run below gets the same environment.
 unset_git=()
 for name in $(env | sed -n 's/^\(GIT_[A-Za-z0-9_]*\)=.*/\1/p'); do
   unset_git+=(-u "$name")
@@ -377,6 +419,9 @@ fail_after() {
 echo "$client_exit" > "$out/$run.exit" || fail_after "the exit status could not be recorded"
 "$here/snapshot.sh" "$root" "$run-after" > /dev/null || fail_after "the after snapshot failed"
 index_state > "$out/$run-index-after" || fail_after "the index state could not be recorded"
+if [ "$case_id" = c6-index ]; then
+  reference || fail_after "$reference_why"
+fi
 listener_lines > "$out/$run-listener-after" || fail_after "the listener count could not be recorded"
 mcp_lines > "$out/$run-mcp-after" || fail_after "the MCP marker count could not be recorded"
 # The live request after the client, past the counts, so its own line is

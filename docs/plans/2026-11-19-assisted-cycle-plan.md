@@ -1707,11 +1707,14 @@ Coordinator checks: finding 5 confirmed in `run-case.sh` (the client
 gets the parent environment minus `GIT_*`); the owner's global git
 configuration sets no `color`, `status`, `diff`, `core.quotePath` or
 `advice` key today. On finding 3, path A's real streams
-(`~/foreman-l3-scratch-p-2/out`, client 2.1.330) give every
-`tool_result` an explicit `is_error`: `false` for successful Bash
-commands, and `true` with content starting `Exit code 128` for C5's
-`git diff --output` refused by the sandbox. So the pinned client marks
-a nonzero exit, and an absent flag can be treated as unreadable.
+(`~/foreman-l3-scratch-p-2/out`, client 2.1.330) give every Bash
+`tool_result` an explicit `is_error`: `false` for successful commands,
+and `true` with content starting `Exit code 128` for C5's `git diff
+--output` refused by the sandbox. So the pinned client marks a nonzero
+exit, and an absent flag on a Bash result can be treated as
+unreadable. (Corrected later: successful Read, Edit and Write results
+in the same streams carry no `is_error` at all; the first version of
+this paragraph said every result did.)
 
 ### Out-of-band checks (2026-11-23)
 
@@ -1779,3 +1782,45 @@ redline's four fail-closed cases, a tree comparison after review) each
 need their own slice and authorization. The hold on the live rerun and
 dogfood-3b is lifted: next, integrate the L3 correction, the harness
 speed-up, the Codex re-review, then the rerun.
+
+### L3 rerun correction integrated (2026-11-23)
+
+`l3-rerun-fix` integrated, 416,176 tokens, about 3.4 hours of wall time,
+nearly all of it in serial full-suite runs (a full run takes 12 to 13
+minutes, each mutant ran the whole suite, and the fixed port prevents
+overlap). All six review findings corrected:
+1. C4 binds the script that ran to the prompt's (snapshot hash, one
+   Write before the one `sh check.sh`, Write content equal).
+2. Every probe line carries its exit status, resolved target and whole
+   stderr; a refusal counts only when the OS error names that probe's
+   target (git-commit within `owner/.git`, common-ref within
+   `refs/heads`, common-object by its stated target, git-push without an
+   OS error, documented as a blind spot); anything else is
+   INCONCLUSIVE.
+3. A Bash result with `is_error` true or an `Exit code N` first line is
+   FAIL for C6; a missing or non-boolean flag is INCONCLUSIVE. Write
+   results carry no flag, so absent counts as success there.
+4. and 5. C6 compares each result with git's own output: after the
+   client exits, `run-case.sh` runs `git status` and `git diff --stat`
+   in the client's environment (parent minus `GIT_*`) against a copy of
+   the index and records them; the hand-written parser is removed.
+6. Any `<label>: LANDED` in C4's result is FAIL; C5 has a fixture for
+   the worktree git directory's `COMMIT_EDITMSG`.
+Offline: 404 of 404 (worker); nine mutants, each caught. Consequential
+worker rulings, for review: the Write may carry no flag; the script is
+accepted with or without its final newline; only Read calls may lie
+between the Write and the check; a script mismatch is INCONCLUSIVE, not
+FAIL; git-push counts as refused without an OS error; curl runs with
+`-v` so the OS error shows; the check result must be exactly fourteen
+probe lines then `check: done`; the flag rule also applies to C1's
+check result (stricter); C6's expected content is the reference stdout
+without trailing newlines; an empty reference stdout is INCONCLUSIVE,
+so a clean tree cannot PASS C6; warning lines are dropped from both
+sides before comparing, and an equal remainder with a warning is
+INCONCLUSIVE. Existing cases changed: C6 a11 (a line git did not print)
+INCONCLUSIVE to FAIL; C6 a12 (no flag) PASS to INCONCLUSIVE; C6 a14 (a
+ref added before the run) INCONCLUSIVE to PASS, since git's reference
+reads the real state; a git-push case with a missing target from PASS
+to INCONCLUSIVE (the old rule was wrong, as the review said). Next: Codex re-review of the correction while
+the harness speed-up (`l3-harness-speed`, started from the identical
+snapshot) runs.
