@@ -4,7 +4,7 @@ Read the [README](../README.md) first. This page shows how the pieces fit, with 
 
 ## Status
 
-The owner approved [the design](plans/2026-11-14-agent-supervisor-design.md) at revision 6.1 on 2026-11-15. Its open items stay open, and the approval authorized no new code. The code is a first slice: the Domain types, the Format decoders for Claude and Codex output, the pure pacing function `pace`, and tests for them. `pace` still follows revision 3's rule; the first tasks of [the implementation plan](plans/2026-11-15-implementation-plan.md) bring it up to revision 6.1. Nothing runs agents yet. Everything else on this page describes the approved design: the event log, the usage ledger, holds, the review queue, worktrees, process control, recovery and the CLI. None of it is approved for implementation yet.
+The owner approved [the design](plans/2026-11-14-agent-supervisor-design.md) at revision 6.1 on 2026-11-15. Its open items stay open unless a later owner ruling resolves them. The code runs the assisted cycle. The owner opens a session on a task file; Claude implements, Codex reviews, and Claude may correct twice. Every launch passes through the usage ledger and the hold rules, and the owner approves and commits. Admission does not yet read usage on its own, so every launch needs a waiver. Process control and recovery are designed but not written, and so is the commit procedure. [The robustness roadmap](plans/2026-11-24-robustness-roadmap.md) lists what remains; the rest of this page describes the approved design, which the code implements only in part.
 
 ## One tranche
 
@@ -221,7 +221,7 @@ Because charged grants keep counting until the owner retires them, the defaults 
 
 - [`src/domain`](../src/domain/README.md): the types, with class diagrams.
 - [`src/format`](../src/format/README.md): the decoders.
-- [`src/features`](../src/features/README.md): `pace` as it stands (revision 3's rule), with a flowchart.
+- [`src/features`](../src/features/README.md): `pace` and the other decisions, with a flowchart.
 - [`src/runtime`](../src/runtime/README.md), [`src/program`](../src/program/README.md), [`src/facade`](../src/facade/README.md): the layers for the Effect shell, the wiring and the CLI.
 - [The design](plans/2026-11-14-agent-supervisor-design.md): Scope, Holds, Pacing, Usage ledger, Stages, Operations and recovery, Open items.
 - [The implementation plan](plans/2026-11-15-implementation-plan.md): what is authorized, what needs approval, what waits on a decision or a live test.
