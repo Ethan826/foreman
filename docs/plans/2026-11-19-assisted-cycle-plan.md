@@ -1730,3 +1730,43 @@ tentatively); read-only grants to the owner's toolchain caches are
 allowed per command; the L3 offline tests are the first configured
 check. The rulings are written into the proposal. The design revision
 and each slice need their own authorization, after dogfood-3b.
+
+## Prior-art miss and re-sweep (2026-11-23)
+
+Finding: a name search for the project (owner, 2026-11-23) found
+virtengine/bosun (npm `bosun`, first published 2026-02-19, 119 releases
+to date), an orchestrator of Codex and Claude executors with a PR
+lifecycle and Telegram control, and oddship/bosun, another agent
+orchestrator. The 2026-11-14 fit assessment compared three candidates
+(ccx-loop, Ralph, AgentsInTheCloud) from two read-only Sonnet agents,
+recorded no search method, and called itself a bounded pass; that pass
+became the basis for building foreman and was never widened. bosun
+existed nine months before it. Whether bosun or another tool meets
+foreman's requirements is not yet known.
+
+Owner ruling (2026-11-23): re-run the prior-art sweep with a written
+search method, every hit logged with how it was found, and each serious
+candidate judged against the requirements from its source, by one Opus
+agent; the question is whether foreman needs to be built. The live
+rerun and dogfood-3b wait for its report.
+
+Re-sweep result ([the sweep](2026-11-23-prior-art-sweep.md), one Opus
+agent, 397,210 tokens): about 560 hits logged with how each was found,
+about 160 cloned and read, none installed or run. No existing tool
+meets R1 (fixed Claude-implements, Codex-reviews roles with the owner's
+findings filter), R2 (subscription-window pacing with a reserve) and R3
+(owner-only approval gates) together, and none is close enough to
+adopt. Closest: awaywork (R2 meets; review and fix rounds auto-continue,
+a report with clear gates "counts as approved", the agent commits).
+Strongest gate: RodrigoRLS2/supervised-agent-orchestrator (Linux only,
+Telegram, no licence, no pacing). Best pacing gate: redline (fails
+closed on stale or missing readings; no review loop). virtengine/bosun
+auto-merges and launches with bypassPermissions. No engine can sit
+under a small layer without that layer undoing its autonomy, as the
+Ralph trial found. Worth borrowing: redline's and awaywork's pacing
+rules. Possible trial (needs its own authorization): redline as an
+observe-only admission gate compared with foreman's L1 and L2
+readings. The coordinator re-checked the decisive awaywork and redline
+cells against source. Sweep gaps: no direct PyPI search, a few
+closed-source products seen only in summaries, 15 results per GitHub
+query.
