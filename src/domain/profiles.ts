@@ -1,5 +1,5 @@
 // The two fixed permission profiles (plan "Profiles, environment and
-// briefs"; decision P4; design "Permission profiles"): the argv foreman
+// briefs"; decision P4; design "Permission profiles"): the argv tarlatan
 // gives Claude to implement or correct, and Codex to review. Both are data
 // built from a brief and the one file each needs, executable first. No
 // bypass flag appears in either (AGENTS.md), and neither resumes or

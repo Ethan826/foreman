@@ -1,7 +1,7 @@
 // The admission decision, pure (design "Admission rule", "Waivers",
 // "Spend-down override"; owner ruling 2026-11-17: decisions live in
 // Features, and Program only reads, writes and wires). Admission is
-// pacing over foreman's own records: it bounds foreman's launches and
+// pacing over tarlatan's own records: it bounds tarlatan's launches and
 // reservations given those records, not the provider's count or the
 // reserve.
 //

@@ -16,7 +16,7 @@ import type { GitOutput, RunGit } from "./git.ts"
 
 /** What `git worktree add` is asked to make. */
 export interface WorktreeAddition {
-  /** The short branch name to create, `foreman/<name>`. */
+  /** The short branch name to create, `tarlatan/<name>`. */
   readonly branch: string
   /** The absolute path of the new worktree. */
   readonly path: string
@@ -50,7 +50,7 @@ export interface AddedReads {
 }
 
 /** The lock reason `git worktree add --lock --reason` records. */
-const lockReason = "foreman"
+const lockReason = "tarlatan"
 
 /** git's separator between options and positional arguments. */
 const endOfOptions = "--"
@@ -105,7 +105,7 @@ export const probeBranchWith = (run: RunGit) => (ownerCheckout: string, branch: 
 }
 
 /**
- * Runs `git worktree add --lock --reason foreman -b <branch> -- <path>
+ * Runs `git worktree add --lock --reason tarlatan -b <branch> -- <path>
  * <base>` in the owner's checkout. The `--` keeps a path that starts with
  * `-` from reading as an option (git 2.50.1 accepts it there). A non-zero
  * exit fails with {@link GitCommandFailed} keeping args, exit code and

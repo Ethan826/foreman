@@ -1,6 +1,6 @@
 // The prechecks before creating the supervisor worktree (design
 // "Creation"; owner rulings on R2 and R3 of the B11a review): the
-// destination must be absolute, `refs/heads/foreman/<name>` must not exist
+// destination must be absolute, `refs/heads/tarlatan/<name>` must not exist
 // and nothing may be at the path. Pure and total over raw results that
 // Program reads through Runtime. An existing path is refused only when
 // this check runs; an empty directory that appears before `git worktree

@@ -1,5 +1,5 @@
 // Git's HOME through the production composition (batch review B02; plan
-// B11b ruling 2): foreman creates `<stateDir>/git-home` itself, fresh,
+// B11b ruling 2): tarlatan creates `<stateDir>/git-home` itself, fresh,
 // private (mode 0700) and empty, before any git command, and refuses one
 // that already holds anything, is a link, or is open to group or others.
 // It never clears an existing directory. The first case plants
@@ -26,7 +26,7 @@ import { cli, endToEndMillis, failureTag, type Layout, openedSession, withLayout
 /** The permission bits of a mode. */
 const permissionBits = 0o777
 
-/** Owner-only access, as foreman creates the home. */
+/** Owner-only access, as tarlatan creates the home. */
 const privateMode = 0o700
 
 /** Group and others may read and search. */
@@ -151,7 +151,7 @@ const openHomeLeftAlone = () =>
 
 describe("git's HOME in production", () => {
   it.effect("a planted HOME attributes file with a marker filter: every command refused, nothing runs", plantedHomeRefused, endToEndMillis)
-  it.effect("foreman creates a private, empty git-home before the first git command", freshHomeCreated, endToEndMillis)
+  it.effect("tarlatan creates a private, empty git-home before the first git command", freshHomeCreated, endToEndMillis)
   it.effect("an existing empty private git-home is used", emptyPrivateHomeKept, endToEndMillis)
   it.effect("a git-home that is a symbolic link is refused", homeRefused(linkedHome), endToEndMillis)
   it.effect("a git-home open to group or others is refused", homeRefused(openHome), endToEndMillis)

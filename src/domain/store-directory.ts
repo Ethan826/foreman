@@ -1,4 +1,4 @@
-// The directories foreman's stores live in (dogfood-1 finding): the
+// The directories tarlatan's stores live in (dogfood-1 finding): the
 // configured state directory, which holds the project log, the lock and
 // the target binding, and the ledger directory, which holds the owner's
 // shared ledger. A command that writes there creates a missing one itself,
@@ -12,7 +12,7 @@ import { Schema } from "effect"
 
 /**
  * Nothing is at the path. `parentPresent` says whether its parent
- * directory exists, following a link; only then may foreman create it.
+ * directory exists, following a link; only then may tarlatan create it.
  */
 export class StoreDirectoryAbsent extends Schema.TaggedClass<StoreDirectoryAbsent>()("StoreDirectoryAbsent", {
   parentPresent: Schema.Boolean,
@@ -48,10 +48,10 @@ export const StoreDirectoryReading = Schema.Union([StoreDirectoryAbsent, StoreDi
 /** One reading of a store directory's path; see {@link StoreDirectoryReading}. */
 export type StoreDirectoryReading = typeof StoreDirectoryReading.Type
 
-/** Nothing is at the path and its parent exists: foreman creates the directory. */
+/** Nothing is at the path and its parent exists: tarlatan creates the directory. */
 export class CreateStoreDirectory extends Schema.TaggedClass<CreateStoreDirectory>()("CreateStoreDirectory", {}) {}
 
-/** A real directory is at the path: foreman uses it as it is and never changes its mode. */
+/** A real directory is at the path: tarlatan uses it as it is and never changes its mode. */
 export class UseStoreDirectory extends Schema.TaggedClass<UseStoreDirectory>()("UseStoreDirectory", {}) {}
 
 /** What a command does with a store directory before it writes there. */
@@ -61,7 +61,7 @@ export type StoreDirectoryAction = typeof StoreDirectoryAction.Type
 
 /**
  * The store directory `directory` is missing and so is its parent
- * `parent`. Foreman creates only the last component, so nothing was
+ * `parent`. Tarlatan creates only the last component, so nothing was
  * created; the owner makes the parent.
  */
 export class StoreDirectoryParentMissing extends Schema.TaggedError<StoreDirectoryParentMissing>()(
@@ -72,8 +72,8 @@ export class StoreDirectoryParentMissing extends Schema.TaggedError<StoreDirecto
 /**
  * The store directory at `directory`, its resolved path, may not be used:
  * it is not a directory, it could not be read or created, its mode could
- * not be set to 0700 after foreman created it, or it is still missing
- * after foreman tried to create it. It is a symbolic link only when one
+ * not be set to 0700 after tarlatan created it, or it is still missing
+ * after tarlatan tried to create it. It is a symbolic link only when one
  * appeared there after the path was resolved. `reason` says which.
  * Nothing that was at the path before was changed.
  */

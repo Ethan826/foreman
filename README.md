@@ -1,8 +1,8 @@
-# foreman
+# tarlatan
 
-Foreman is a small personal supervisor for coding agents. It will drive unmodified Claude Code and Codex CLIs through tranches of work on one repository. Within a tranche, one agent implements, a fresh and independent process reviews, and the implementer corrects if the review asks for changes. Then the user approves before the next tranche starts. By default Claude implements and corrects and Codex reviews; the client for each role is configurable.
+Tarlatan is a small personal supervisor for coding agents. It will drive unmodified Claude Code and Codex CLIs through tranches of work on one repository. Within a tranche, one agent implements, a fresh and independent process reviews, and the implementer corrects if the review asks for changes. Then the user approves before the next tranche starts. By default Claude implements and corrects and Codex reviews; the client for each role is configurable.
 
-Foreman is meant to pace its launches against the user's subscription usage windows, start every step with fresh context, and keep durable checkpoints so a crash or restart does not lose its place.
+Tarlatan is meant to pace its launches against the user's subscription usage windows, start every step with fresh context, and keep durable checkpoints so a crash or restart does not lose its place.
 
 The [API reference](https://ethan826.github.io/foreman/) documents every exported declaration in `src/` from its TSDoc. CI rebuilds it on each push to `main`. For the design in plain words, read [docs/how-it-works.md](docs/how-it-works.md).
 
@@ -10,9 +10,9 @@ The [API reference](https://ethan826.github.io/foreman/) documents every exporte
 
 The owner approved the design at revision 6.1 on 2026-11-15. Its open items (O1 to O13 and a few others) stay open, and approving the design authorized no new code. The approved first code slice is project setup, Domain types, Format decoders for Claude and Codex output, the pure pacing function, and their tests. The pacing function in the code still follows revision 3 and has to be brought up to revision 6.1. Nothing runs agents yet. The usage ledger, holds, the review queue, worktrees, process control, permissions and recovery are designed but not approved for implementation and not written.
 
-Launch admission is pacing. Foreman launches a step only when its own records leave room: the highest recent usage reading, plus a reservation for every step it has started and not yet retired, plus the new step's estimate, must stay under a cap below 100 percent. That bounds what foreman launches. It does not keep the provider's usage count under the cap or guarantee that the reserve is left for the user, because readings can be old and a running agent can use more than its estimate.
+Launch admission is pacing. Tarlatan launches a step only when its own records leave room: the highest recent usage reading, plus a reservation for every step it has started and not yet retired, plus the new step's estimate, must stay under a cap below 100 percent. That bounds what tarlatan launches. It does not keep the provider's usage count under the cap or guarantee that the reserve is left for the user, because readings can be old and a running agent can use more than its estimate.
 
-Four live tests (L1 to L4) have not been run. L1 and L2 come first. They show whether foreman can read Claude and Codex usage on its own; without that, an unattended night gets about one Claude launch. Until L2 runs, the default policy lists no Codex windows, so every Codex launch would need a waiver.
+Four live tests (L1 to L4) have not been run. L1 and L2 come first. They show whether tarlatan can read Claude and Codex usage on its own; without that, an unattended night gets about one Claude launch. Until L2 runs, the default policy lists no Codex windows, so every Codex launch would need a waiver.
 
 The next steps, the open decisions and the live-test packages are in [the implementation plan](docs/plans/2026-11-15-implementation-plan.md).
 

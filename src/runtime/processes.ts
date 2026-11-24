@@ -2,7 +2,7 @@
 // evidence"): `ps -A -o pid,pgid,lstart,command`, returned as raw text;
 // Format decodes it (`src/format/ps.ts`). `ps` runs by absolute path with
 // exactly `LC_ALL=C` in its environment, so the lstart layout and the
-// header are the C locale's and nothing from foreman's environment
+// header are the C locale's and nothing from tarlatan's environment
 // reaches it. Without `TZ`, start times are in the system's local time,
 // the same for every reading. When stdout is not a terminal, BSD ps and
 // procps print the whole command line.

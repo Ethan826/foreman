@@ -1,4 +1,4 @@
-// `foreman status` creates nothing and writes nothing (review item B11;
+// `tarlatan status` creates nothing and writes nothing (review item B11;
 // plan "Commands and their prerequisites": `status` never takes the
 // lock and never writes). Run through the CLI's `main`, as the owner
 // runs it: a missing state is reported as missing and no file appears;
@@ -23,7 +23,7 @@ import { reading } from "../program/session-harness.ts"
 import { awaitExit, startChild } from "../runtime/child-process.ts"
 
 /** An environment in which no client binary can be found. */
-const noClients = { PATH: "/nonexistent-foreman-path" }
+const noClients = { PATH: "/nonexistent-tarlatan-path" }
 
 /** How long the other process holds the ledger's write lock, in milliseconds. */
 const holdMillis = 3_000
@@ -36,7 +36,7 @@ const busyMillis = 50
 
 /** Writes a configuration file whose state directory is `stateDir`, and returns its path. */
 const configIn = (dir: string, stateDir: string) => {
-  const path = `${dir}/foreman.json`
+  const path = `${dir}/tarlatan.json`
   const config = {
     projectId: "alpha",
     stateDir,
@@ -85,7 +85,7 @@ const existingState = (dir: string) =>
 
 const withDirectory = <A, E, R>(use: (dir: string) => Effect.Effect<A, E, R>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-status-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-status-`)),
     use,
     (dir) =>
       Effect.sync(() => {
@@ -156,7 +156,7 @@ const missingSharedLedgerEmpty = (dir: string) =>
     expect(filesOf(dir)).toEqual(before)
   })
 
-describe("foreman status", () => {
+describe("tarlatan status", () => {
   it.live("creates no file for a missing state", () => withDirectory(missingStateCreatesNothing))
   it.live("leaves an existing state's files as they were", () => withDirectory(existingStateUnchanged))
   it.live("reads the shared ledger in the ledger directory, and leaves it as it was", () =>

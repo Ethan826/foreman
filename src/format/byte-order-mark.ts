@@ -1,4 +1,4 @@
-// The byte order mark a JSON file of foreman's may begin with (focused
+// The byte order mark a JSON file of tarlatan's may begin with (focused
 // re-review finding 2). Editors on some systems write UTF-8 with a
 // leading mark, EF BB BF, and 9fee8a5 read the configuration and the
 // binding with or without one. The strict UTF-8 decoder keeps the mark as

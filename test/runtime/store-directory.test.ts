@@ -34,7 +34,7 @@ import { createStoreDirectory, readStoreDirectory } from "../../src/runtime/stor
 /** The permission bits of st_mode. */
 const permissionBits = 0o777
 
-/** The mode foreman creates a store directory with. */
+/** The mode tarlatan creates a store directory with. */
 const privateMode = 0o700
 
 /** A mode an existing directory keeps: group and others may read and search. */
@@ -62,7 +62,7 @@ const modeOf = (path: string) => lstatSync(path).mode & permissionBits
 /** Runs `use` in a fresh canonical temporary directory and removes it afterwards. */
 const inTemporary = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => realpathSync(mkdtempSync(`${tmpdir()}/foreman-store-dir-`))),
+    Effect.sync(() => realpathSync(mkdtempSync(`${tmpdir()}/tarlatan-store-dir-`))),
     use,
     (dir) =>
       Effect.sync(() => {

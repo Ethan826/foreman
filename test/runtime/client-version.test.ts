@@ -13,7 +13,7 @@ import { readClientVersionWith } from "../../src/runtime/client-version.ts"
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-version-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-version-`)),
     use,
     (dir) =>
       Effect.sync(() => {

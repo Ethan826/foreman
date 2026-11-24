@@ -82,13 +82,13 @@ const configWords = 2
  * exited (owner ruling on L01, 2026-11-20).
  */
 export const usage =
-  "usage: foreman --config <path> (worktree create | session open --tranche <id> --task <path> | " +
+  "usage: tarlatan --config <path> (worktree create | session open --tranche <id> --task <path> | " +
   "implement [--waive] | review [--waive] --attest | correct --findings <file> [--waive] --attest | " +
   "reject [--note <text>] | status | step-ended <opId> --grant <grantId> | " +
   "session close --abandoned|--interrupted [--note <text>] | session close --finished --attest [--note <text>])\n" +
-  "A launch waits until its client's output closes, and foreman never signals a client. If a launch does " +
+  "A launch waits until its client's output closes, and tarlatan never signals a client. If a launch does " +
   "not return after its client exited, a process the client started still holds its output: interrupt " +
-  "foreman, then run status, step-ended <opId> --grant <grantId>, then session close --interrupted."
+  "tarlatan, then run status, step-ended <opId> --grant <grantId>, then session close --interrupted."
 
 /** Reads `argv` (the words after the program) as an invocation, or says why not. */
 export const parseArguments = (argv: ReadonlyArray<string>): Result.Result<Invocation, UsageError> =>

@@ -31,7 +31,7 @@ const removeDir = (dir: string) =>
 
 // Runs `use` with a fresh temporary directory.
 const withDir = <A, E>(use: (dir: string) => Effect.Effect<A, E, Scope.Scope>) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-log-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-log-`)
   return Effect.ensuring(Effect.scoped(use(dir)), removeDir(dir))
 }
 const withLog = <A, E>(use: (log: ProjectLog, dir: string) => Effect.Effect<A, E, Scope.Scope>) =>

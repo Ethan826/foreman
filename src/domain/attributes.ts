@@ -17,7 +17,7 @@ import { GitText } from "./worktree.ts"
 
 /**
  * The object types of a tree entry (git-ls-tree(1)). The values are
- * foreman's own, distinct from the words git prints, which only the
+ * tarlatan's own, distinct from the words git prints, which only the
  * tree-listing decoder knows and maps to these.
  */
 export const TreeEntryTypes = { Blob: "blob-entry", Tree: "tree-entry", Commit: "commit-entry" } as const

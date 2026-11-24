@@ -21,7 +21,7 @@ export const { createWorktree, identifyWorktree } = worktreeProgram(emptyHome)
 /** The pre-B11b runner: git with the test process's whole environment and no overrides. */
 export const inheritedGit: RunGit = (cwd, args) => startGit({ cwd, args, env: process.env })
 
-/** The request every hazard test makes: `<dir>/worktree` on `foreman/t` from the owner's HEAD. */
+/** The request every hazard test makes: `<dir>/worktree` on `tarlatan/t` from the owner's HEAD. */
 export const request = (owner: string, dir: string) => ({
   ownerCheckout: owner,
   path: `${dir}/worktree`,
@@ -31,12 +31,12 @@ export const request = (owner: string, dir: string) => ({
 
 /**
  * `git worktree add` of the owner's HEAD at `<dir>/worktree` on
- * `foreman/t` through `run`, with no prechecks and no attribute check.
+ * `tarlatan/t` through `run`, with no prechecks and no attribute check.
  */
 export const addWith = (run: RunGit) => (dir: string, owner: string) =>
   Effect.gen(function* () {
     const base = Revision.make(yield* gitWith(run)(owner, "rev-parse", "HEAD"))
-    yield* addWorktreeWith(run)(owner, { branch: "foreman/t", path: `${dir}/worktree`, base })
+    yield* addWorktreeWith(run)(owner, { branch: "tarlatan/t", path: `${dir}/worktree`, base })
   })
 
 /**

@@ -1,7 +1,7 @@
 // The check after creating the supervisor worktree (owner ruling 1 on
 // B11a, as the coordinator read it): the new worktree's top level must be
 // the requested path with symlinks resolved, and its HEAD must be
-// `refs/heads/foreman/<name>`. The recorded path is git's top level, so
+// `refs/heads/tarlatan/<name>`. The recorded path is git's top level, so
 // this check ties that record to the worktree that was asked for. Pure;
 // Program runs git and the decoders.
 import { Result } from "effect"
@@ -11,7 +11,7 @@ import { WorktreeNotAsCreated, localBranchRef } from "../domain/worktree.ts"
 export interface RequestedWorktree {
   /** The requested path with symlinks resolved (`realpath` after the add). */
   readonly resolvedPath: string
-  /** The short branch name, `foreman/<name>`. */
+  /** The short branch name, `tarlatan/<name>`. */
   readonly branch: string
 }
 

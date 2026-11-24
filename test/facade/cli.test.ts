@@ -22,7 +22,7 @@ import {
   UsageError,
 } from "../../src/facade/cli-arguments.ts"
 
-const config = ["--config", "/etc/foreman.json"]
+const config = ["--config", "/etc/tarlatan.json"]
 
 const parsed = (...words: ReadonlyArray<string>) => Result.getOrUndefined(parseArguments([...config, ...words]))
 
@@ -34,7 +34,7 @@ const refused = (...argv: ReadonlyArray<string>) => {
 
 describe("parseArguments", () => {
   it("parses worktree create", () => {
-    expect(parsed("worktree", "create")).toEqual({ configPath: "/etc/foreman.json", command: new CreateWorktree() })
+    expect(parsed("worktree", "create")).toEqual({ configPath: "/etc/tarlatan.json", command: new CreateWorktree() })
   })
 
   it("parses session open with its tranche and task, in either order", () => {
@@ -68,7 +68,7 @@ describe("parseArguments", () => {
   it("requires --config <path> first", () => {
     refused("status")
     refused("--config")
-    refused("status", "--config", "/etc/foreman.json")
+    refused("status", "--config", "/etc/tarlatan.json")
   })
 
   it("parses review with or without --waive and --attest", () => {
@@ -149,8 +149,8 @@ describe("parseArguments", () => {
 
 describe("usage", () => {
   it("states the owner's rule for a launch that does not return after its client exits", () => {
-    expect(usage).toMatch(/interrupt foreman/)
+    expect(usage).toMatch(/interrupt tarlatan/)
     expect(usage).toMatch(/status, step-ended <opId> --grant <grantId>, then session close --interrupted/)
-    expect(usage).toMatch(/foreman never signals/)
+    expect(usage).toMatch(/tarlatan never signals/)
   })
 })

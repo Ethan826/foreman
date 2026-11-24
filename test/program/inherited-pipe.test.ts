@@ -1,8 +1,8 @@
 // A descendant that keeps the client's stdout open after the leader
-// exits (limit L01; owner ruling of 2026-11-20). Foreman keeps waiting
+// exits (limit L01; owner ruling of 2026-11-20). Tarlatan keeps waiting
 // for the pipes to close and never signals, so the command does not
 // return while the descendant lives. The owner's way out is to interrupt
-// foreman: the attempt is left incomplete, `status` shows it, and
+// tarlatan: the attempt is left incomplete, `status` shows it, and
 // `step-ended` and `session close --interrupted` close it. A real `sh`
 // leader starts a background `sh` that inherits stdout, then exits; the
 // descendant ends on its own, and each test waits for it.
@@ -137,7 +137,7 @@ describe("a descendant holding the client's inherited stdout", () => {
   it.live("keeps the command waiting after the leader exits, until the descendant ends", () =>
     withHarness({}, commandWaits), testTimeoutMillis,
   )
-  it.live("leaves an incomplete attempt that status, step-ended and close --interrupted handle when foreman is interrupted", () =>
+  it.live("leaves an incomplete attempt that status, step-ended and close --interrupted handle when tarlatan is interrupted", () =>
     withHarness({}, interruptLeavesIncomplete), testTimeoutMillis,
   )
 })

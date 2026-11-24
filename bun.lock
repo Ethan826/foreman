@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "foreman",
+      "name": "tarlatan",
       "dependencies": {
         "effect": "4.1.4",
       },

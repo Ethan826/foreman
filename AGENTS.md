@@ -1,6 +1,6 @@
-# Foreman: agent instructions
+# Tarlatan: agent instructions
 
-Foreman is a small personal supervisor. It drives unmodified Claude Code
+Tarlatan is a small personal supervisor. It drives unmodified Claude Code
 and Codex clients through tranches of work on one target repository:
 Claude implements, Codex reviews, Claude corrects, and the user approves
 before the next tranche. It paces launches against the user's
@@ -16,7 +16,7 @@ attribute line) and the assisted cycle, MVP-D0 slices A1 and A2
 (`docs/plans/2026-11-19-assisted-cycle-plan.md`), corrected for the
 batch review's findings and awaiting its re-review. Production git runs
 through `cleanGit`, `pinnedGitWith` and `snapshotGitWith` in
-`src/runtime/git.ts`, with a private git home that foreman creates and
+`src/runtime/git.ts`, with a private git home that tarlatan creates and
 checks. Landing, push, the L3 subset's live run, the rest of B11 and B12
 to B18 each need the owner's authorization; scoping a slice does not
 authorize it.
@@ -107,7 +107,7 @@ decoder.
 ## Dependency watch
 
 `effect/workflow` and `effect/cluster` are `@stability unstable`. The
-owner's ruling on design revision 4 (2026-11-15) keeps foreman's
+owner's ruling on design revision 4 (2026-11-15) keeps tarlatan's
 hand-built log and recovery on SQLite instead of building on them; the
 tripwire stays so the question can be reopened. `test/docs/stability-watch.test.ts`
 fails when the installed effect's stability tags, module list or version
@@ -124,10 +124,10 @@ record conceptual provenance. Waxwing is not a dependency or submodule.
 The first fit assessment (2026-11-14) recorded no search method and
 missed tools that already existed. The 2026-11-23 re-sweep
 (`docs/plans/2026-11-23-prior-art-sweep.md`) logged every hit with how it
-was found and read the closest tools from source; none meets foreman's
+was found and read the closest tools from source; none meets tarlatan's
 roles, pacing and approval requirements together.
 `docs/plans/2026-11-23-prior-art-lessons.md` maps what those tools do well
-to foreman's parts.
+to tarlatan's parts.
 
 - Before designing or planning a component (a design revision, a slice,
   a proposal), read the lessons note's rows for that area and cite the

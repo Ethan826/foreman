@@ -38,15 +38,15 @@ const createdOnBranchLocked = (dir: string, owner: string) =>
     const commonDir = yield* git(owner, "rev-parse", "--absolute-git-dir")
     expect(Schema.is(WorktreeCreated)(created)).toBe(true)
     expect(created.path).toBe(top)
-    expect(created.branch).toBe("foreman/t")
+    expect(created.branch).toBe("tarlatan/t")
     expect(created.base).toBe(base)
     expect(created.commonDir).toBe(commonDir)
     expect(created.gitDir).toBe(`${commonDir}/worktrees/worktree`)
     const listing = yield* git(owner, "worktree", "list", "--porcelain")
     expect(listing).toContain(
-      `worktree ${top}\nHEAD ${base}\nbranch refs/heads/foreman/t\nlocked foreman`,
+      `worktree ${top}\nHEAD ${base}\nbranch refs/heads/tarlatan/t\nlocked tarlatan`,
     )
-    expect(yield* git(created.path, "symbolic-ref", "HEAD")).toBe("refs/heads/foreman/t")
+    expect(yield* git(created.path, "symbolic-ref", "HEAD")).toBe("refs/heads/tarlatan/t")
   })
 
 const startsFromGivenRevision = (dir: string, owner: string) =>
@@ -65,9 +65,9 @@ const startsFromGivenRevision = (dir: string, owner: string) =>
 
 const existingBranchRefused = (dir: string, owner: string) =>
   Effect.gen(function* () {
-    yield* git(owner, "branch", "foreman/t")
+    yield* git(owner, "branch", "tarlatan/t")
     const refused = yield* Effect.flip(createWorktree(request(owner, `${dir}/worktree`)))
-    expect(refused).toEqual(new WorktreeBranchExists({ branch: "foreman/t" }))
+    expect(refused).toEqual(new WorktreeBranchExists({ branch: "tarlatan/t" }))
     expect(existsSync(`${dir}/worktree`)).toBe(false)
   })
 
@@ -77,7 +77,7 @@ const existingPathRefused = (dir: string, owner: string) =>
     mkdirSync(path)
     const refused = yield* Effect.flip(createWorktree(request(owner, path)))
     expect(refused).toEqual(new WorktreePathExists({ path }))
-    const branches = yield* git(owner, "branch", "--list", "foreman/*")
+    const branches = yield* git(owner, "branch", "--list", "tarlatan/*")
     expect(branches).toBe("")
   })
 
@@ -99,7 +99,7 @@ const createdWithNewline = (dir: string, owner: string) =>
     expect(created.path).toContain("\n")
     expect(created.gitDir).toBe(yield* git(path, "rev-parse", "--absolute-git-dir"))
     expect(created.commonDir).toBe(yield* git(owner, "rev-parse", "--absolute-git-dir"))
-    expect(yield* git(path, "symbolic-ref", "HEAD")).toBe("refs/heads/foreman/t")
+    expect(yield* git(path, "symbolic-ref", "HEAD")).toBe("refs/heads/tarlatan/t")
   })
 
 const createdThroughSymlink = (dir: string, owner: string) =>

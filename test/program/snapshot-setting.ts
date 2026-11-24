@@ -20,7 +20,7 @@ export interface Setting {
 
 /**
  * Commits `a.txt`, `run.sh` (executable) and `link` (to `a.txt`) in the
- * owner's repository, adds `<dir>/worktree` on `foreman/t` at that commit,
+ * owner's repository, adds `<dir>/worktree` on `tarlatan/t` at that commit,
  * records its identity and makes `<dir>/state`.
  */
 export const supervisor = (dir: string, owner: string) =>
@@ -33,7 +33,7 @@ export const supervisor = (dir: string, owner: string) =>
     yield* git(owner, "commit", "--quiet", "-m", "fixtures")
     const base = Revision.make(yield* git(owner, "rev-parse", "HEAD"))
     const path = `${dir}/worktree`
-    yield* addWorktreeWith(cleanRun)(owner, { branch: "foreman/t", path, base })
+    yield* addWorktreeWith(cleanRun)(owner, { branch: "tarlatan/t", path, base })
     const identity = {
       path: yield* git(path, "rev-parse", "--show-toplevel"),
       gitDir: yield* git(path, "rev-parse", "--absolute-git-dir"),

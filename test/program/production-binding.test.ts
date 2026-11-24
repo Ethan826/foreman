@@ -1,5 +1,5 @@
 // The target binding through the production composition (batch review
-// B04, and B09 for the ledger): at first use foreman records the project
+// B04, and B09 for the ledger): at first use tarlatan records the project
 // id, the owner's checkout, the supervisor worktree's path and branch
 // name, the ledger and the attribute allowance, canonical, in the state
 // directory. A configuration that later names the same state directory
@@ -69,7 +69,7 @@ const refusedAfterChange = (change: Change) => () =>
       yield* succeeded(layout, ["session", "close", "--abandoned"], { config: copied })
       expect(existsSync(`${layout.root}/ledger2/ledger.sqlite`)).toBe(false)
       expect(existsSync(`${layout.root}/elsewhere`)).toBe(false)
-      expect(yield* git(layout.owner, "branch", "--list", "foreman/u")).toBe("")
+      expect(yield* git(layout.owner, "branch", "--list", "tarlatan/u")).toBe("")
     }),
   )
 
@@ -82,7 +82,7 @@ const otherTargetUntouched = () =>
       expect(failureTag(run)).toBe("TargetMismatch")
       const listing = yield* git(`${layout.root}/owner2`, "worktree", "list", "--porcelain")
       expect(listing.split("\n").filter((line) => line.startsWith("worktree "))).toEqual([`worktree ${layout.root}/owner2`])
-      expect(yield* git(`${layout.root}/owner2`, "branch", "--list", "foreman/*")).toBe("")
+      expect(yield* git(`${layout.root}/owner2`, "branch", "--list", "tarlatan/*")).toBe("")
     }),
   )
 

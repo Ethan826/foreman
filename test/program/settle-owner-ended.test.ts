@@ -28,7 +28,7 @@ const grant = new Grant({
 })
 
 const withLedger = <A, E>(use: (store: LedgerStore) => Effect.Effect<A, E, Scope.Scope>) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-owner-ended-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-owner-ended-`)
   return Effect.ensuring(
     Effect.scoped(Effect.flatMap(openLedger(`${dir}/ledger.sqlite`, busyMillis), use)),
     Effect.sync(() => {

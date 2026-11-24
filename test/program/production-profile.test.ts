@@ -1,5 +1,5 @@
 // Claude's editing profile through the production composition (batch
-// review B03; owner ruling of 2026-11-20): foreman writes the settings
+// review B03; owner ruling of 2026-11-20): tarlatan writes the settings
 // file itself, from the fixed template bound to the recorded supervisor
 // worktree, publishes it in the state directory before admission, and
 // launches Claude with exactly those bytes. The configuration cannot
@@ -97,7 +97,7 @@ const expectedProfile = (worktree: string, directories: GitDirectories) => ({
   disableClaudeAiConnectors: true,
 })
 
-/** Where foreman publishes the profile. */
+/** Where tarlatan publishes the profile. */
 const publishedPath = (layout: Layout) => `${layout.state}/claude-settings.json`
 
 /** Opens a session, plants `planted` at the published path, and runs `implement --waive`. */

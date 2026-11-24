@@ -24,9 +24,11 @@ import {
 
 /**
  * The recorded worktree, as `WorktreeCreated` holds it: its path,
- * compared exactly with the listing's; its short branch name
- * (`foreman/<name>`), whose ref `refs/heads/<branch>` the listing must
- * show; and its git identity. Every field is non-empty text.
+ * compared exactly with the listing's; its short branch name, taken
+ * verbatim as recorded at creation, whose ref `refs/heads/<branch>` the
+ * listing must show; and its git identity. The check assumes no branch
+ * prefix, so a worktree created under an earlier prefix still passes.
+ * Every field is non-empty text.
  */
 export const RecordedWorktree = Schema.Struct({
   path: GitText,

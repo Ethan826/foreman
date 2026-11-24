@@ -66,7 +66,7 @@ declare module "node:child_process" {
   }
 
   /**
-   * A child started by {@link spawn}. Only the members foreman uses are
+   * A child started by {@link spawn}. Only the members tarlatan uses are
    * declared; `kill` is deliberately absent.
    */
   export interface ChildProcess {

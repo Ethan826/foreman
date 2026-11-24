@@ -34,7 +34,7 @@ const mtimeOf = (path: string) => statSync(path, { bigint: false }).mtimeMs
 const bytesOf = (path: string) => Array.from(readFileSync(path))
 
 const withDir = <A, E>(use: (dir: string) => Effect.Effect<A, E, Scope.Scope>) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-read-files-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-read-files-`)
   return Effect.ensuring(
     Effect.scoped(use(dir)),
     Effect.sync(() => {

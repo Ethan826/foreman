@@ -35,7 +35,7 @@ export const evidenceCaveat =
   "Advisory evidence, not proof: a listed group may be an unrelated one reusing the id, " +
   "a descendant that left the group is not listed, and nothing listed does not establish " +
   "that the client's processes stopped. An attempt with no recorded launch may still have " +
-  "started, since the client is spawned before its launch is recorded. Foreman never signals."
+  "started, since the client is spawned before its launch is recorded. Tarlatan never signals."
 
 /** The process listing could not be read or decoded; `reason` says why. */
 export class EvidenceUnavailable extends Schema.TaggedClass<EvidenceUnavailable>()("EvidenceUnavailable", {

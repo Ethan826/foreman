@@ -193,7 +193,7 @@ export const withHarness = <A, E>(
   options: Partial<HarnessOptions>,
   use: (harness: Harness) => Effect.Effect<A, E, Scope.Scope>,
 ) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-session-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-session-`)
   return Effect.ensuring(
     Effect.scoped(Effect.flatMap(build(dir, { ...defaults, ...options }), use)),
     Effect.sync(() => {

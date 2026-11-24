@@ -11,13 +11,13 @@ export const GitText = Schema.String.check(Schema.isNonEmpty())
 /** A non-empty path or ref name; see {@link GitText}. */
 export type GitText = typeof GitText.Type
 
-/** The prefix of the supervisor's branch: `foreman/<name>` (design "Branch"). */
-export const supervisorBranchPrefix = "foreman/"
+/** The prefix of the supervisor's branch: `tarlatan/<name>` (design "Branch"). */
+export const supervisorBranchPrefix = "tarlatan/"
 
 /** The prefix git gives a local branch's full ref name. */
 export const localBranchRefPrefix = "refs/heads/"
 
-/** The supervisor's branch for a configured `name`: `foreman/<name>`. */
+/** The supervisor's branch for a configured `name`: `tarlatan/<name>`. */
 export const supervisorBranch = (name: string): string => `${supervisorBranchPrefix}${name}`
 
 /** The full ref name of local branch `branch`: `refs/heads/<branch>`. */
@@ -179,7 +179,7 @@ export class WorktreeRecordInvalid extends Schema.TaggedError<WorktreeRecordInva
 /**
  * Creation found the new worktree other than requested (owner ruling 1 on
  * B11a): its top level is not the requested path with symlinks resolved,
- * or its HEAD is not `refs/heads/foreman/<name>`. `headRef` is what
+ * or its HEAD is not `refs/heads/tarlatan/<name>`. `headRef` is what
  * `rev-parse --symbolic-full-name HEAD` printed. The worktree is left in
  * place, locked; nothing is cleaned up.
  */

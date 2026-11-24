@@ -1,6 +1,6 @@
 // `status` with no `ledgerDir` configured and HOME unset (follow-up
 // review at 3b72efc, finding 4; owner ruling of 2026-11-20). The default
-// ledger directory `<HOME>/.foreman` cannot be resolved, which status
+// ledger directory `<HOME>/.tarlatan` cannot be resolved, which status
 // reports as a finding instead of failing before it reads the log. With
 // a binding recorded it runs on the recorded target and reads that
 // target's ledger; with none it shows the log and chooses no ledger. As

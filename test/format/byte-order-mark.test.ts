@@ -9,7 +9,7 @@ import { Result } from "effect"
 import { Clients } from "../../src/domain/clients.ts"
 import { ProjectId } from "../../src/domain/ids.ts"
 import type { TargetBinding } from "../../src/domain/target.ts"
-import { decodeForemanConfig } from "../../src/format/foreman-config.ts"
+import { decodeTarlatanConfig } from "../../src/format/tarlatan-config.ts"
 import { decodeTargetBinding, encodeTargetBinding } from "../../src/format/target-binding.ts"
 
 /** U+FEFF, the byte order mark once decoded. */
@@ -33,7 +33,7 @@ const binding = (ownerCheckout: string): TargetBinding => ({
   attributeAllowance: { rootLines: [] },
 })
 
-const ownerOf = (text: string) => Result.map(decodeForemanConfig(text), (decoded) => decoded.ownerCheckout)
+const ownerOf = (text: string) => Result.map(decodeTarlatanConfig(text), (decoded) => decoded.ownerCheckout)
 
 describe("a leading byte order mark", () => {
   it("is accepted at the start of the configuration", () => {
@@ -47,12 +47,12 @@ describe("a leading byte order mark", () => {
   })
 
   it("is dropped only once: a second mark is refused", () => {
-    expect(Result.isFailure(decodeForemanConfig(`${mark}${mark}${config("/owner")}`))).toBe(true)
+    expect(Result.isFailure(decodeTarlatanConfig(`${mark}${mark}${config("/owner")}`))).toBe(true)
     expect(Result.isFailure(decodeTargetBinding(`${mark}${mark}${encodeTargetBinding(binding("/owner"))}`))).toBe(true)
   })
 
   it("is not dropped after leading whitespace", () => {
-    expect(Result.isFailure(decodeForemanConfig(` ${mark}${config("/owner")}`))).toBe(true)
+    expect(Result.isFailure(decodeTarlatanConfig(` ${mark}${config("/owner")}`))).toBe(true)
     expect(Result.isFailure(decodeTargetBinding(` ${mark}${encodeTargetBinding(binding("/owner"))}`))).toBe(true)
   })
 

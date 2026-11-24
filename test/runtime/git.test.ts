@@ -13,7 +13,7 @@ import { cleanGitWith, pinnedGitWith, startGit, type GitInvocation, type StartGi
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-git-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-git-`)),
     use,
     (dir) =>
       Effect.sync(() => {

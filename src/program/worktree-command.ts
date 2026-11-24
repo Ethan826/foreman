@@ -1,4 +1,4 @@
-// `foreman worktree create`: creates the supervisor worktree with
+// `tarlatan worktree create`: creates the supervisor worktree with
 // `worktreeProgram`'s creation (design "Supervisor worktree", plan B11a
 // to B11d) and records it, because a session needs a recorded worktree.
 // This command is a deviation from plan "Slice A1", whose boundary does

@@ -2975,7 +2975,7 @@ lock="warning: Unable to create '$rk/owner/.git/worktrees/worktree/index.lock': 
 c6_on_rk 3 L3_STANDIN_PROSE="$lock"
 expect "an index.lock warning in the agent's prose alone leaves C6 at PASS" \
   '[ "$(outcome "$rk" c6-index-a3)" = PASS ] && grep -q "index.lock" "$rk/out/c6-index-a3.jsonl"'
-c6_on_rk 4 L3_STANDIN_PROSE="$lock" L3_STANDIN_STATUS_TEXT="On branch foreman/l3
+c6_on_rk 4 L3_STANDIN_PROSE="$lock" L3_STANDIN_STATUS_TEXT="On branch tarlatan/l3
 nothing to commit, working tree clean"
 expect "the prose warning beside a git status result that lacks the state scores FAIL, not INCONCLUSIVE or PASS" \
   '[ "$(outcome "$rk" c6-index-a4)" = FAIL ] && grep -q "^- FAIL: attempt 1 (.git status.): .* does not equal the reference" "$rk/out/c6-index-a4.score" && ! grep -q "^- INCONCLUSIVE" "$rk/out/c6-index-a4.score"'
@@ -3020,7 +3020,7 @@ expect "an untracked directory made before the run is derived as git lists it, a
 # Changed after the review of 6ae20c5 (findings 4 and 5): with the state
 # derived by hand, a git directory unlike setup's left it underived
 # (INCONCLUSIVE); git's own reference run reads whatever is there.
-cp -p "$rk/owner/.git/refs/heads/foreman/l3" "$rk/owner/.git/refs/heads/l3-extra"
+cp -p "$rk/owner/.git/refs/heads/tarlatan/l3" "$rk/owner/.git/refs/heads/l3-extra"
 c6_on_rk 14
 rm "$rk/owner/.git/refs/heads/l3-extra"
 expect "a ref added under owner/.git before the run leaves C6 at PASS against the reference" \

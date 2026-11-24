@@ -12,7 +12,7 @@ import { cleanRun, git, makeRepo } from "../runtime/git-repo.ts"
 export const madeUpHead = Revision.make("e".repeat(40))
 
 /** The branch of the supervisor worktree. */
-const branch = "foreman/t"
+const branch = "tarlatan/t"
 
 /** A recorded worktree and the revision its check reports as HEAD. */
 export interface RecordedSetting {

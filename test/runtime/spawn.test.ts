@@ -3,7 +3,7 @@
 // stdout streamed as lines, every byte of output appended to the raw
 // file, the leader's start time read once, and the exit reported. Every
 // child here ends on its own (by finishing, by a release file, or by
-// signaling itself), and every test waits for its exit. Foreman never
+// signaling itself), and every test waits for its exit. Tarlatan never
 // signals.
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Fiber, Option, Result, Schema, Stream } from "effect"
@@ -25,7 +25,7 @@ import {
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-spawn-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-spawn-`)),
     use,
     (dir) =>
       Effect.sync(() => {

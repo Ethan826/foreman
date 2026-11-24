@@ -19,7 +19,7 @@ import {
   StoreDirectoryUnreadable,
 } from "../domain/store-directory.ts"
 
-/** The mode foreman creates a store directory with: owner read, write and search. */
+/** The mode tarlatan creates a store directory with: owner read, write and search. */
 const privateMode = 0o700
 
 /** The reason recorded when a thrown value carries no message. */

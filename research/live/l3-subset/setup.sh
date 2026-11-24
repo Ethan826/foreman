@@ -145,7 +145,7 @@ www="$scratch/www"
 out="$scratch/out"
 settings="$scratch/claude-settings.json"
 done_marker="$scratch/.l3-setup-done"
-branch="foreman/l3"
+branch="tarlatan/l3"
 empty_tree=4b825dc642cb6eb9a060e54bf8d69288fbe24904
 
 # The clean git environment of src/runtime/git.ts (cleanGitEnvironment and
@@ -155,8 +155,8 @@ cleangit() {
   env -i PATH=/usr/bin:/bin HOME="$home" GIT_CONFIG_NOSYSTEM=1 \
     GIT_CONFIG_GLOBAL=/dev/null GIT_ATTR_SOURCE="$empty_tree" \
     git -c core.hooksPath=/dev/null -c core.fsmonitor=false \
-    -c commit.gpgsign=false -c user.name=foreman-l3 \
-    -c user.email=foreman-l3@invalid -c init.defaultBranch=main "$@"
+    -c commit.gpgsign=false -c user.name=tarlatan-l3 \
+    -c user.email=tarlatan-l3@invalid -c init.defaultBranch=main "$@"
 }
 
 for created in home outside www out state; do
@@ -234,7 +234,7 @@ cleangit -C "$owner" push --quiet origin main
 # says: locked, on a new branch, at the owner's HEAD. The root is already
 # canonical, so the worktree path is too.
 base=$(cleangit -C "$owner" rev-parse HEAD)
-cleangit -C "$owner" worktree add --quiet --lock --reason foreman -b "$branch" "$worktree" "$base"
+cleangit -C "$owner" worktree add --quiet --lock --reason tarlatan -b "$branch" "$worktree" "$base"
 
 git_dir=$(cleangit -C "$worktree" rev-parse --absolute-git-dir)
 common_dir=$(cleangit -C "$worktree" rev-parse --path-format=absolute --git-common-dir)

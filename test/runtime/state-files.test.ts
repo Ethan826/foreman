@@ -12,7 +12,7 @@ import { StateFileFailed, stateFiles } from "../../src/runtime/state-files.ts"
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-state-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-state-`)),
     use,
     (dir) =>
       Effect.sync(() => {

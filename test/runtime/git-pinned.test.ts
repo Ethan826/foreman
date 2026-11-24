@@ -31,14 +31,14 @@ interface Setting {
 }
 
 /**
- * Adds `<dir>/worktree` on `foreman/t`, records its identity, makes the
+ * Adds `<dir>/worktree` on `tarlatan/t`, records its identity, makes the
  * decoy at `<dir>/decoy`, and gives each a distinct config key and
  * untracked file.
  */
 const supervisorAndDecoy = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const base = Revision.make(yield* git(owner, "rev-parse", "HEAD"))
-    yield* addWorktreeWith(cleanRun)(owner, { branch: "foreman/t", path: `${dir}/worktree`, base })
+    yield* addWorktreeWith(cleanRun)(owner, { branch: "tarlatan/t", path: `${dir}/worktree`, base })
     const recorded = {
       path: yield* git(`${dir}/worktree`, "rev-parse", "--show-toplevel"),
       gitDir: yield* git(`${dir}/worktree`, "rev-parse", "--absolute-git-dir"),
@@ -61,7 +61,7 @@ const readings = (run: RunGit, setting: Setting) =>
   })
 
 /** What the three reads give in the recorded supervisor worktree. */
-const supervisorReadings = { head: "refs/heads/foreman/t", where: "owner", untracked: "only-in-supervisor" }
+const supervisorReadings = { head: "refs/heads/tarlatan/t", where: "owner", untracked: "only-in-supervisor" }
 
 /** Plants a redirection after the identity is recorded. */
 type Plant = (setting: Setting) => Effect.Effect<void, unknown>
@@ -128,7 +128,7 @@ describe("the pinned runner reads the recorded worktree after a redirection", ()
 /** Runs `use` with GIT_DIR, GIT_WORK_TREE and GIT_COMMON_DIR naming the decoy, and one parent-only variable. */
 const underHostileParent = <A, E>(decoy: string, use: Effect.Effect<A, E>) =>
   withParentEnvironment("GIT_DIR", `${decoy}/.git`, withParentEnvironment("GIT_WORK_TREE", decoy,
-    withParentEnvironment("GIT_COMMON_DIR", `${decoy}/.git`, withParentEnvironment("FOREMAN_PARENT_ONLY", "leaked", use))))
+    withParentEnvironment("GIT_COMMON_DIR", `${decoy}/.git`, withParentEnvironment("TARLATAN_PARENT_ONLY", "leaked", use))))
 
 /**
  * The readings through `run`, with the hostile parent environment set
@@ -163,7 +163,7 @@ const isPinnedVariable = (line: string) =>
   line.startsWith("GIT_DIR=") || line.startsWith("GIT_WORK_TREE=") || line.startsWith("GIT_COMMON_DIR=")
 
 /** Whether a line sets the variable only the parent environment has. */
-const isParentOnly = (line: string) => line.startsWith("FOREMAN_PARENT_ONLY=")
+const isParentOnly = (line: string) => line.startsWith("TARLATAN_PARENT_ONLY=")
 
 const inheritedReadsDecoy = (dir: string, owner: string) =>
   Effect.gen(function* () {
@@ -179,7 +179,7 @@ const pinnedReadsRecorded = (dir: string, owner: string) =>
 const inheritedChildLeaks = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const { lines } = yield* childEnvironment(() => inheritedGit)(dir, owner)
-    expect(lines).toContain("FOREMAN_PARENT_ONLY=leaked")
+    expect(lines).toContain("TARLATAN_PARENT_ONLY=leaked")
   })
 
 const pinnedChildRecorded = (dir: string, owner: string) =>

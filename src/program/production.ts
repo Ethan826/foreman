@@ -31,7 +31,7 @@ import { allocationsInFallback } from "../features/admission.ts"
 import { ownerOnly } from "../features/counting.ts"
 import { defaultPolicy } from "../domain/policy.ts"
 import { type Role, Roles } from "../domain/roles.ts"
-import type { ForemanConfig } from "../format/foreman-config.ts"
+import type { TarlatanConfig } from "../format/tarlatan-config.ts"
 import { startTimeOf } from "../format/ps.ts"
 import { readClientVersionWith } from "../runtime/client-version.ts"
 import { pinnedGitWith, startGit } from "../runtime/git.ts"
@@ -71,7 +71,7 @@ export const initialEstimates: Readonly<Record<Role, number>> = {
 
 /** Everything a command runs with in production. */
 export interface Production {
-  readonly config: ForemanConfig
+  readonly config: TarlatanConfig
   /** The target in force: the configured one, which the binding records. */
   readonly target: TargetBinding
   readonly context: SessionContext
@@ -79,7 +79,7 @@ export interface Production {
   readonly worktree: WorktreeProgram
 }
 
-/** The production factory's signature: the configuration file and foreman's own environment. */
+/** The production factory's signature: the configuration file and tarlatan's own environment. */
 export type ProductionFactory = (
   configPath: string,
   environment: Readonly<Record<string, string | undefined>>,
@@ -90,7 +90,7 @@ export type ProductionFactory = (
  * every launch and handoff, `worktree create`, `session open` and
  * `session close --finished`. It records the target binding at first use
  * and fails with `TargetMismatch` when the configuration names another
- * target (batch review B04). `environment` is foreman's own, from which a
+ * target (batch review B04). `environment` is tarlatan's own, from which a
  * client gets everything but `GIT_*` (decision P2). It settles the target
  * (production-target.ts): a recorded binding compared first, so a
  * mismatch creates nothing (owner finding F10), then the state and ledger

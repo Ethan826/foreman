@@ -8,7 +8,7 @@ import { chmodSync, lstatSync, mkdirSync, readdirSync } from "node:fs"
 import { userInfo } from "node:os"
 import { HomeAbsent, HomeFound, type HomeReading, HomeUnreadable } from "../domain/git-home.ts"
 
-/** The mode foreman creates the home with: owner read, write and search. */
+/** The mode tarlatan creates the home with: owner read, write and search. */
 const privateMode = 0o700
 
 /** The permission bits of st_mode. */
@@ -19,7 +19,7 @@ const unknownReason = "unknown error"
 
 /**
  * What is at `path`: nothing (ENOENT), or the entry's kind, permission
- * bits, owner, foreman's own user id and, for a directory that is not a
+ * bits, owner, tarlatan's own user id and, for a directory that is not a
  * link, how many names it holds. Any other error is
  * {@link HomeUnreadable}. Never fails.
  */

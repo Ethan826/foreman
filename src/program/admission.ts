@@ -2,7 +2,7 @@
 // rule", "Grant lifecycle"). Program only reads, writes and wires: each
 // function runs one ledger transaction, asks a pure Features function what
 // to do, and writes what it returns (owner ruling 2026-11-17). Admission is
-// pacing over foreman's own records, not a provider-usage guarantee.
+// pacing over tarlatan's own records, not a provider-usage guarantee.
 import { Array as Arr, Effect, Match, Schema } from "effect"
 import type { ProjectEvent } from "../domain/events.ts"
 import { GrantId, LedgerSeq, type ProjectId } from "../domain/ids.ts"

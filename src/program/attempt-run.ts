@@ -105,4 +105,4 @@ const shown = (line: StdoutLine): string => Result.getOrElse(line, undecodableNo
 
 /** The notice shown in place of a stdout line that is not UTF-8; the raw file keeps its bytes. */
 const undecodableNotice = (line: UndecodableLine): string =>
-  `[foreman: a line of ${String(line.byteLength)} bytes is not valid UTF-8; the raw file keeps it]`
+  `[tarlatan: a line of ${String(line.byteLength)} bytes is not valid UTF-8; the raw file keeps it]`

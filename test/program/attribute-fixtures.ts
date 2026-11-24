@@ -66,13 +66,13 @@ export const kinds = (refusals: ReadonlyArray<AttributeRefusal>) =>
 
 /**
  * Checks that a refused creation left nothing: no path, no branch
- * `foreman/t` and no second worktree registration.
+ * `tarlatan/t` and no second worktree registration.
  */
 export const leftNothing = (dir: string, owner: string) =>
   Effect.gen(function* () {
     expect(existsSync(`${dir}/worktree`)).toBe(false)
     const listing = yield* git(owner, "worktree", "list", "--porcelain")
     expect(listing).not.toContain(`${dir}/worktree`)
-    const branches = yield* git(owner, "branch", "--list", "foreman/t")
+    const branches = yield* git(owner, "branch", "--list", "tarlatan/t")
     expect(branches).toBe("")
   })

@@ -14,7 +14,7 @@ import { type CanonicalLayout, LayoutRefused } from "../domain/layout.ts"
 import { TargetBinding, TargetBindingUnreadable, TargetMismatch } from "../domain/target.ts"
 import { checkLayout } from "../features/layout.ts"
 import { compareTarget } from "../features/target-binding.ts"
-import type { ConfigUndecodable, ForemanConfig } from "../format/foreman-config.ts"
+import type { ConfigUndecodable, TarlatanConfig } from "../format/tarlatan-config.ts"
 import { resolvedLayout } from "./layout.ts"
 import { checkedTargetLayout, targetOf } from "./production-target.ts"
 import { bindingPath, recordedTarget } from "./target-binding.ts"
@@ -98,7 +98,7 @@ export interface StatusTarget {
  * (see the module comment). Reads only; never fails.
  */
 export const statusTarget = (
-  config: ForemanConfig,
+  config: TarlatanConfig,
   layout: Result.Result<CanonicalLayout, ConfigUndecodable>,
 ): Effect.Effect<StatusTarget> =>
   Effect.gen(function* () {
@@ -130,7 +130,7 @@ const ledgerUnresolved = (undecodable: ConfigUndecodable): LayoutRefused =>
 const noBinding = (): Option.Option<TargetBinding> => Option.none()
 
 /** The configured target, when its resolved layout `canonical` passes the layout rules. */
-const usableTarget = (config: ForemanConfig) => (canonical: CanonicalLayout) =>
+const usableTarget = (config: TarlatanConfig) => (canonical: CanonicalLayout) =>
   Result.map(checkLayout(canonical), constant(targetOf(config, canonical)))
 
 /** `value`, when the layout check `checked` passed; otherwise the check's refusal. */

@@ -13,7 +13,7 @@ const recorded: TargetBinding = {
   projectId: ProjectId.make("alpha"),
   ownerCheckout: "/o/repo",
   supervisor: { path: "/o/state/worktree", name: "t" },
-  ledger: "/o/.foreman/ledger.sqlite",
+  ledger: "/o/.tarlatan/ledger.sqlite",
   attributeAllowance: { rootLines: [] },
 }
 

@@ -116,7 +116,7 @@ export class SpendDown extends Schema.TaggedClass<SpendDown>()(
 
 /**
  * Why a spend-down ended early: the owner's `spend-down --cancel`, or a
- * loosening spend-down whose period's reset time foreman observed passed.
+ * loosening spend-down whose period's reset time tarlatan observed passed.
  */
 export const SpendDownEndCauses = {
   Owner: "owner",

@@ -22,20 +22,20 @@ describe("bun src/facade/main.ts", () => {
     const run = runEntry()
     expect({ error: run.error, status: run.status, stdout: run.stdout }).toEqual({ error: undefined, status: 2, stdout: "" })
     expect(run.stderr).toContain("--config <path> must come first")
-    expect(run.stderr).toContain("usage: foreman --config <path>")
+    expect(run.stderr).toContain("usage: tarlatan --config <path>")
   })
 
   it("exits 2 with the usage line for --help, which is not a command", () => {
     const run = runEntry("--help")
     expect({ error: run.error, status: run.status, stdout: run.stdout }).toEqual({ error: undefined, status: 2, stdout: "" })
     expect(run.stderr).toContain("--config <path> must come first")
-    expect(run.stderr).toContain("usage: foreman --config <path>")
+    expect(run.stderr).toContain("usage: tarlatan --config <path>")
   })
 
   it("passes the owner's words, after the runtime and script path, to main", () => {
-    const run = runEntry("--config", "/nonexistent/foreman.json", "bogus")
+    const run = runEntry("--config", "/nonexistent/tarlatan.json", "bogus")
     expect({ error: run.error, status: run.status, stdout: run.stdout }).toEqual({ error: undefined, status: 2, stdout: "" })
     expect(run.stderr).toContain("unknown command: bogus")
-    expect(run.stderr).toContain("usage: foreman --config <path>")
+    expect(run.stderr).toContain("usage: tarlatan --config <path>")
   })
 })

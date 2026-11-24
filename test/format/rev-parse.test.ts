@@ -42,7 +42,7 @@ describe("decodeRevParsePath", () => {
 
 describe("decodeRevParseLine", () => {
   it("decodes a ref name", () => {
-    expect(decodeRevParseLine("refs/heads/foreman/x\n")).toEqual(Result.succeed("refs/heads/foreman/x"))
+    expect(decodeRevParseLine("refs/heads/tarlatan/x\n")).toEqual(Result.succeed("refs/heads/tarlatan/x"))
   })
 
   it("decodes a detached HEAD's output as HEAD", () => {

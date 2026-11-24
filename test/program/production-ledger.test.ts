@@ -1,6 +1,6 @@
 // The ledger through the production composition. It lives at
 // `<ledgerDir>/ledger.sqlite`, one per owner and account, shared by every
-// project's state directory, with `~/.foreman` as the default directory
+// project's state directory, with `~/.tarlatan` as the default directory
 // (batch review B09; design "Where the ledger lives"); each project keeps
 // its own log and lock. Every role's grant estimate is the policy's
 // 15-point `initialEstimate`, and the configuration cannot override it
@@ -99,18 +99,18 @@ const defaultLedgerDir = () =>
     Effect.gen(function* () {
       const home = `${layout.root}/home`
       mkdirSync(home)
-      mkdirSync(`${home}/.foreman`)
+      mkdirSync(`${home}/.tarlatan`)
       writeConfig(layout, Record.remove(configOf(layout), "ledgerDir"))
       yield* openedSession(layout, { env: { HOME: home } })
       yield* succeeded(layout, ["implement", "--waive"], { env: { HOME: home } })
-      expect(yield* Effect.map(ledgerRowsAt(`${home}/.foreman/ledger.sqlite`), (rows) => rows.filter(Schema.is(Grant)).length)).toBe(1)
+      expect(yield* Effect.map(ledgerRowsAt(`${home}/.tarlatan/ledger.sqlite`), (rows) => rows.filter(Schema.is(Grant)).length)).toBe(1)
       expect(existsSync(ledgerPath(layout))).toBe(false)
     }),
   )
 
 describe("the shared ledger in production", () => {
   it.effect("two projects' state directories share one ledger and keep their own log and lock", sharedLedger, endToEndMillis)
-  it.effect("without ledgerDir, the ledger is ~/.foreman/ledger.sqlite", defaultLedgerDir, endToEndMillis)
+  it.effect("without ledgerDir, the ledger is ~/.tarlatan/ledger.sqlite", defaultLedgerDir, endToEndMillis)
 })
 
 describe("grant estimates in production", () => {

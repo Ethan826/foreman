@@ -1,6 +1,6 @@
 // Pure pacing decision (design revision 6.1, "Pacing" and "Admission
-// rule", rule 1). Admission is pacing over foreman's own records: it bounds
-// foreman's launches and reservations given those records. It does not
+// rule", rule 1). Admission is pacing over tarlatan's own records: it bounds
+// tarlatan's launches and reservations given those records. It does not
 // bound the provider's count, a step's real use, or the reserve.
 //
 // The wall clock enters only through `now < resetsAt`, which can only
@@ -159,7 +159,7 @@ const judge =
     })
 
 /**
- * Decides whether foreman may launch a step on `provider` (design
+ * Decides whether tarlatan may launch a step on `provider` (design
  * "Admission rule", rule 1). It checks exactly the provider's policy
  * windows (R-P1) and counts only that provider's grants.
  *

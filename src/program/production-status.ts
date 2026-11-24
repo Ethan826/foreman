@@ -92,7 +92,7 @@ export type StatusOutcome = typeof StatusOutcome.Type
 
 /**
  * Runs `status` in production for the configuration at `configPath`;
- * `environment` is foreman's own, from which a client's version read
+ * `environment` is tarlatan's own, from which a client's version read
  * gets everything but `GIT_*` (decision P2) and the default ledger
  * directory its `HOME`. A broken layout or binding is a finding in the
  * outcome, never a failure, and so is a default ledger directory that

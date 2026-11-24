@@ -12,7 +12,7 @@ import { checkWorktree } from "../../src/features/worktree-check.ts"
 
 const recorded = {
   path: "/state/worktree",
-  branch: "foreman/x",
+  branch: "tarlatan/x",
   gitDir: "/repo/owner/.git/worktrees/worktree",
   commonDir: "/repo/owner/.git",
 }
@@ -41,10 +41,10 @@ const check = (entries: ReadonlyArray<WorktreeEntry>, directory: WorktreeDirecto
 const entry = (overrides: Partial<WorktreeEntry>): WorktreeEntry => ({
   path: recorded.path,
   head: Option.none(),
-  branch: Option.some("refs/heads/foreman/x"),
+  branch: Option.some("refs/heads/tarlatan/x"),
   detached: false,
   bare: false,
-  lock: Option.some({ reason: Option.some("foreman") }),
+  lock: Option.some({ reason: Option.some("tarlatan") }),
   ...overrides,
 })
 
@@ -83,12 +83,12 @@ describe("checkWorktree (startup check)", () => {
   })
 
   it("reports a different branch", () => {
-    const other = entry({ branch: Option.some("refs/heads/foreman/y") })
+    const other = entry({ branch: Option.some("refs/heads/tarlatan/y") })
     expect(check([other])).toEqual(failedWith(WorktreeConditions.OnBranch))
   })
 
   it("does not accept the short branch name as the ref", () => {
-    const short = entry({ branch: Option.some("foreman/x") })
+    const short = entry({ branch: Option.some("tarlatan/x") })
     expect(check([short])).toEqual(failedWith(WorktreeConditions.OnBranch))
   })
 

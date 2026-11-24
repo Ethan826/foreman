@@ -1,5 +1,5 @@
 // The git command environments (design "Git environment", E7; plans B11b
-// and B11d). Every git command foreman runs gets exactly the five
+// and B11d). Every git command tarlatan runs gets exactly the five
 // variables of {@link cleanGitEnvironment} and nothing from the parent,
 // and the three `-c` overrides come before the command's own args: through
 // `cleanGitWith`, or through `pinnedGitWith`, which adds the recorded

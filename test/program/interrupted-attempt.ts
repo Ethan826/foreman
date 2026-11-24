@@ -1,7 +1,7 @@
 // An incomplete attempt made through the production CLI, as the owner
 // meets one (owner ruling on L01, 2026-11-20): `implement` starts a fake
-// Claude that sleeps, and foreman is interrupted once the launch is
-// recorded. The fake ends on its own; foreman never signals.
+// Claude that sleeps, and tarlatan is interrupted once the launch is
+// recorded. The fake ends on its own; tarlatan never signals.
 import { Duration, Effect, Fiber, Schedule, Schema } from "effect"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
@@ -36,7 +36,7 @@ const Incomplete = Schema.Struct({
 
 /**
  * Opens a session and starts `implement` with a fake Claude that sleeps,
- * then interrupts foreman once the launch is recorded. Returns the
+ * then interrupts tarlatan once the launch is recorded. Returns the
  * incomplete attempt `status` shows.
  */
 export const interruptedAttempt = (layout: Layout) =>

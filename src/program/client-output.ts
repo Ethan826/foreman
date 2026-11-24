@@ -52,7 +52,7 @@ export const utf8Bytes = (text: string) =>
 /**
  * The bytes of the file at `path` as strict UTF-8 text (review finding
  * R04); fails with {@link FileNotUtf8} when they are not UTF-8. A leading
- * byte order mark is kept as U+FEFF. Every file foreman reads as text
+ * byte order mark is kept as U+FEFF. Every file tarlatan reads as text
  * goes through it, the configuration and the target binding included
  * (focused review finding 3); none is read with U+FFFD in place of bytes
  * that are not UTF-8.

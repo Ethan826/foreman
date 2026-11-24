@@ -32,8 +32,8 @@ export const HomeReading = Schema.Union([HomeAbsent, HomeFound, HomeUnreadable])
 export type HomeReading = typeof HomeReading.Type
 
 /**
- * Git's HOME may not be used: it is missing after foreman tried to create
- * it, it is a link or not a directory, it is not owned by foreman's user,
+ * Git's HOME may not be used: it is missing after tarlatan tried to create
+ * it, it is a link or not a directory, it is not owned by tarlatan's user,
  * its mode is not exactly 0700, it is not empty, or it could not be read.
  * `reasons` names each, in that order. Nothing was changed at the path.
  */

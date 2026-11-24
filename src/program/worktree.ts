@@ -42,7 +42,7 @@ export interface WorktreeRequest {
   readonly ownerCheckout: string
   /** Where the worktree goes: an absolute path, `<stateDir>/worktree`, outside the owner's checkout. */
   readonly path: string
-  /** The configured name; the branch is `foreman/<name>`. */
+  /** The configured name; the branch is `tarlatan/<name>`. */
   readonly name: string
   /** The configured start revision; none means the owner's HEAD. */
   readonly start: Option.Option<Revision>
@@ -105,7 +105,7 @@ type OutputDecoder<Value> = (text: string) => Result.Result<Value, { readonly me
  * repository (plan B11c), runs the branch and path prechecks (Runtime reads,
  * Features decides), adds the worktree (Runtime), decodes each read after
  * it (Format), and checks that the top level is the requested path with
- * symlinks resolved and that HEAD is `refs/heads/foreman/<name>`
+ * symlinks resolved and that HEAD is `refs/heads/tarlatan/<name>`
  * (Features). The recorded `path` is git's top level, the form `git
  * worktree list` prints.
  */

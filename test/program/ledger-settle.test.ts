@@ -60,7 +60,7 @@ const openAll = (dir: string) =>
     return { lockPath: `${dir}/project.lock`, log, store }
   })
 const withFiles = <A, E>(use: (files: Files) => Effect.Effect<A, E, Scope.Scope>) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-settle-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-settle-`)
   return Effect.ensuring(Effect.scoped(Effect.flatMap(openAll(dir), use)), removeDir(dir))
 }
 const seed = (files: Files) =>

@@ -1,7 +1,7 @@
 // The target binding file (batch review B04): the bound target as one
 // JSON object with a final newline. Decoding is strict, so a file with an
 // unknown or missing key is unreadable rather than half understood, and so
-// is one whose ledger path is not absolute: foreman only ever records an
+// is one whose ledger path is not absolute: tarlatan only ever records an
 // absolute path, and a relative one would open the ledger relative to the
 // working directory (owner finding F11, dogfood-2).
 import { Formatter, Result, Schema, String } from "effect"

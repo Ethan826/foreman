@@ -71,7 +71,7 @@ export const judgeExistingStoreDirectory = (
   })
 
 /**
- * Judges the store directory at `path` after foreman tried to create it:
+ * Judges the store directory at `path` after tarlatan tried to create it:
  * `created` is how the creation ended and `reading` what is at the path
  * afterwards. A mode left unset after `mkdir` succeeded is refused
  * whatever the reading. A failed `mkdir` is settled by the reading: a
@@ -85,7 +85,7 @@ export const judgeCreatedStoreDirectory = (
   reading: StoreDirectoryReading,
 ): Result.Result<void, StoreDirectoryParentMissing | StoreDirectoryRefused> =>
   Result.match(created, {
-    onSuccess: () => judgedAfterCreation(path, reading, "nothing is at the path after foreman created it"),
+    onSuccess: () => judgedAfterCreation(path, reading, "nothing is at the path after tarlatan created it"),
     onFailure: (failed) =>
       Match.valueTags(failed, {
         StoreDirectoryModeUnset: (unset) => Result.fail(refused(path, `mode 0700 could not be set: ${unset.reason}`)),

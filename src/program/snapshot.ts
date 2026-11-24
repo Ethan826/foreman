@@ -39,7 +39,7 @@ import { listed, stepFailed, succeeded } from "./snapshot-steps.ts"
 export interface SnapshotSite {
   /** The supervisor worktree's top level, where git runs and entries are read. */
   readonly worktree: string
-  /** foreman's state directory, which holds the temporary index while the snapshot runs. */
+  /** Tarlatan's state directory, which holds the temporary index while the snapshot runs. */
   readonly stateDirectory: string
 }
 

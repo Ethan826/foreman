@@ -89,7 +89,7 @@ const failure = constant(false)
 /**
  * Whether a failure is a deliberate refusal, which expires every armed
  * waiver, or a failure to read, write or run, which expires none. A
- * refusal is foreman deciding, from what it read, that the attempt must
+ * refusal is tarlatan deciding, from what it read, that the attempt must
  * not launch: the rules (a worktree judged unready among them), quota, a
  * refused `--waive`, a lost race at batch I, a missing or changed
  * recorded file, a file that is not UTF-8, a missing or undecodable

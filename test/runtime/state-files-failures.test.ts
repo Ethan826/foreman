@@ -62,7 +62,7 @@ describe("flushDirectoryWith", () => {
 
 const withDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-present-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-present-`)),
     use,
     (dir) =>
       Effect.sync(() => {

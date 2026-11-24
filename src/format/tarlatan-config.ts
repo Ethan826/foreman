@@ -2,7 +2,7 @@
 // object naming the project, the state directory, the owner's checkout,
 // the supervisor worktree's path and branch name, the root
 // `.gitattributes` allowance (decision M09) and the client version pins.
-// It names no Claude settings file, since foreman writes the editing
+// It names no Claude settings file, since tarlatan writes the editing
 // profile itself (batch review B03), and no grant estimate, since every
 // role reserves the policy's `initialEstimate` (decision P5, batch review
 // B10). It may name check commands, which the editing profile then
@@ -33,7 +33,7 @@ export class ConfigUndecodable extends Schema.TaggedError<ConfigUndecodable>()(
 const AbsolutePath = Schema.String.check(Schema.isPattern(/^(?:\/(?!\.\.?(?:\/|$))[^/\0]+)+$/))
 
 /**
- * The supervisor branch's `<name>` in `foreman/<name>`: letters, digits,
+ * The supervisor branch's `<name>` in `tarlatan/<name>`: letters, digits,
  * dot, underscore and hyphen, 1 to 64 characters, the first a letter or
  * digit, so the branch name needs no quoting.
  */
@@ -43,7 +43,7 @@ const BranchName = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9.
 export const ledgerFileName = "ledger.sqlite"
 
 /** The default ledger directory's name under `HOME`. */
-const defaultLedgerName = ".foreman"
+const defaultLedgerName = ".tarlatan"
 
 /** A client version pin: the client's `--version` output, trimmed (decision P4). */
 const Pin = Schema.String.check(Schema.isNonEmpty())
@@ -126,18 +126,18 @@ const ConfigFile = Schema.Struct({
 })
 
 /** The decoded configuration. */
-export interface ForemanConfig {
+export interface TarlatanConfig {
   readonly projectId: ProjectId
   /** Holds the project's log and lock and every published state file. */
   readonly stateDir: string
   /** The owner's checkout, read only when the supervisor worktree is created. */
   readonly ownerCheckout: string
-  /** The supervisor worktree's path and the `<name>` of `foreman/<name>`. */
+  /** The supervisor worktree's path and the `<name>` of `tarlatan/<name>`. */
   readonly supervisor: { readonly path: string; readonly name: string }
   /**
    * The directory of the owner's one ledger, shared by every project
    * (design "Where the ledger lives"); none means the default,
-   * `<HOME>/.foreman` (see {@link ledgerDirOf}).
+   * `<HOME>/.tarlatan` (see {@link ledgerDirOf}).
    */
   readonly ledgerDir: Option.Option<string>
   /** No root line, or Waxwing's one line (decision M09, batch review B06). */
@@ -164,10 +164,10 @@ const decodeFile = Schema.decodeUnknownResult(Schema.fromJsonString(ConfigFile),
  * absent `checkCommands` is an empty list. One leading byte order mark is
  * dropped first (focused re-review finding 2).
  */
-export const decodeForemanConfig = (text: string): Result.Result<ForemanConfig, ConfigUndecodable> =>
+export const decodeTarlatanConfig = (text: string): Result.Result<TarlatanConfig, ConfigUndecodable> =>
   Result.mapBoth(decodeFile(withoutByteOrderMark(text)), {
     onFailure: (error) => new ConfigUndecodable({ reason: String.trim(error.message) }),
-    onSuccess: ({ ledgerDir, checkCommands, ...rest }): ForemanConfig => ({
+    onSuccess: ({ ledgerDir, checkCommands, ...rest }): TarlatanConfig => ({
       ...rest,
       ledgerDir: Option.fromNullishOr(ledgerDir),
       checkCommands: Option.getOrElse(Option.fromNullishOr(checkCommands), (): ReadonlyArray<string> => []),
@@ -176,11 +176,11 @@ export const decodeForemanConfig = (text: string): Result.Result<ForemanConfig, 
 
 /**
  * The ledger's directory: the configured `ledgerDir`, or else
- * `<home>/.foreman`, the design's default, where `home` is foreman's own
+ * `<home>/.tarlatan`, the design's default, where `home` is tarlatan's own
  * `HOME`. Fails with {@link ConfigUndecodable} when neither is set or the
  * default would not be an absolute, normalized path.
  */
-export const ledgerDirOf = (config: ForemanConfig, home: Option.Option<string>): Result.Result<string, ConfigUndecodable> =>
+export const ledgerDirOf = (config: TarlatanConfig, home: Option.Option<string>): Result.Result<string, ConfigUndecodable> =>
   Option.match(config.ledgerDir, {
     onSome: Result.succeed,
     onNone: () =>

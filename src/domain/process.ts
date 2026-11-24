@@ -1,8 +1,8 @@
-// A client's process as foreman records and observes it (plan
+// A client's process as tarlatan records and observes it (plan
 // "Process evidence", advisory only): the leader's identity read once
 // right after spawn, one row of a `ps` listing, how the leader ended, the
 // advisory evidence that `status` shows, and the typed failures of
-// starting a client and reading the listing. Foreman never signals a
+// starting a client and reading the listing. Tarlatan never signals a
 // client, so nothing here describes stopping one.
 import { type Result, Schema } from "effect"
 
@@ -18,7 +18,7 @@ export type ProcessId = typeof ProcessId.Type
  * The process group of a listed process as `ps` prints it: a non-negative
  * integer. It is 0 for a process the kernel started outside any group:
  * procps on Linux lists kernel threads such as `kthreadd` in group 0, and
- * in some containers and VMs pid 1 as well. No client foreman starts is in
+ * in some containers and VMs pid 1 as well. No client tarlatan starts is in
  * group 0, since each leads its own group, so such a row is never a member.
  */
 export const ProcessGroupId = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
@@ -65,7 +65,7 @@ export type ProcessLeader = typeof ProcessLeader.Type
 /**
  * How a client's leader ended: its exit code, or the name of the signal
  * that ended it (such as `SIGTERM`). Exactly one is present for a leader
- * that ran; foreman sends no signal, so a signal came from elsewhere.
+ * that ran; tarlatan sends no signal, so a signal came from elsewhere.
  */
 export const ClientExit = Schema.Struct({
   code: Schema.Option(Schema.Int),

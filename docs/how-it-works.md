@@ -1,4 +1,4 @@
-# How foreman works
+# How tarlatan works
 
 Read the [README](../README.md) first. This page shows how the pieces fit, with diagrams, so you can follow the design before reading the code.
 
@@ -14,7 +14,7 @@ A tranche is a unit of work the owner names in a task file. The diagram follows 
 sequenceDiagram
     autonumber
     actor Owner
-    participant F as Foreman
+    participant F as Tarlatan
     participant L as Event log
     participant C as Implementer and corrector<br/>(default: fresh claude -p)
     participant R as Reviewer<br/>(default: fresh codex exec, read-only)
@@ -61,7 +61,7 @@ Points the diagram compresses:
 - Every step is a fresh process. There is no `--resume` and no `--continue`. Its inputs are the task file, the previous step's handoff file and the working tree at the base revision.
 - The commit procedure applies only to implement and correct steps. The reviewer does not commit.
 - If the review still asks for changes after `maxCorrectionRounds` corrections, the tranche is recorded as `notConverged`. The design allows no extra rounds (ruling 1, 2026-11-14).
-- Agents never work in the owner's checkout. Implement and correct steps run in a linked worktree that foreman owns, on its own branch (`foreman/<name>`), and reviews run in a second worktree detached at the revision under review. The owner's edits and commits in their own checkout never enter a step, and a tranche's work reaches the owner's branch only through a git command the owner runs.
+- Agents never work in the owner's checkout. Implement and correct steps run in a linked worktree that tarlatan owns, on its own branch. A newly created worktree gets the branch `tarlatan/<name>`; an existing worktree keeps the branch recorded when it was created, which may use the project's previous prefix. Reviews run in a second worktree detached at the revision under review. The owner's edits and commits in their own checkout never enter a step, and a tranche's work reaches the owner's branch only through a git command the owner runs.
 - Every launch also takes a grant in the shared usage ledger before `Intended`, and the grant is charged after `Finished` (see "The usage ledger" below).
 - The four records named in the diagram (Intended, Launched, Finished, Committed) are events in the project's append-only log in SQLite. State is a fold over that log. A crash or restart reads the log to find its place.
 - With the default review-queue bound of 1, the next tranche starts only after the previous one has been reviewed. A bound of 2 lets one pre-approved tranche be implemented while the one below it waits for review; if that review asks for changes, the tranche above is unwound.
@@ -178,7 +178,7 @@ A reading observed before the hold never releases it, even if it arrives later. 
 
 ## The usage ledger
 
-All foreman instances on the Mac share one SQLite database, the usage ledger, because they draw on the same subscription accounts. One foreman runs per target repository, and the ledger is the only state the projects share. Every ledger write is one `BEGIN IMMEDIATE` transaction, so admissions from different projects run one after the other, and each row gets a ledger-wide `seq` that orders it against every other row.
+All tarlatan instances on the Mac share one SQLite database, the usage ledger, because they draw on the same subscription accounts. One tarlatan runs per target repository, and the ledger is the only state the projects share. Every ledger write is one `BEGIN IMMEDIATE` transaction, so admissions from different projects run one after the other, and each row gets a ledger-wide `seq` that orders it against every other row.
 
 Admission reserves before it spends: the transaction that admits a step appends a grant for the step's estimate in every window. The grant then follows this life:
 
@@ -202,7 +202,7 @@ The settle step runs at every launch attempt and at startup, so a crash at any p
 
 ## How pacing works
 
-Admission is pacing over foreman's own records. It bounds foreman's launches and reservations. It does not keep the provider's usage count under the cap, and it does not keep the reserve free for the owner's own use: a reading can be old when foreman sees it, and a running agent can use more than its estimate.
+Admission is pacing over tarlatan's own records. It bounds tarlatan's launches and reservations. It does not keep the provider's usage count under the cap, and it does not keep the reserve free for the owner's own use: a reading can be old when tarlatan sees it, and a running agent can use more than its estimate.
 
 In plain words:
 
@@ -210,12 +210,12 @@ In plain words:
 - Pacing checks the windows listed in policy for the step's provider, whatever readings exist. For Claude these are the five-hour and weekly windows. The Codex windows are unknown until live test L2, so the default Codex policy lists none and every Codex launch needs a waiver.
 - Readings belong to periods. Only a reading whose reset time is later than the current period's opens a new period. A drop in usage opens none, and a reading of an earlier period is never used.
 - For each window, pacing uses the highest reading of the current period, stale readings included, so a late, lower reading never lowers the figure.
-- A window is usable when its current period has a fresh reading and its reset time has not passed. Freshness is measured on the monotonic clock in the same boot: a reading observed in the last 10 minutes (the default) is fresh. Until the owner approves how foreman and the statusline script read that clock (open item O11), no reading is fresh and every launch needs a waiver.
+- A window is usable when its current period has a fresh reading and its reset time has not passed. Freshness is measured on the monotonic clock in the same boot: a reading observed in the last 10 minutes (the default) is fresh. Until the owner approves how tarlatan and the statusline script read that clock (open item O11), no reading is fresh and every launch needs a waiver.
 - The level of a window is the highest reading plus every grant that still counts, from every project. A window allows a launch when the level plus the step's estimate is at most the cap, `100 − reserve` (30 percent reserve on the five-hour window and 40 percent on the weekly window by default), or the level a spend-down set for this period.
 - The estimate per role and window is the largest measured increase among the role's last five finished steps, or 15 points when none was measured.
 - The answer is one of three. Allow only if every policy window is usable and allows. Hold if a usable window fails. Otherwise Unknown. Unknown never turns into Allow by waiting, and no timer loosens anything. A Hold or an Unknown creates a Quota hold, and the owner can `waive` one launch.
 
-Because charged grants keep counting until the owner retires them, the defaults allow at most 4 Claude launches on the five-hour window, about 2 per period, and at most 4 in a weekend on the weekly window. With readings only from the owner's interactive sessions, an unattended night probably gets about one Claude launch. Live test L1 decides whether foreman's own Claude output includes usable readings; the design's "Unattended launches" has the arithmetic.
+Because charged grants keep counting until the owner retires them, the defaults allow at most 4 Claude launches on the five-hour window, about 2 per period, and at most 4 in a weekend on the weekly window. With readings only from the owner's interactive sessions, an unattended night probably gets about one Claude launch. Live test L1 decides whether tarlatan's own Claude output includes usable readings; the design's "Unattended launches" has the arithmetic.
 
 ## Where to read next
 

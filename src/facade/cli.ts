@@ -44,7 +44,7 @@ const jsonIndent = 2
 
 /**
  * Runs the command `argv` names (the owner's words, `--config` first)
- * with foreman's own `environment`, and returns the exit status. Never
+ * with tarlatan's own `environment`, and returns the exit status. Never
  * fails: a failure is printed and becomes status 1.
  */
 export const main = (

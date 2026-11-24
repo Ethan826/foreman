@@ -6,7 +6,7 @@ May import: `domain`.
 
 Features is a pure core layer. It may import Domain and nothing else of ours, Format included, so a decision never depends on how input was decoded or where it came from. A module that needs decoded input declares the fields it reads. The lint table also bars Node and Bun imports. Nothing here reads a clock or a file; the caller passes the wall-clock `now`, the monotonic `nowMono`, the readings and the grants.
 
-Admission is pacing over foreman's own records. It bounds foreman's launches and reservations given those records. It does not bound the provider's count, a step's real use or the reserve.
+Admission is pacing over tarlatan's own records. It bounds tarlatan's launches and reservations given those records. It does not bound the provider's count, a step's real use or the reserve.
 
 ## Periods
 
@@ -77,7 +77,7 @@ flowchart TD
 
 Details the flowchart leaves out:
 
-- With no monotonic clock (`nowMono` none) no window is usable. Until the owner decides how foreman reads that clock (O11), every launch is Unknown and needs a waiver.
+- With no monotonic clock (`nowMono` none) no window is usable. Until the owner decides how tarlatan reads that clock (O11), every launch is Unknown and needs a waiver.
 - A stale reading still raises the period's highest reading.
 - A provider whose policy lists no windows is Unknown, never Allow. The default Codex policy lists none until the owner decides how Codex's reset times open periods (O14).
 - `pace` builds each window's period from the asked provider's readings only; window names are shared across providers.
@@ -119,7 +119,7 @@ Part B's first milestone adds these pure modules. Each folds the project log or 
 
 [`worktree-check.ts`](worktree-check.ts) holds `checkWorktree`, which decides whether the recorded path is listed on `refs/heads/<branch>` and locked, and whether a directory is present there with the recorded git directory and common directory. A listed registration alone does not show that the worktree exists. It returns the entry, or `WorktreeCheckFailed` with each condition that failed. It judges the raw reading: nothing or a file at the path means no directory is present, and an identity command that reported no repository there does not identify the worktree. An identity command that git could not complete never reaches this judgment. A path that is not listed is reported alone, a missing directory is not also reported as the wrong identity, and a detached entry is not on the branch. Paths compare exactly. A recorded worktree with an empty field returns `WorktreeRecordInvalid` instead of throwing.
 
-[`worktree-created.ts`](worktree-created.ts) holds `checkCreated`, run after `git worktree add`: the new worktree's top level must be the requested path with symlinks resolved, and HEAD must be `refs/heads/foreman/<name>`. Otherwise it returns `WorktreeNotAsCreated` with both sides.
+[`worktree-created.ts`](worktree-created.ts) holds `checkCreated`, run after `git worktree add`: the new worktree's top level must be the requested path with symlinks resolved, and HEAD must be `refs/heads/tarlatan/<name>`. Otherwise it returns `WorktreeNotAsCreated` with both sides.
 
 [`attribute-sources.ts`](attribute-sources.ts) holds `checkAttributeSources(reading, allowance)` (plan B11c, option A). It never interprets a declaration, and the only path it compares is the root `.gitattributes`. Four conditions must hold for a revision and repository to pass. Every `.gitattributes` entry is a regular blob of blank and comment lines. `<commonDir>/info/attributes` is absent or an empty regular file. `git config --get core.attributesFile` exited 1. `git config --get-regexp '^includeif\.'` exited 1, so the config holds no conditional include (option R). A blank line holds only spaces and tabs and at most a final CR; a comment line starts with `#` at its first character. Anything else, and a symbolic link or other kind of entry, is a refusal. A failed read is never a pass. When every refusal is a failed read, the check fails with `AttributeSourcesUnread`, which lists each failed read with its diagnostic; when any source that was read is refused, it fails with `AttributeSourcesRefused`, which lists the failed reads beside the refusals (owner ruling on B11c and R01, 2026-11-20). The one exception is the allowance (owner decision M09, option a): a line of the root `.gitattributes` also passes when it equals one of `allowance.rootLines` byte for byte once its `\n` and one CR before it are removed. A last line with no `\n` keeps its CR. The allowance never applies to a nested `.gitattributes`, to `info/attributes`, to the setting or to a conditional include, and `noAttributeAllowance` leaves option A unchanged. `AttributeSourcesRefused` lists each refusal with its source, its path and its line number where there is one. `isAttributesEntry` and `isRegularBlob` tell Program which entries to read.
 
@@ -152,11 +152,11 @@ So `status`, `step-ended` and `close` stay reachable when the worktree, a client
 
 [`process-evidence.ts`](process-evidence.ts) holds `processEvidence`, which reads a decoded `ps` listing against the leader `Launched` recorded. The leader counts as listed only with its recorded start time, since the system reuses process ids; members are the processes in the recorded group. The result is advisory and proves nothing.
 
-[`client-environment.ts`](client-environment.ts) holds `clientEnvironment`: the parent's environment minus every variable whose name starts with `GIT_` (decision P2), so foreman's own git settings cannot redirect a client's git commands.
+[`client-environment.ts`](client-environment.ts) holds `clientEnvironment`: the parent's environment minus every variable whose name starts with `GIT_` (decision P2), so tarlatan's own git settings cannot redirect a client's git commands.
 
 ## Production boundaries
 
-[`git-home.ts`](git-home.ts) holds `judgeGitHome` (batch review B02). Git's `HOME` passes only when it is a directory and not a symbolic link, foreman's user owns it, its mode is exactly 0700 and it is empty. Anything else is refused with every reason. An absent path is refused too, because Program judges only after creating it.
+[`git-home.ts`](git-home.ts) holds `judgeGitHome` (batch review B02). Git's `HOME` passes only when it is a directory and not a symbolic link, tarlatan's user owns it, its mode is exactly 0700 and it is empty. Anything else is refused with every reason. An absent path is refused too, because Program judges only after creating it.
 
 [`store-directory.ts`](store-directory.ts) holds `judgeStoreDirectory`, which decides what a command that writes state does with the state directory or the ledger directory (dogfood-1 finding). When nothing is at the path and its parent is a directory, the answer is `CreateStoreDirectory`. A real directory gets `UseStoreDirectory` whatever its mode. Program judges the resolved path, so a symbolic link to a directory was already followed (owner ruling, dogfood-2). A missing parent is refused with `StoreDirectoryParentMissing`. That error records the directory and its parent. A parent that is the other configured store directory, still to be created by the same command, counts as present, so a ledger directory directly inside a missing state directory is created after it (owner ruling F12, dogfood-2). A path that is not a directory or cannot be read is refused with `StoreDirectoryRefused`, which records the path. `judgeCreatedStoreDirectory` judges a creation and the path after it. A mode that `chmod` could not set is refused whatever the path holds. When `mkdir` failed, a directory that another command made first is used, and a path that is still empty is refused with the failure. `judgeExistingStoreDirectory` runs before an owner exit reads the binding. It refuses only an entry that is there and is not a directory.
 

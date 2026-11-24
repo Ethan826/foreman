@@ -1,7 +1,7 @@
 // The owner's exits do not need HOME when a target is recorded (focused
 // re-review finding 3; plan "Commands and their prerequisites", AC1).
 // With a configuration that leaves out `ledgerDir`, the default ledger
-// directory `<HOME>/.foreman` is resolved only when it is needed: with no
+// directory `<HOME>/.tarlatan` is resolved only when it is needed: with no
 // binding recorded, or for a command that settles the configured target.
 // With a binding, `step-ended` and `session close --abandoned |
 // --interrupted` read it first and use its ledger. The test CLI's

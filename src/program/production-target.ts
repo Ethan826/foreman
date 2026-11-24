@@ -19,7 +19,7 @@ import type { CanonicalLayout } from "../domain/layout.ts"
 import type { TargetBinding } from "../domain/target.ts"
 import { checkLayout } from "../features/layout.ts"
 import { parentOf } from "../features/store-directory.ts"
-import { decodeForemanConfig, type ForemanConfig, ledgerDirOf, ledgerFileName } from "../format/foreman-config.ts"
+import { decodeTarlatanConfig, type TarlatanConfig, ledgerDirOf, ledgerFileName } from "../format/tarlatan-config.ts"
 import { stateFiles } from "../runtime/state-files.ts"
 import { strictText } from "./client-output.ts"
 import { checkedLayout, resolvedLayout } from "./layout.ts"
@@ -28,7 +28,7 @@ import { matchedRecord, recordedTarget, type TargetPolicy } from "./target-bindi
 
 /** The decoded configuration and the target in force. */
 export interface SettledTarget {
-  readonly config: ForemanConfig
+  readonly config: TarlatanConfig
   readonly target: TargetBinding
 }
 
@@ -74,11 +74,11 @@ export const decodedConfiguration = (
 export const readConfiguration = (configPath: string) =>
   Effect.flatMap(
     Effect.flatMap(stateFiles.read(configPath), (bytes) => strictText(configPath, bytes)),
-    (text) => Effect.fromResult(decodeForemanConfig(text)),
+    (text) => Effect.fromResult(decodeTarlatanConfig(text)),
   )
 
 /** The target `config` names, with the canonical paths of its resolved layout `canonical`. */
-export const targetOf = (config: ForemanConfig, canonical: CanonicalLayout): TargetBinding => ({
+export const targetOf = (config: TarlatanConfig, canonical: CanonicalLayout): TargetBinding => ({
   projectId: config.projectId,
   ownerCheckout: canonical.ownerCheckout,
   supervisor: { path: canonical.supervisor, name: config.supervisor.name },
@@ -148,7 +148,7 @@ export const settledTarget = (
  * whatever the configured layout says, as `status` runs; otherwise the
  * configured target, whose layout is then checked. The binding is read
  * before the ledger's directory is settled, so with a binding recorded
- * the default `<HOME>/.foreman` is never resolved and `HOME` is not
+ * the default `<HOME>/.tarlatan` is never resolved and `HOME` is not
  * needed (focused re-review finding 3). The layout of the
  * target in force is checked with the state directory, so an exit never
  * writes through a refused layout. Before the binding is read, an entry
@@ -177,7 +177,7 @@ export const exitTarget = (configPath: string, environment: Readonly<Record<stri
  * Fails with `ConfigUndecodable` when neither is set or the default is
  * not an absolute, normalized path (`ledgerDirOf`).
  */
-export const configuredLayout = (config: ForemanConfig, environment: Readonly<Record<string, string | undefined>>) =>
+export const configuredLayout = (config: TarlatanConfig, environment: Readonly<Record<string, string | undefined>>) =>
   Result.map(
     ledgerDirOf(config, Option.fromNullishOr(environment.HOME)),
     (ledgerDir): CanonicalLayout => ({
@@ -189,7 +189,7 @@ export const configuredLayout = (config: ForemanConfig, environment: Readonly<Re
   )
 
 /** The configured target of an exit with no binding: only here is the default ledger directory needed. */
-const unboundExitTarget = (config: ForemanConfig, environment: Readonly<Record<string, string | undefined>>) =>
+const unboundExitTarget = (config: TarlatanConfig, environment: Readonly<Record<string, string | undefined>>) =>
   Effect.flatMap(Effect.fromResult(configuredLayout(config, environment)), (layout) =>
     Effect.map(checkedLayout(layout), (canonical) => targetOf(config, canonical)),
   )

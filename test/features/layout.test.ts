@@ -6,7 +6,7 @@ import { Result } from "effect"
 import { LayoutRefused } from "../../src/domain/layout.ts"
 import { checkLayout, isWithin } from "../../src/features/layout.ts"
 
-const approved = { stateDir: "/home/o/state", ownerCheckout: "/home/o/repo", supervisor: "/home/o/state/worktree", ledgerDir: "/home/o/.foreman" }
+const approved = { stateDir: "/home/o/state", ownerCheckout: "/home/o/repo", supervisor: "/home/o/state/worktree", ledgerDir: "/home/o/.tarlatan" }
 
 const reasons = (layout: typeof approved) =>
   Result.match(checkLayout(layout), { onSuccess: () => [], onFailure: (refused) => refused.reasons })
@@ -45,7 +45,7 @@ describe("checkLayout", () => {
           reasons: [
             "the owner's checkout is inside the supervisor worktree: /home/o/repo is within /home/o",
             "the state directory is inside the supervisor worktree: /home/o/state is within /home/o",
-            "the ledger directory is inside the supervisor worktree: /home/o/.foreman is within /home/o",
+            "the ledger directory is inside the supervisor worktree: /home/o/.tarlatan is within /home/o",
           ],
         }),
       ),

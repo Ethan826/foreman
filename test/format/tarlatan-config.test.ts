@@ -1,5 +1,5 @@
 // The configuration file decoder (plan "Slice A1", Format
-// `foreman-config.ts`; decisions P4 and P5): strict JSON, every path
+// `tarlatan-config.ts`; decisions P4 and P5): strict JSON, every path
 // absolute, both client pins present, unknown keys refused, and no
 // per-role grant estimate (decision P5, batch review B10). Check commands
 // are optional, and a malformed one refuses the file with a reason that
@@ -9,12 +9,12 @@ import { Array as Arr, Formatter, Option, Result, String } from "effect"
 import { waxwingRootLine } from "../../src/domain/attributes.ts"
 import { Clients } from "../../src/domain/clients.ts"
 import { Roles } from "../../src/domain/roles.ts"
-import { ConfigUndecodable, decodeForemanConfig, type ForemanConfig, ledgerDirOf } from "../../src/format/foreman-config.ts"
+import { ConfigUndecodable, decodeTarlatanConfig, type TarlatanConfig, ledgerDirOf } from "../../src/format/tarlatan-config.ts"
 
 const pins = { [Clients.Claude]: "2.1.328 (Claude Code)", [Clients.Codex]: "codex-cli 0.170.0" }
 
 const file = (overrides: Record<string, unknown> = {}) => ({
-  projectId: "foreman",
+  projectId: "tarlatan",
   stateDir: "/state",
   ownerCheckout: "/owner",
   supervisor: { path: "/state/worktree", name: "assisted" },
@@ -23,7 +23,7 @@ const file = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
-const decoded = (value: unknown) => decodeForemanConfig(JSON.stringify(value))
+const decoded = (value: unknown) => decodeTarlatanConfig(JSON.stringify(value))
 
 const refused = (value: unknown) => {
   const result = decoded(value)
@@ -95,7 +95,7 @@ const repeated = (text: string, count: number) => Arr.join(Arr.makeBy(count, () 
  * cannot round-trip, such as `1e400`.
  */
 const fileWithRawEntry = (entry: string) =>
-  `{"projectId":"foreman","stateDir":"/state","ownerCheckout":"/owner",` +
+  `{"projectId":"tarlatan","stateDir":"/state","ownerCheckout":"/owner",` +
   `"supervisor":{"path":"/state/worktree","name":"assisted"},` +
   `"attributeAllowance":{"rootLines":${JSON.stringify([waxwingRootLine])}},` +
   `"pins":${JSON.stringify(pins)},"checkCommands":["bun run verify",${entry}]}`
@@ -106,7 +106,7 @@ const fileWithRawEntry = (entry: string) =>
  * stays short.
  */
 const refusedAsKind = (entry: string, kind: string) => {
-  const reason = Result.match(decodeForemanConfig(fileWithRawEntry(entry)), {
+  const reason = Result.match(decodeTarlatanConfig(fileWithRawEntry(entry)), {
     onSuccess: () => expect.unreachable(`the entry of kind ${kind} decodes`),
     onFailure: (failure) => failure.reason,
   })
@@ -139,11 +139,11 @@ const refusesOverflowingNumberCommand = () => {
   refusedAsKind("1e400", "a number")
 }
 
-describe("decodeForemanConfig", () => {
+describe("decodeTarlatanConfig", () => {
   it("decodes every field", () => {
     const config = Result.getOrUndefined(decoded(file()))
     expect(config).toEqual({
-      projectId: "foreman",
+      projectId: "tarlatan",
       stateDir: "/state",
       ownerCheckout: "/owner",
       supervisor: { path: "/state/worktree", name: "assisted" },
@@ -179,17 +179,17 @@ describe("decodeForemanConfig", () => {
     refused(file({ estimates: { [Roles.Implementer]: 0, [Roles.Reviewer]: 0, [Roles.Corrector]: 0 } }))
   })
 
-  it("puts the ledger in the configured directory, else in <HOME>/.foreman", () => {
-    const decodedConfig = (value: unknown): ForemanConfig =>
+  it("puts the ledger in the configured directory, else in <HOME>/.tarlatan", () => {
+    const decodedConfig = (value: unknown): TarlatanConfig =>
       Result.getOrElse(decoded(value), () => expect.unreachable("the file decodes"))
     expect(ledgerDirOf(decodedConfig(file({ ledgerDir: "/ledger" })), Option.some("/home/o"))).toEqual(Result.succeed("/ledger"))
-    expect(ledgerDirOf(decodedConfig(file()), Option.some("/home/o"))).toEqual(Result.succeed("/home/o/.foreman"))
+    expect(ledgerDirOf(decodedConfig(file()), Option.some("/home/o"))).toEqual(Result.succeed("/home/o/.tarlatan"))
     expect(Result.isFailure(ledgerDirOf(decodedConfig(file()), Option.none()))).toBe(true)
     expect(Result.isFailure(ledgerDirOf(decodedConfig(file()), Option.some("home")))).toBe(true)
   })
 
   it("refuses text that is not JSON", () => {
-    expect(Result.isFailure(decodeForemanConfig("{ projectId: foreman"))).toBe(true)
+    expect(Result.isFailure(decodeTarlatanConfig("{ projectId: tarlatan"))).toBe(true)
   })
 
   it("refuses an unknown key at the top level", () => {
@@ -205,7 +205,7 @@ describe("decodeForemanConfig", () => {
     refused(file({ supervisor: { path: "worktree", name: "assisted" } }))
   })
 
-  it("refuses a Claude settings file: foreman writes the editing profile itself (B03)", () => {
+  it("refuses a Claude settings file: tarlatan writes the editing profile itself (B03)", () => {
     refused(file({ claudeSettings: "/state/claude-settings.json" }))
   })
 

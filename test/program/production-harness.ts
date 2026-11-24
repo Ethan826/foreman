@@ -3,7 +3,7 @@
 // owner repository, a state directory, a ledger directory and a
 // configuration file, and the CLI's `main` run over it exactly as the
 // entry runs it. The clients are fake executables on the PATH the test
-// passes as foreman's environment: `claude` and `codex` answer
+// passes as tarlatan's environment: `claude` and `codex` answer
 // `--version` with the pins, record their argv and what they were given,
 // run an optional shell action in their working directory, and print a
 // recorded-shape successful run. No live client runs.
@@ -57,7 +57,7 @@ const ledgerBusyMillis = 1_000
 const executableMode = 0o755
 
 /** A heredoc body that prints `lines`, one per line. */
-const printed = (lines: ReadonlyArray<string>) => `cat <<'FOREMAN_EOF'\n${lines.join("\n")}\nFOREMAN_EOF\n`
+const printed = (lines: ReadonlyArray<string>) => `cat <<'TARLATAN_EOF'\n${lines.join("\n")}\nTARLATAN_EOF\n`
 
 /** The fake `claude`: records argv and the bytes of the `--settings` file, then succeeds. */
 const fakeClaude = [
@@ -83,7 +83,7 @@ const fakeCodex = [
   'out=""',
   'while [ $# -gt 0 ]; do if [ "$1" = "--output-last-message" ]; then out="$2"; fi; shift; done',
   'if [ -n "$FAKE_MESSAGE" ]; then printf "%s" "$FAKE_MESSAGE" > "$out"; fi',
-  `if [ -z "$FAKE_MESSAGE" ]; then cat > "$out" <<'FOREMAN_EOF'\n${cleanReviewMessage}FOREMAN_EOF\nfi`,
+  `if [ -z "$FAKE_MESSAGE" ]; then cat > "$out" <<'TARLATAN_EOF'\n${cleanReviewMessage}TARLATAN_EOF\nfi`,
   printed(codexCompletedLines),
 ].join("\n")
 
@@ -94,7 +94,7 @@ const script = (path: string, text: string) => {
 
 /** A fresh layout under a canonical temporary directory, with the owner repository made. */
 const makeLayout = Effect.gen(function* () {
-  const root = realpathSync(mkdtempSync(`${tmpdir()}/foreman-production-`))
+  const root = realpathSync(mkdtempSync(`${tmpdir()}/tarlatan-production-`))
   const layout: Layout = {
     root,
     owner: `${root}/owner`,
@@ -159,7 +159,7 @@ const capturing = (out: Array<string>, err: Array<string>): Console.Console => (
   error: (...args: ReadonlyArray<unknown>) => err.push(args.map(String).join(" ")),
 })
 
-/** Runs `main` with `--config` and `words`, foreman's environment holding the fakes' PATH. */
+/** Runs `main` with `--config` and `words`, tarlatan's environment holding the fakes' PATH. */
 export const cli = (layout: Layout, words: ReadonlyArray<string>, options: CliOptions = {}) =>
   Effect.gen(function* () {
     const out: Array<string> = []

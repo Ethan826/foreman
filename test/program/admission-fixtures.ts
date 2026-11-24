@@ -70,7 +70,7 @@ export const removeDir = (dir: string) =>
 export const withLedger = <A, E>(
   use: (store: LedgerStore, path: string) => Effect.Effect<A, E, Scope.Scope>,
 ) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-admit-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-admit-`)
   const path = `${dir}/ledger.sqlite`
   return Effect.ensuring(
     Effect.scoped(Effect.flatMap(openLedger(path, busyMillis), (store) => use(store, path))),

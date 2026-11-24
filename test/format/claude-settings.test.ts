@@ -11,7 +11,7 @@ import { Array as Arr, Effect, Formatter, Result, Schema, String as Str } from "
 import type { RecordedGitIdentity } from "../../src/domain/session.ts"
 import { CheckCommandRefused, claudeEditingSettings, ProfilePathUnsafe } from "../../src/format/claude-settings.ts"
 
-const worktree = "/state/foreman_t-1/worktree"
+const worktree = "/state/tarlatan_t-1/worktree"
 const gitDir = "/owner/.git/worktrees/worktree"
 const commonDir = "/owner/.git"
 

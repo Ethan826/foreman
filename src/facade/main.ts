@@ -3,7 +3,7 @@
 // `process.argv`, `process.env` and `process.exit` (the process gate
 // enforces both limits; the entry's cases are in
 // test/runtime/process-entry-gate.test.ts). It passes the owner's words and
-// foreman's environment to `main` in cli.ts, which decides nothing either,
+// tarlatan's environment to `main` in cli.ts, which decides nothing either,
 // and exits with the status `main` returns. Run it as
 // `bun <checkout>/src/facade/main.ts --config <path> <command>`
 // (decision P3).

@@ -144,7 +144,7 @@ export interface SessionCapabilities {
   readonly nowMono: Effect.Effect<Option.Option<MonoStamp>>
   /** Shows one line of a client's output to the owner as it arrives. */
   readonly show: (line: string) => Effect.Effect<void>
-  /** Foreman's own environment; a client gets it minus every `GIT_*` variable (decision P2). */
+  /** Tarlatan's own environment; a client gets it minus every `GIT_*` variable (decision P2). */
   readonly parentEnvironment: Readonly<Record<string, string>>
 }
 

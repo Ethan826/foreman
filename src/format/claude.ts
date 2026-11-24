@@ -50,7 +50,7 @@ export type ClaudeResult = typeof ClaudeResult.Type
 export const resultText = (result: ClaudeResult): Option.Option<string> =>
   Option.fromNullishOr(result.result)
 
-// The wire names of the windows foreman tracks, and the window each is.
+// The wire names of the windows tarlatan tracks, and the window each is.
 const ClaudeWireWindows = {
   FiveHour: "five_hour",
   SevenDay: "seven_day",
@@ -197,7 +197,7 @@ const readingFor =
     })
 
 /**
- * The readings a `rate_limit_event` gives for the two windows foreman
+ * The readings a `rate_limit_event` gives for the two windows tarlatan
  * tracks: `five_hour` (the five-hour window) and `seven_day` (the weekly
  * window), in that order. Windows are taken one at a time: an untracked
  * window is never examined, and a tracked window that is malformed or has

@@ -33,32 +33,32 @@ const settingFile = (dir: string, name: string) => {
 }
 
 /** The condition that matches the supervisor's branches and not the owner's. */
-const onForemanBranch = "includeIf.onbranch:foreman/**.path"
+const onTarlatanBranch = "includeIf.onbranch:tarlatan/**.path"
 
-/** `includeIf.onbranch:foreman/**` in the owner's config, selecting a file that sets `core.attributesFile`. */
+/** `includeIf.onbranch:tarlatan/**` in the owner's config, selecting a file that sets `core.attributesFile`. */
 const plantOnBranch: Plant = (dir, owner) =>
-  Effect.tap(plantMarkerFilter(dir, owner), () => git(owner, "config", onForemanBranch, settingFile(dir, "selected")))
+  Effect.tap(plantMarkerFilter(dir, owner), () => git(owner, "config", onTarlatanBranch, settingFile(dir, "selected")))
 
 /** The same condition, written in a file that an unconditional `include.path` reaches. */
 const plantNested: Plant = (dir, owner) =>
   Effect.tap(plantMarkerFilter(dir, owner), () => {
     const selected = settingFile(dir, "selected")
-    writeFileSync(`${dir}/outer`, `[includeIf "onbranch:foreman/**"]\n\tpath = ${selected}\n`)
+    writeFileSync(`${dir}/outer`, `[includeIf "onbranch:tarlatan/**"]\n\tpath = ${selected}\n`)
     return git(owner, "config", "include.path", `${dir}/outer`)
   })
 
-/** The control: `git worktree add` on a `foreman/` branch through the clean runner, with no check. */
-const addForemanWithoutCheck = (dir: string, owner: string) =>
+/** The control: `git worktree add` on a `tarlatan/` branch through the clean runner, with no check. */
+const addTarlatanWithoutCheck = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const base = Revision.make(yield* git(owner, "rev-parse", "HEAD"))
-    yield* addWorktreeWith(cleanRun)(owner, { branch: "foreman/control", path: `${dir}/control`, base })
+    yield* addWorktreeWith(cleanRun)(owner, { branch: "tarlatan/control", path: `${dir}/control`, base })
   })
 
 const controlWrites = (plant: Plant) => () =>
   withRepo((dir, owner) =>
     Effect.gen(function* () {
       const marker = yield* plant(dir, owner)
-      yield* addForemanWithoutCheck(dir, owner)
+      yield* addTarlatanWithoutCheck(dir, owner)
       expect(written(marker)).toBe(true)
     }),
   )
@@ -75,8 +75,8 @@ const refusedUnwritten = (plant: Plant) => () =>
   )
 
 describe("creation refuses any conditional include before worktree add", () => {
-  it.effect("control: worktree add on a foreman/ branch runs the filter includeIf.onbranch selects", controlWrites(plantOnBranch))
-  it.effect("includeIf.onbranch:foreman/** is refused, and the marker is not written", refusedUnwritten(plantOnBranch))
+  it.effect("control: worktree add on a tarlatan/ branch runs the filter includeIf.onbranch selects", controlWrites(plantOnBranch))
+  it.effect("includeIf.onbranch:tarlatan/** is refused, and the marker is not written", refusedUnwritten(plantOnBranch))
   it.effect("control: worktree add runs the filter a nested includeIf selects", controlWrites(plantNested))
   it.effect("an includeIf inside an unconditional include.path is refused, and the marker is not written", refusedUnwritten(plantNested))
 })
@@ -139,7 +139,7 @@ const worktreeConfigRefused = (dir: string, owner: string) =>
 const includeIfLaterRefused = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const created = yield* createWorktree(request(owner, dir))
-    yield* git(owner, "config", onForemanBranch, `${dir}/absent`)
+    yield* git(owner, "config", onTarlatanBranch, `${dir}/absent`)
     expect(kinds(yield* refusalsOf(identifyWorktree(created)))).toEqual([[Sources.ConditionalInclude, Reasons.Configured]])
   })
 

@@ -12,7 +12,7 @@ import {
 } from "../../src/domain/worktree.ts"
 import { refuseExistingBranch, refuseExistingPath, requireAbsolute } from "../../src/features/worktree-precheck.ts"
 
-const probeArgs = ["rev-parse", "--verify", "--quiet", "refs/heads/foreman/t"]
+const probeArgs = ["rev-parse", "--verify", "--quiet", "refs/heads/tarlatan/t"]
 
 const probe = (exitCode: number) => ({ args: probeArgs, exitCode, stderr: "stderr text" })
 
@@ -40,17 +40,17 @@ describe("requireAbsolute", () => {
 
 describe("refuseExistingBranch", () => {
   it("refuses when the ref resolves (exit 0)", () => {
-    expect(refuseExistingBranch("foreman/t", probe(0))).toEqual(
-      Result.fail(new WorktreeBranchExists({ branch: "foreman/t" })),
+    expect(refuseExistingBranch("tarlatan/t", probe(0))).toEqual(
+      Result.fail(new WorktreeBranchExists({ branch: "tarlatan/t" })),
     )
   })
 
   it("passes when the ref is missing (exit 1)", () => {
-    expect(refuseExistingBranch("foreman/t", probe(1))).toEqual(Result.void)
+    expect(refuseExistingBranch("tarlatan/t", probe(1))).toEqual(Result.void)
   })
 
   it("keeps the args, exit code and stderr of any other exit", () => {
-    expect(refuseExistingBranch("foreman/t", probe(128))).toEqual(
+    expect(refuseExistingBranch("tarlatan/t", probe(128))).toEqual(
       Result.fail(new GitCommandFailed({ args: probeArgs, exitCode: Option.some(128), stderr: "stderr text" })),
     )
   })

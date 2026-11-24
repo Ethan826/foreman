@@ -66,7 +66,7 @@ const startClient = startClientWith(readProcesses, startTimeOf)
  */
 const printedByShell = (bytes: Uint8Array) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-bytes-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-bytes-`)),
     (dir) =>
       Effect.gen(function* () {
         writeFileSync(`${dir}/out`, bytes)

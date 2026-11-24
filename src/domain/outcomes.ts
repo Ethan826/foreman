@@ -73,7 +73,7 @@ export class NothingToCommit extends Schema.TaggedClass<NothingToCommit>()(
   "NothingToCommit",
   {},
 ) {}
-/** Why foreman refused a commit: a protected path changed, or HEAD moved. */
+/** Why tarlatan refused a commit: a protected path changed, or HEAD moved. */
 export const CommitRefusals = {
   ProtectedPath: "protectedPath",
   HeadMoved: "headMoved",
@@ -83,7 +83,7 @@ export const CommitRefusal = Schema.Literals(Record.values(CommitRefusals))
 /** A commit refusal reason, one of the values of {@link CommitRefusals}. */
 export type CommitRefusal = typeof CommitRefusal.Type
 
-/** Foreman refused to commit, for `reason`. */
+/** Tarlatan refused to commit, for `reason`. */
 export class CommitRefused extends Schema.TaggedClass<CommitRefused>()(
   "CommitRefused",
   { reason: CommitRefusal },

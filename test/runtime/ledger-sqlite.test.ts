@@ -61,7 +61,7 @@ const removeDir = (dir: string) =>
 
 // Runs `use` against a ledger in a fresh temporary directory.
 const withLedger = <A, E>(use: (store: LedgerStore, path: string) => Effect.Effect<A, E>) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-ledger-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-ledger-`)
   const path = `${dir}/ledger.sqlite`
   return Effect.ensuring(
     Effect.scoped(Effect.flatMap(openLedger(path, busyMillis), (store) => use(store, path))),
@@ -197,7 +197,7 @@ const waitsThenSucceeds = (dir: string) =>
   )
 
 const withDir = <A, E>(use: (dir: string) => Effect.Effect<A, E>) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-ledger-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-ledger-`)
   return Effect.ensuring(use(dir), removeDir(dir))
 }
 

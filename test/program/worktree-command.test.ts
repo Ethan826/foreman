@@ -1,4 +1,4 @@
-// `foreman worktree create` (a deviation from plan "Slice A1", recorded
+// `tarlatan worktree create` (a deviation from plan "Slice A1", recorded
 // in the report: a session needs a recorded supervisor worktree): under
 // the lock, it runs the creation it is given and appends the returned
 // `WorktreeCreated`; with one already recorded it refuses and runs
@@ -16,7 +16,7 @@ import { tryLock } from "../../src/runtime/project-lock.ts"
 
 const created = new WorktreeCreated({
   path: "/state/worktree",
-  branch: "foreman/t",
+  branch: "tarlatan/t",
   gitDir: "/owner/.git/worktrees/worktree",
   commonDir: "/owner/.git",
   base: Revision.make("a".repeat(40)),
@@ -29,7 +29,7 @@ interface Deps {
 }
 
 const withLog = <A, E>(use: (deps: Deps) => Effect.Effect<A, E>) => {
-  const dir = mkdtempSync(`${tmpdir()}/foreman-worktree-command-`)
+  const dir = mkdtempSync(`${tmpdir()}/tarlatan-worktree-command-`)
   return Effect.ensuring(
     Effect.scoped(Effect.flatMap(openProjectLog(`${dir}/log.sqlite`, 50), (log) => use({ log, dir }))),
     Effect.sync(() => {

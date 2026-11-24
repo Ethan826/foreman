@@ -5,7 +5,7 @@
 // the processes whose group is the recorded group. None of this proves
 // anything: a listed group may be an unrelated one reusing the id, a
 // descendant that left the group is not listed, and nothing listed does
-// not establish cleanup. Foreman never signals.
+// not establish cleanup. Tarlatan never signals.
 import { Array as Arr, Option } from "effect"
 import {
   GroupIdReused,

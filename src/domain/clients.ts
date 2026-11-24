@@ -1,8 +1,8 @@
-// The agent clients foreman drives.
+// The agent clients tarlatan drives.
 import { Record, Schema } from "effect"
 
 /**
- * The names of the agent clients foreman drives. This is the one place they
+ * The names of the agent clients tarlatan drives. This is the one place they
  * are spelled; every schema, key and default elsewhere refers to `Clients`.
  */
 export const Clients = { Claude: "claude", Codex: "codex" } as const

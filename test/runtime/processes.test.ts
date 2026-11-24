@@ -16,7 +16,7 @@ import { awaitExit } from "./child-process.ts"
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-ps-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-ps-`)),
     use,
     (dir) =>
       Effect.sync(() => {

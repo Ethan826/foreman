@@ -40,7 +40,7 @@ const stopOf = (effect: Effect.Effect<unknown, unknown>) =>
 /** Runs `use` over a fresh temporary directory and removes it afterwards. */
 const inDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-startup-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-startup-`)),
     use,
     (dir) =>
       Effect.sync(() => {

@@ -41,7 +41,7 @@ describe("decodeTreeRun", () => {
     "a missing final NUL": `100644 blob ${blob}\ta`,
     "an empty record": `100644 blob ${blob}\ta\x00\x00`,
     "an unknown type": `100644 blobby ${blob}\ta\x00`,
-    "foreman's own name for a type, which git never prints": `100644 ${TreeEntryTypes.Blob} ${blob}\ta\x00`,
+    "tarlatan's own name for a type, which git never prints": `100644 ${TreeEntryTypes.Blob} ${blob}\ta\x00`,
     "a short mode": `10644 blob ${blob}\ta\x00`,
     "a non-octal mode": `100648 blob ${blob}\ta\x00`,
     "a short object id": `100644 blob ${blob.slice(1)}\ta\x00`,

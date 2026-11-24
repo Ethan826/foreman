@@ -69,7 +69,7 @@ disposable repository has protected files only at the top level.
 | File | Purpose |
 |---|---|
 | `profile.sh` | Production's Claude editing profile, read with `bun` from the repository's code: the settings from `claudeEditingSettings` with the one stand-in below, and the argv from `claudeEditingArgv` (see "Settings and production"). Sourced by `setup.sh` and `run-case.sh`. |
-| `setup.sh <scratch>` | Creates the scratch root, which must not exist yet, and records every top-level path it creates in `<scratch>/.l3-owner` before creating it. Then creates the disposable repository (`owner/`, with the project MCP fixture), a bare remote (`remote.git/`), the locked linked worktree (`state/worktree`, branch `foreman/l3`), the empty `outside/`, `www/`, `home/` and `out/`, production's settings for the worktree and `layout.env`. Runs no client. |
+| `setup.sh <scratch>` | Creates the scratch root, which must not exist yet, and records every top-level path it creates in `<scratch>/.l3-owner` before creating it. Then creates the disposable repository (`owner/`, with the project MCP fixture), a bare remote (`remote.git/`), the locked linked worktree (`state/worktree`, branch `tarlatan/l3`), the empty `outside/`, `www/`, `home/` and `out/`, production's settings for the worktree and `layout.env`. Runs no client. |
 | `snapshot.sh <scratch> <label>` | Writes `out/snap-<label>.txt`, one line for every path under the root except `out/`, including paths `setup.sh` never created. Each line has five tab-separated fields: the type, the permission bits, the path's bytes in hex, the SHA-256 of a file's content (the hex of a link's target, `-` otherwise) and the path escaped for reading. Any listing or hashing error fails the snapshot. Two snapshots around a run show every change it made. |
 | `teardown.sh <scratch>` | Checks the whole ownership record against the root (its path, its device and inode, and names `setup.sh` creates), then removes only the recorded paths. Keeps `out/` and anything unrecorded, and leaves permission bits as they are. |
 | `ownership.sh` | The ownership record's format and checks, shared by the scripts. |
@@ -104,7 +104,7 @@ reads a permission rule such as `Edit(//<path>/**)` as a pattern, so a
 matches; the offline tests prove nothing about that matching, so such
 paths are refused instead. `layout.env` still holds single-quoted values
 and the settings are still written by a JSON encoder. Every git
-command in them runs in foreman's clean environment
+command in them runs in tarlatan's clean environment
 (`src/runtime/git.ts`, `cleanGitEnvironment` and `cleanGitOverrides`):
 `env -i` with exactly `PATH=/usr/bin:/bin`, `HOME=<scratch>/home`,
 `GIT_CONFIG_NOSYSTEM=1`, `GIT_CONFIG_GLOBAL=/dev/null` and
@@ -112,7 +112,7 @@ command in them runs in foreman's clean environment
 fsmonitor and signing. Identity and the initial branch are further `-c`
 overrides, so the environment stays at five variables. The worktree is
 created the way the design's "Supervisor worktree" says: `git worktree
-add --lock --reason foreman -b <branch> <path> <base>`.
+add --lock --reason tarlatan -b <branch> <path> <base>`.
 
 ## Scratch location
 
@@ -120,11 +120,11 @@ The scratch directory must be outside every git repository and outside
 every temporary directory (`/tmp`, `/private/tmp`, `/var/folders`).
 Claude's Bash sandbox may allow writes under temporary directories;
 if the scratch directory sat there, `outside/` could be writable for
-reasons that do not apply to foreman's `<stateDir>`, and an outside write
+reasons that do not apply to tarlatan's `<stateDir>`, and an outside write
 could land or be refused for the wrong reason. `setup.sh` refuses those
 locations unless given `--temp-ok`, which exists only to test the scripts.
-Use, for example, `$HOME/foreman-l3-scratch-p` and
-`$HOME/foreman-l3-scratch-x` (and `$HOME/foreman-l3-scratch-u` if
+Use, for example, `$HOME/tarlatan-l3-scratch-p` and
+`$HOME/tarlatan-l3-scratch-x` (and `$HOME/tarlatan-l3-scratch-u` if
 variant U is authorized), one per root, paths that do not exist yet;
 `prepare.sh` creates each through `setup.sh`. A later authorized run
 uses new paths (for example with a `-2` suffix). `$HOME` must itself be
@@ -198,7 +198,7 @@ directories is UNCONFIRMED, hence "Scratch location").
 ### Settings and production
 
 The live run must test the settings production generates:
-`claudeEditingSettings` in `src/format/claude-settings.ts`, which foreman
+`claudeEditingSettings` in `src/format/claude-settings.ts`, which tarlatan
 writes itself for the recorded worktree. `setup.sh` therefore takes the
 root's `claude-settings.json` from that function (through `profile.sh`,
 with `bun`), whatever production holds on the day, and changes one
@@ -253,8 +253,8 @@ its own before-and-after snapshots and its own results table:
 
 | Variant | Claude argv | Scratch root | What it is |
 |---|---|---|---|
-| U (user scope inherited) | production's, less `--setting-sources project,local` | `$HOME/foreman-l3-scratch-u` | the profile with user settings, their hooks and their enabled plugins loaded; `--strict-mcp-config` stays |
-| P (project and local only) | production's, whole | `$HOME/foreman-l3-scratch-p` | the production profile after the change of open question 1 |
+| U (user scope inherited) | production's, less `--setting-sources project,local` | `$HOME/tarlatan-l3-scratch-u` | the profile with user settings, their hooks and their enabled plugins loaded; `--strict-mcp-config` stays |
+| P (project and local only) | production's, whole | `$HOME/tarlatan-l3-scratch-p` | the production profile after the change of open question 1 |
 
 `run-case.sh` builds the argv from the variant `prepare.sh` recorded for
 the root, so a run cannot use the other variant's flags. For P it
@@ -373,11 +373,11 @@ Run every command from a plain terminal (not inside an agent session,
 whose own sandbox would nest), in `bash`, from this directory. Prepare
 only the roots of the authorized path (see "Order and cases"):
 
-    R="$HOME/foreman-l3-path-a"           # the path record; path B: foreman-l3-path-b
-    S_P="$HOME/foreman-l3-scratch-p"      # new paths per "Scratch location"
-    S_X="$HOME/foreman-l3-scratch-x"
+    R="$HOME/tarlatan-l3-path-a"          # the path record; path B: tarlatan-l3-path-b
+    S_P="$HOME/tarlatan-l3-scratch-p"     # new paths per "Scratch location"
+    S_X="$HOME/tarlatan-l3-scratch-x"
     # path B only, first:
-    S_U="$HOME/foreman-l3-scratch-u"
+    S_U="$HOME/tarlatan-l3-scratch-u"
     T_U=$(./prepare.sh U "$S_U" "$R")
     T_P=$(./prepare.sh P "$S_P" "$R")
     T_X=$(./prepare.sh X "$S_X" "$R")
@@ -1354,11 +1354,11 @@ Estimate for this package (a forecast; the caps are the turn limits):
    cap and accept a startup failure if it is gone, or drop it and rely
    on the 600-second timeout?
 3. `sandbox.filesystem.denyWrite` lists only top-level names because
-   glob support is unconfirmed. Foreman's settings encoder will need a
+   glob support is unconfirmed. Tarlatan's settings encoder will need a
    rule for nested protected files; C4 does not test one.
 4. `disableBypassPermissionsMode` and `autoAllowBashIfSandboxed: false`
    go beyond the design's text. Both are stricter. Keep them in the
-   profile foreman encodes?
+   profile tarlatan encodes?
 5. AGENTS.md says every Codex launch needs a waiver until the Codex
    windows enter the default policy. Does the authorization for this
    package count as the waiver for X1 and X2?

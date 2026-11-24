@@ -2,7 +2,7 @@
 // writing in the working directory (plan "Quiescence, inspection and
 // snapshots"). The child is a real `sh` that appends a line to
 // `lingering.txt` five times, a tenth of a second apart, and then ends
-// on its own; foreman never signals it. A test waits for `ended` before
+// on its own; tarlatan never signals it. A test waits for `ended` before
 // it removes the directory.
 import { Effect } from "effect"
 import { type ChildProcess, spawn } from "node:child_process"

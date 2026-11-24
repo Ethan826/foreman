@@ -14,7 +14,7 @@ import { cleanGit, type RunGit } from "../../src/runtime/git.ts"
  * The empty directory that every clean git run in this test file uses as
  * HOME. Made once per test file and removed after its tests.
  */
-export const emptyHome = mkdtempSync(`${tmpdir()}/foreman-home-`)
+export const emptyHome = mkdtempSync(`${tmpdir()}/tarlatan-home-`)
 
 afterAll(() => {
   rmSync(emptyHome, { recursive: true, force: true })
@@ -45,7 +45,7 @@ export const emptyCommit = emptyCommitWith(cleanRun)
 
 const initRepo = (repo: string) =>
   Effect.gen(function* () {
-    yield* git(repo, "config", "user.name", "Foreman Test")
+    yield* git(repo, "config", "user.name", "Tarlatan Test")
     yield* git(repo, "config", "user.email", "test@example.invalid")
     yield* git(repo, "config", "commit.gpgsign", "false")
     yield* emptyCommit(repo, "first")
@@ -61,7 +61,7 @@ export const makeRepo = (dir: string, name: string) =>
  */
 export const withRepo = <A, E>(use: (dir: string, owner: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-worktree-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-worktree-`)),
     (dir) => Effect.andThen(makeRepo(dir, "owner"), use(dir, `${dir}/owner`)),
     (dir) =>
       Effect.sync(() => {

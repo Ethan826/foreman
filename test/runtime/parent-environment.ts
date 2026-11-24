@@ -22,8 +22,8 @@ const unsetters = {
   GIT_COMMON_DIR: () => {
     delete process.env.GIT_COMMON_DIR
   },
-  FOREMAN_PARENT_ONLY: () => {
-    delete process.env.FOREMAN_PARENT_ONLY
+  TARLATAN_PARENT_ONLY: () => {
+    delete process.env.TARLATAN_PARENT_ONLY
   },
 }
 

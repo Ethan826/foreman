@@ -9,7 +9,7 @@
 // and move the supervisor branch in the common git directory. With them
 // denied, `git status` and `git diff` cannot refresh the index; git skips
 // that silently and still exits 0 with correct output.
-// foreman writes it itself; the configuration cannot supply a settings
+// tarlatan writes it itself; the configuration cannot supply a settings
 // file. A rule's `//` starts an absolute path, and `Edit(path)` governs Edit, Write and NotebookEdit,
 // so writes are allowed by one `Edit(...)` rule (L3 plan, settings table).
 // The sandbox keys come through `--settings` because a `false` from

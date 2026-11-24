@@ -206,7 +206,7 @@ const step = (store: LedgerStore, world: World) => (op: Op) =>
 
 const runHistory = (ops: ReadonlyArray<Op>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-lifecycle-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-lifecycle-`)),
     (dir) =>
       Effect.scoped(
         Effect.gen(function* () {

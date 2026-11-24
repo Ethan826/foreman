@@ -208,7 +208,7 @@ describe("checkAttributeSources", () => {
   it("refuses any conditional include listed (exit 0), and stops on any listing exit other than 0 or 1 as unread", () => {
     const listing = (reason: AttributeRefusal["reason"], detail: string) =>
       refusal(AttributeSources.ConditionalInclude, reason, Option.none(), Option.none(), detail)
-    const listed = "includeif.onbranch:foreman/**.path /x/selected\n"
+    const listed = "includeif.onbranch:tarlatan/**.path /x/selected\n"
     expect(checkWithNoAllowance(reading({ conditionalIncludes: exited(0, listed) }))).toEqual(
       refused(listing(AttributeRefusalReasons.Configured, listed)),
     )

@@ -14,7 +14,7 @@ import { withUnsearchable } from "./git-repo.ts"
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-walk-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-walk-`)),
     use,
     (dir) =>
       Effect.sync(() => {

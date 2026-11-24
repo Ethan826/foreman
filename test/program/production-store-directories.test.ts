@@ -19,7 +19,7 @@ import { cli, configOf, endToEndMillis, failureTag, type Layout, succeeded, with
 /** The permission bits of st_mode. */
 const permissionBits = 0o777
 
-/** The mode foreman creates a store directory with. */
+/** The mode tarlatan creates a store directory with. */
 const privateMode = 0o700
 
 /** The permission bits of the entry at `path`, without following a link. */
@@ -95,7 +95,7 @@ const ledgerJudgedFirst = (words: ReadonlyArray<string>) => () =>
 
 /**
  * A ledger directory directly inside a missing state directory: the state
- * directory is the ledger's parent and is one foreman is configured to
+ * directory is the ledger's parent and is one tarlatan is configured to
  * own, so both are created, each mode 0700 (owner ruling F12, dogfood-2).
  */
 const nestedBothCreated = () =>

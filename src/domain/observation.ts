@@ -36,7 +36,7 @@ export const wholeWindowPercent = 100
  *   one is never fresh.
  * - `seq`: the ledger sequence number assigned at ingestion.
  *
- * Freshness says how recently foreman observed a reading, never when the
+ * Freshness says how recently tarlatan observed a reading, never when the
  * provider captured it.
  */
 export const Observation = Schema.Struct({

@@ -1,7 +1,7 @@
 // Fixtures follow the output of git 2.50.1 `git worktree list --porcelain
 // -z` as probed on 2026-11-17: each attribute line ends in NUL and each
 // record ends in one more NUL. They hold a main entry, a locked entry with a
-// reason (`--lock --reason foreman`), one locked with no reason (`git
+// reason (`--lock --reason tarlatan`), one locked with no reason (`git
 // worktree lock` without `--reason`), a detached entry and a bare
 // repository's entry. Without `-z`, git quotes a lock reason such as
 // `say "hi"<TAB>tab` and a newline in a path splits its record; with `-z`
@@ -22,17 +22,17 @@ const listing = [
   "",
   "worktree /state/worktree",
   `HEAD ${head}`,
-  "branch refs/heads/foreman/x",
-  "locked foreman",
+  "branch refs/heads/tarlatan/x",
+  "locked tarlatan",
   "",
   "worktree /state/no-reason",
   `HEAD ${head}`,
-  "branch refs/heads/foreman/y",
+  "branch refs/heads/tarlatan/y",
   "locked",
   "",
   "worktree /state/spaced",
   `HEAD ${head}`,
-  "branch refs/heads/foreman/z",
+  "branch refs/heads/tarlatan/z",
   "locked added with --lock",
   "",
   "worktree /state/detached",
@@ -62,7 +62,7 @@ describe("git worktree list --porcelain -z", () => {
 
   it("decodes a locked entry with a reason", () => {
     expect(decoded(listing)[1]?.lock).toEqual(
-      Option.some({ reason: Option.some("foreman") }),
+      Option.some({ reason: Option.some("tarlatan") }),
     )
   })
 

@@ -1,4 +1,4 @@
-// House-rule lint configuration for foreman.
+// House-rule lint configuration for tarlatan.
 //
 // Provenance: adapted from the owner's lsatchapelhill project
 // (eslint-fp-rules.js and apps/api/eslint.config.js): the loop, throw, try,

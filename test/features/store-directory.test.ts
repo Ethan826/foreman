@@ -24,7 +24,7 @@ import {
   parentOf,
 } from "../../src/features/store-directory.ts"
 
-const path = "/home/owner/foreman-state"
+const path = "/home/owner/tarlatan-state"
 
 /** A verdict as a comparable value: the action, or the refusal's kind and fields. */
 const verdict = (reading: StoreDirectoryReading) =>

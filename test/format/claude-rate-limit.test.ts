@@ -84,7 +84,7 @@ describe("Claude rate_limit_event readings", () => {
     )
   })
 
-  it("ignores windows foreman does not track", () => {
+  it("ignores windows tarlatan does not track", () => {
     expect(
       readingsOf(withWindows({ seven_day_fable: { utilization: 0.1 } })),
     ).toEqual(Result.succeed([]))

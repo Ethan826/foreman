@@ -11,7 +11,7 @@
 // `execPath` to {@link Process} by interface merging and declares no
 // second `process`.
 
-/** The parts of Bun's `process` global that foreman declares. */
+/** The parts of Bun's `process` global that tarlatan declares. */
 interface Process {
   /**
    * The runtime's executable, the script's path, then the script's

@@ -1,5 +1,5 @@
 // Whether git's HOME may be used (batch review B02): a real directory,
-// not a link, owned by foreman's user, mode exactly 0700, and empty. The
+// not a link, owned by tarlatan's user, mode exactly 0700, and empty. The
 // owner case is here because a test cannot make a directory another user
 // owns; the rest also run through production in
 // test/program/production-home.test.ts.
@@ -16,12 +16,12 @@ const reasons = (reading: HomeAbsent | HomeFound | HomeUnreadable) =>
   Result.match(judgeGitHome(path, reading), { onSuccess: () => [], onFailure: (refused) => refused.reasons })
 
 describe("judgeGitHome", () => {
-  it("passes a private, empty directory owned by foreman's user", () => {
+  it("passes a private, empty directory owned by tarlatan's user", () => {
     expect(judgeGitHome(path, new HomeFound(usable))).toEqual(Result.void)
   })
 
   it("refuses another user's directory", () => {
-    expect(reasons(new HomeFound({ ...usable, ownerUid: 0 }))).toEqual(["is owned by uid 0, not foreman's"])
+    expect(reasons(new HomeFound({ ...usable, ownerUid: 0 }))).toEqual(["is owned by uid 0, not tarlatan's"])
   })
 
   it("refuses any mode but 700, narrower included", () => {

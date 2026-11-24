@@ -86,7 +86,7 @@ step stops the next one.
 
 1. Choose a new scratch root per root of the path (P and X for path A;
    U, P and X for path B) outside every repository and every temporary
-   directory, for example `$HOME/foreman-l3-scratch-p`. None may exist
+   directory, for example `$HOME/tarlatan-l3-scratch-p`. None may exist
    yet. Each path may hold only letters, digits, `.`, `_`, `+`, `-` and
    `/`, the alphabet production's profile accepts; `setup.sh` refuses
    any other character before it writes. Trailing and doubled slashes

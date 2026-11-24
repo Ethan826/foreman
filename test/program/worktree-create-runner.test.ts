@@ -29,7 +29,7 @@ const overriding =
     )
 
 /**
- * The clean runner, which first creates `foreman/t` in `owner` when
+ * The clean runner, which first creates `tarlatan/t` in `owner` when
  * `worktree add` is called, and keeps that command's args and output in
  * `added`.
  */
@@ -37,7 +37,7 @@ const racingBranch =
   (owner: string, added: Array<{ readonly args: ReadonlyArray<string>; readonly output: GitOutput }>): RunGit =>
   (cwd, called) =>
     called[0] === "worktree" && called[1] === "add"
-      ? Effect.tap(Effect.andThen(cleanRun(owner, ["branch", "foreman/t"]), cleanRun(cwd, called)), (output) =>
+      ? Effect.tap(Effect.andThen(cleanRun(owner, ["branch", "tarlatan/t"]), cleanRun(cwd, called)), (output) =>
           Effect.sync(() => {
             added.push({ args: called, output })
           }),
@@ -54,8 +54,8 @@ const refusesOtherToplevel = (dir: string, owner: string) =>
       new WorktreeNotAsCreated({
         requestedPath: realpathSync(path),
         toplevel: dir,
-        expectedRef: "refs/heads/foreman/t",
-        headRef: "refs/heads/foreman/t",
+        expectedRef: "refs/heads/tarlatan/t",
+        headRef: "refs/heads/tarlatan/t",
       }),
     )
     expect(existsSync(path)).toBe(true)
@@ -70,7 +70,7 @@ const refusesOtherHead = (dir: string, owner: string) =>
       new WorktreeNotAsCreated({
         requestedPath: realpathSync(path),
         toplevel: realpathSync(path),
-        expectedRef: "refs/heads/foreman/t",
+        expectedRef: "refs/heads/tarlatan/t",
         headRef: "refs/heads/main",
       }),
     )
@@ -136,7 +136,7 @@ const notAbsoluteRefused = (path: string) => (_dir: string, owner: string) =>
     expect(refused).toEqual(new WorktreePathNotAbsolute({ path }))
     expect(calls).toEqual([])
     expect(existsSync(`${owner}/${path}`)).toBe(false)
-    expect(yield* git(owner, "branch", "--list", "foreman/*")).toBe("")
+    expect(yield* git(owner, "branch", "--list", "tarlatan/*")).toBe("")
   })
 
 const createdWithDashSegment = (dir: string, owner: string) =>
@@ -145,7 +145,7 @@ const createdWithDashSegment = (dir: string, owner: string) =>
     const calls: Array<ReadonlyArray<string>> = []
     const created = yield* createWorktreeWith(recording(calls), noAttributeAllowance)(request(owner, path))
     expect(created.path).toBe(realpathSync(path))
-    expect(yield* git(path, "symbolic-ref", "HEAD")).toBe("refs/heads/foreman/t")
+    expect(yield* git(path, "symbolic-ref", "HEAD")).toBe("refs/heads/tarlatan/t")
     const added = calls.filter(isAdd)
     expect(added.map((args) => args.slice(-3, -1))).toEqual([["--", path]])
   })
@@ -153,7 +153,7 @@ const createdWithDashSegment = (dir: string, owner: string) =>
 describe("createWorktree over an injected runner", () => {
   it.effect("fails when the top level is not the requested path, and leaves the worktree", () => withRepo(refusesOtherToplevel))
 
-  it.effect("fails when HEAD is not refs/heads/foreman/<name>", () => withRepo(refusesOtherHead))
+  it.effect("fails when HEAD is not refs/heads/tarlatan/<name>", () => withRepo(refusesOtherHead))
 
   it.effect("keeps git's args, exit code and stderr when a race defeats the branch precheck", () => withRepo(raceKeepsGitDetails))
 

@@ -14,7 +14,7 @@ import { awaitExit, startChild, waitForFile } from "./child-process.ts"
 
 const withDir = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
-    Effect.sync(() => mkdtempSync(`${tmpdir()}/foreman-lock-`)),
+    Effect.sync(() => mkdtempSync(`${tmpdir()}/tarlatan-lock-`)),
     use,
     (dir) =>
       Effect.sync(() => {

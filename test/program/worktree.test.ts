@@ -38,8 +38,8 @@ const passesForCreated = (dir: string, owner: string) =>
     const worktree = yield* created(dir, owner)
     const entry = yield* identifyWorktree(worktree)
     expect(entry.path).toBe(worktree.path)
-    expect(entry.branch).toEqual(Option.some("refs/heads/foreman/t"))
-    expect(entry.lock).toEqual(Option.some({ reason: Option.some("foreman") }))
+    expect(entry.branch).toEqual(Option.some("refs/heads/tarlatan/t"))
+    expect(entry.lock).toEqual(Option.some({ reason: Option.some("tarlatan") }))
   })
 
 const reportsUnlocked = (dir: string, owner: string) =>
@@ -85,7 +85,7 @@ const passesWithNewlineInPath = (dir: string, owner: string) =>
     expect(worktree.path).toContain("\n")
     const entry = yield* identifyWorktree(worktree)
     expect(entry.path).toBe(worktree.path)
-    expect(entry.branch).toEqual(Option.some("refs/heads/foreman/t"))
+    expect(entry.branch).toEqual(Option.some("refs/heads/tarlatan/t"))
   })
 
 const reportsDeletedDirectory = (dir: string, owner: string) =>
@@ -97,7 +97,7 @@ const reportsDeletedDirectory = (dir: string, owner: string) =>
     )
     const entry = yield* listedEntry(worktree)
     expect(Result.map(entry, (found) => found?.lock)).toEqual(
-      Result.succeed(Option.some({ reason: Option.some("foreman") })),
+      Result.succeed(Option.some({ reason: Option.some("tarlatan") })),
     )
   })
 
@@ -115,7 +115,7 @@ const reportsOtherRepository = (dir: string, owner: string) =>
   Effect.gen(function* () {
     const worktree = yield* created(dir, owner)
     rmSync(worktree.path, { recursive: true, force: true })
-    yield* git(dir, "init", "--quiet", "-b", "foreman/t", worktree.path)
+    yield* git(dir, "init", "--quiet", "-b", "tarlatan/t", worktree.path)
     expect(yield* Effect.flip(identifyWorktree(worktree))).toEqual(
       failedWith(worktree)(WorktreeConditions.Identity),
     )
