@@ -35,7 +35,7 @@ l3_production_settings() {
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
 const [, path, gitDir, commonDir] = process.argv
-const rendered = claudeEditingSettings({ path, gitDir, commonDir })
+const rendered = claudeEditingSettings({ path, gitDir, commonDir }, [])
 if (Result.isFailure(rendered)) process.exit(3)
 process.stdout.write(rendered.success)
 ' "$1" "$2" "$3") || return 1

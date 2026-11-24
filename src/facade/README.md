@@ -30,7 +30,7 @@ For `status`, `main` calls Program's `productionStatus`. It opens the state read
 The object is one of two:
 
 - `StateMissing`, when the configured state directory has no project log: `stateDir`, `logPath` and `findings`.
-- `ProductionStatusReport`, with five fields: `findings`, `target`, `inForce`, `gitHome` and `report`.
+- `ProductionStatusReport`, with six fields: `findings`, `target`, `inForce`, `gitHome`, `report` and `checkCommands`.
 
 `findings` lists each problem status found, in this order, and is empty when there is none:
 
@@ -45,6 +45,8 @@ The object is one of two:
 `gitHome` is `GitHomeUsable` or `GitHomeRefused` with every reason (batch review B02). Status judges the home from a reading and never makes it.
 
 `report` is the status report described in Program's README: the session state, each incomplete attempt with its grant, the holds, the armed waivers, the pin checks, the worktree check, report and brief integrity, the coverage statement and the advisory process evidence. It is read from the configured state directory's log whatever the findings are. The worktree check runs git only when a target is in force, `findings` is empty and the home is usable. Otherwise `report.worktree` has `passed` false and a `detail` that ends in "worktree check skipped".
+
+`checkCommands` lists the check commands the configuration names, in its order, and is empty when it names none.
 
 [`main.ts`](main.ts) is the entry. Run foreman as `bun src/facade/main.ts --config <path> <command>`, with one of the commands above. It passes the words after the script's path and foreman's environment to `main`, then exits with the status `main` returns: 0, 1 or 2 as above. Following the owner's ruling of 2026-11-19, it is the only module in `src/` that may reference the `process` global, and only as `process.argv`, `process.env` and `process.exit`. It is also the only module in `src/` that may run an Effect, through one awaited `Effect.runPromise`. The process gate (`test/runtime/git-process-gate.test.ts`) and a named lint exception in `eslint.rules.js` enforce those limits. [`process.d.ts`](process.d.ts) declares those three members of the global and no others.
 

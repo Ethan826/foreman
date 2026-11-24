@@ -11,7 +11,8 @@
 // is recorded in `HandoffApproved`. The prior handoff in the brief is the
 // last implementer's or corrector's, not the reviewer's, whose final
 // message holds the reviewer's own findings. Claude's editing profile is
-// published for the session's worktree before admission (batch review B03).
+// published for the session's worktree before admission (batch review B03)
+// with the configured check commands, which the brief names too (dogfood-3b).
 import { type Cause, Effect, Option } from "effect"
 import { HandoffApproved, ReviewChecked } from "../domain/events.ts"
 import { claudeEditingArgv } from "../domain/profiles.ts"
@@ -24,7 +25,7 @@ import { claudeDecoded, claudeHandoff, strictText } from "./client-output.ts"
 import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedOnReviewedTree, handoffTextOf, lastEdit, takeSnapshot } from "./handoff-facts.ts"
 import { recordedTask } from "./implement.ts"
-import type { ProfilePathUnsafe } from "../format/claude-settings.ts"
+import type { CheckCommandRefused, ProfilePathUnsafe } from "../format/claude-settings.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
 import { claudeSettingsPath } from "./claude-profile.ts"
 import type { HandoffGitFailure, SessionContext } from "./session-context.ts"
@@ -49,6 +50,7 @@ export type CorrectFailure =
   | FindingsFileUnreadable
   | StateFileFailed
   | ProfilePathUnsafe
+  | CheckCommandRefused
   | Cause.NoSuchElementError
 
 /** Runs `correct` (see attempt.ts for the protocol and its failures). */
@@ -82,12 +84,14 @@ const prepared = (context: SessionContext, options: CorrectOptions, input: Prepa
     const reviewedTree = yield* Effect.fromOption(session.reviewedTree)
     const findings = yield* ownerFindings(context, session, review.opId, options.findingsFile)
     const edit = yield* Effect.fromOption(lastEdit(session))
-    yield* context.capabilities.publishClaudeProfile(session.opened.worktree)
+    const { checkCommands } = context.settings
+    yield* context.capabilities.publishClaudeProfile(session.opened.worktree, checkCommands)
     const brief = correctBrief({
       task: yield* recordedTask(context, session),
       findingsFile: findings.text,
       priorHandoff: yield* handoffTextOf(context, session, edit.intent.opId),
       tree,
+      checkCommands,
     })
     const { sessionId } = session.opened
     const consent = [

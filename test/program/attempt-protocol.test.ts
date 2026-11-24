@@ -67,7 +67,7 @@ const launchesWithProfile = (harness: Harness) =>
     yield* implement(harness.context, { waive: false })
     const [launch] = harness.client.launches
     const settingsFile = `${harness.dir}/claude-settings.json`
-    expect(launch?.argv).toEqual(claudeEditingArgv({ brief: implementBrief({ task: "Add a greeting.\n" }), settingsFile }))
+    expect(launch?.argv).toEqual(claudeEditingArgv({ brief: implementBrief({ task: "Add a greeting.\n", checkCommands: [] }), settingsFile }))
     expect(launch?.cwd).toBe(harness.worktree.path)
     expect(launch?.env).toEqual({ PATH: "/usr/bin", HOME: "/home/owner" })
     expect(harness.shown).toEqual(claudeSuccess.lines)

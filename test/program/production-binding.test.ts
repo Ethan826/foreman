@@ -111,6 +111,19 @@ const samePathsThroughLinks = () =>
     }),
   )
 
+const checkCommandsNotBound = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      const binding = readFileSync(`${layout.state}/target-binding.json`, "utf8")
+      const copied = writeConfig(layout, configOf(layout, { checkCommands: ["bun run verify"] }), `${layout.root}/copied.json`)
+      yield* succeeded(layout, ["implement", "--waive"], { config: copied })
+      expect(recorded(layout, "claude-launches")).toBe("ran\n")
+      expect(readFileSync(`${layout.state}/target-binding.json`, "utf8")).toBe(binding)
+      expect(binding).not.toContain("checkCommands")
+    }),
+  )
+
 const damagedBindingKept = () =>
   withLayout((layout) =>
     Effect.gen(function* () {
@@ -134,4 +147,5 @@ describe("the target binding in production", () => {
   it.effect("the other owner's repository is left alone", otherTargetUntouched, endToEndMillis)
   it.effect("the same paths named through links are the same target", samePathsThroughLinks, endToEndMillis)
   it.effect("a damaged binding is refused and kept as it is", damagedBindingKept, endToEndMillis)
+  it.effect("a copied config with other check commands is the same target (dogfood-3b)", checkCommandsNotBound, endToEndMillis)
 })

@@ -138,10 +138,10 @@ const recordedBriefs = (harness: Harness) =>
     expect(firstReviewReport?.role).toBe(Roles.Reviewer)
     const findingsFile = text(findingsFileOf(harness))
     expect(launches).toEqual([
-      claudeEditingArgv({ brief: implementBrief({ task }), settingsFile }),
+      claudeEditingArgv({ brief: implementBrief({ task, checkCommands: [] }), settingsFile }),
       reviewArgv({ task, base, tree: firstTree ?? base, handoff: "Wrote the greeting.", lastMessageFile: lastMessageOf(harness, 1) }),
       claudeEditingArgv({
-        brief: correctBrief({ task, findingsFile, priorHandoff: "Wrote the greeting.", tree: firstTree ?? base }),
+        brief: correctBrief({ task, findingsFile, priorHandoff: "Wrote the greeting.", tree: firstTree ?? base, checkCommands: [] }),
         settingsFile,
       }),
       reviewArgv({ task, base, tree: secondTree ?? base, handoff: "Named Ada.", lastMessageFile: lastMessageOf(harness, 3) }),

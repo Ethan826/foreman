@@ -32,9 +32,17 @@ const fresh =
   "You work in a fresh session: you have no transcript of any earlier\n" +
   "session, and everything you need is in this brief."
 
+/** Two configured check commands, in configuration order (dogfood-3b). */
+const twoCommands = ["bun run verify", "bun run test"]
+
+/** The one unwrapped line that names `twoCommands`, byte for byte. */
+const twoCommandsLine =
+  "You may run these check commands with the Bash tool, each exactly as written: `bun run verify`, `bun run test`. " +
+  "They run in the Bash sandbox, with no network and the git directories read-only; give the Bash tool a timeout of 600000 ms."
+
 describe("implementBrief", () => {
   it("gives the task and asks for a handoff", () => {
-    expect(implementBrief({ task: "Add a greeting.\n" })).toBe(
+    expect(implementBrief({ task: "Add a greeting.\n", checkCommands: [] })).toBe(
       `You are the implementer for one task in this repository.
 ${fresh}
 
@@ -52,7 +60,20 @@ what the reviewer should check.
   })
 
   it("marks an empty task file as empty", () => {
-    expect(implementBrief({ task: "" })).toContain("## Task\n\n(empty)\n")
+    expect(implementBrief({ task: "", checkCommands: [] })).toContain("## Task\n\n(empty)\n")
+  })
+
+  it("ends What to do with one line naming the check commands, in order, when there are any", () => {
+    const without = implementBrief({ task: "Add a greeting.\n", checkCommands: [] })
+    const withCommands = implementBrief({ task: "Add a greeting.\n", checkCommands: twoCommands })
+    expect(withCommands).toBe(`${without}\n${twoCommandsLine}\n`)
+    expect(withCommands).toContain(`what the reviewer should check.\n\n${twoCommandsLine}\n`)
+  })
+
+  it("names a single check command alone", () => {
+    expect(implementBrief({ task: "Add a greeting.\n", checkCommands: ["bun run verify"] })).toContain(
+      "\n\nYou may run these check commands with the Bash tool, each exactly as written: `bun run verify`. They run",
+    )
   })
 })
 
@@ -166,6 +187,7 @@ describe("correctBrief", () => {
       findingsFile: "# Findings\n\n## F1 (major)\n\nWrong name.\n",
       priorHandoff: "No changes requested? No: one finding.\n",
       tree,
+      checkCommands: [],
     })
     expect(brief).toBe(`You are the corrector for one task in this repository.
 ${fresh}
@@ -196,6 +218,20 @@ reply with a short handoff: what you changed for each finding and what
 you left open.
 `)
   })
+
+  it("ends What to do with one line naming the check commands, in order, when there are any", () => {
+    const input = { task: "Add a greeting.\n", findingsFile: "Wrong name.\n", priorHandoff: "Done.\n", tree }
+    const without = correctBrief({ ...input, checkCommands: [] })
+    const withCommands = correctBrief({ ...input, checkCommands: twoCommands })
+    expect(withCommands).toBe(`${without}\n${twoCommandsLine}\n`)
+    expect(withCommands).toContain(`you left open.\n\n${twoCommandsLine}\n`)
+  })
+})
+
+describe("the review brief", () => {
+  it("takes no check commands", () => {
+    expect(reviewBrief(reviewInput)).not.toContain("check commands")
+  })
 })
 
 describe("briefs hold only their inputs", () => {
@@ -211,14 +247,14 @@ describe("briefs hold only their inputs", () => {
   const strayInput = /MARK|[0-9a-f]{40}/
 
   it("leaves no other input or object id once its own are removed", () => {
-    const implement = implementBrief({ task: marked.task })
+    const implement = implementBrief({ task: marked.task, checkCommands: [] })
     const review = reviewBrief({
       ...reviewInput,
       task: marked.task,
       lastHandoff: marked.lastHandoff,
       changedPaths: [single("A", marked.changed)],
     })
-    const correct = correctBrief({ ...marked, tree })
+    const correct = correctBrief({ ...marked, tree, checkCommands: [] })
     expect(without(implement, [marked.task])).not.toMatch(strayInput)
     const reviewGiven = [
       marked.task, marked.lastHandoff, marked.changed, tree, base,

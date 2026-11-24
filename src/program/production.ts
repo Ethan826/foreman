@@ -136,6 +136,7 @@ export const production: ProductionFactory = (configPath, environment) =>
         pins: config.pins,
         estimates: initialEstimates,
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
+        checkCommands: config.checkCommands,
       },
     }
     return { config, target, context, worktree } satisfies Production

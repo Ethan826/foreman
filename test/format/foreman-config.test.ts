@@ -1,9 +1,11 @@
 // The configuration file decoder (plan "Slice A1", Format
 // `foreman-config.ts`; decisions P4 and P5): strict JSON, every path
 // absolute, both client pins present, unknown keys refused, and no
-// per-role grant estimate (decision P5, batch review B10).
+// per-role grant estimate (decision P5, batch review B10). Check commands
+// are optional, and a malformed one refuses the file with a reason that
+// names it (dogfood-3b; owner ruling of 2026-11-24).
 import { describe, expect, it } from "@effect/vitest"
-import { Option, Result } from "effect"
+import { Array as Arr, Formatter, Option, Result, String } from "effect"
 import { waxwingRootLine } from "../../src/domain/attributes.ts"
 import { Clients } from "../../src/domain/clients.ts"
 import { Roles } from "../../src/domain/roles.ts"
@@ -34,6 +36,109 @@ const refused = (value: unknown) => {
   })
 }
 
+/** A command of `length` letters. */
+const commandOf = (length: number) => Arr.join(Arr.makeBy(length, () => "a"), "")
+
+/** Valid check commands, using every character the rule allows. */
+const validCommands = ["bun run verify", "bun run test -- test/a_b.ts", "make check PORT=8080 user@host:/x+y", commandOf(200)]
+
+/** Each entry the decoder refuses on its own (dogfood-3b). */
+const malformedCommands = [
+  "",
+  commandOf(201),
+  "bun run verify; rm -rf x",
+  "bun run 'x'",
+  "bun\trun",
+  "bun run *",
+  " bun run verify",
+  "bun run verify ",
+  "bun  run verify",
+  "git",
+  "git log",
+  "curl",
+  "curl x",
+]
+
+const keepsCheckCommands = () => {
+  expect(Result.map(decoded(file({ checkCommands: validCommands })), (config) => config.checkCommands)).toEqual(
+    Result.succeed(validCommands),
+  )
+  expect(Result.map(decoded(file({ checkCommands: [] })), (config) => config.checkCommands)).toEqual(Result.succeed([]))
+  expect(Result.map(decoded(file()), (config) => config.checkCommands)).toEqual(Result.succeed([]))
+}
+
+/** Requires that decoding with `commands` fails with `ConfigUndecodable` whose reason names `named`. */
+const refusedNaming = (commands: ReadonlyArray<string>, named: string) => {
+  const reason = Result.match(decoded(file({ checkCommands: commands })), {
+    onSuccess: () => expect.unreachable(`${Formatter.formatJson(named)} decodes`),
+    onFailure: (failure) => failure.reason,
+  })
+  expect(reason).toContain(`the check command ${Formatter.formatJson(named)} `)
+}
+
+const refusesEachMalformedCommand = () => {
+  Arr.forEach(malformedCommands, (command) => {
+    refusedNaming(["bun run verify", command], command)
+  })
+}
+
+const refusesDuplicateCommand = () => {
+  refusedNaming(["bun run verify", "bun run test", "bun run verify"], "bun run verify")
+}
+
+/** `text` repeated `count` times. */
+const repeated = (text: string, count: number) => Arr.join(Arr.makeBy(count, () => text), "")
+
+/**
+ * The configuration file's text with the check commands `bun run verify`
+ * and then `entry`, given as raw JSON text so that it may be a number JSON
+ * cannot round-trip, such as `1e400`.
+ */
+const fileWithRawEntry = (entry: string) =>
+  `{"projectId":"foreman","stateDir":"/state","ownerCheckout":"/owner",` +
+  `"supervisor":{"path":"/state/worktree","name":"assisted"},` +
+  `"attributeAllowance":{"rootLines":${JSON.stringify([waxwingRootLine])}},` +
+  `"pins":${JSON.stringify(pins)},"checkCommands":["bun run verify",${entry}]}`
+
+/**
+ * Requires that the raw JSON `entry`, second in the list, fails decoding
+ * with `ConfigUndecodable` whose reason gives index 1 and `kind`, and
+ * stays short.
+ */
+const refusedAsKind = (entry: string, kind: string) => {
+  const reason = Result.match(decodeForemanConfig(fileWithRawEntry(entry)), {
+    onSuccess: () => expect.unreachable(`the entry of kind ${kind} decodes`),
+    onFailure: (failure) => failure.reason,
+  })
+  expect(reason).toContain(`the check command at index 1 is ${kind}, not a string`)
+  expect(String.length(reason)).toBeLessThan(400)
+}
+
+/** Entries that are not strings, as raw JSON, each with the kind the reason gives (owner finding F2). */
+const nonStringCommands: ReadonlyArray<readonly [string, string]> = [
+  ["42", "a number"],
+  ["null", "null"],
+  ["true", "a boolean"],
+  ['["bun"]', "a list"],
+  ['{"run":"verify"}', "an object"],
+]
+
+const refusesNonStringCommand = () => {
+  Arr.forEach(nonStringCommands, ([entry, kind]) => {
+    refusedAsKind(entry, kind)
+  })
+}
+
+/** A list nested 5,000 deep: formatting it as JSON overflowed the stack (second correction, F2). */
+const refusesDeeplyNestedCommand = () => {
+  refusedAsKind(`${repeated("[", 5000)}${repeated("]", 5000)}`, "a list")
+}
+
+/** `1e400` parses to Infinity, which JSON formats as `null` (second correction, F2). */
+const refusesOverflowingNumberCommand = () => {
+  refusedAsKind("1e400", "a number")
+}
+
 describe("decodeForemanConfig", () => {
   it("decodes every field", () => {
     const config = Result.getOrUndefined(decoded(file()))
@@ -45,8 +150,21 @@ describe("decodeForemanConfig", () => {
       ledgerDir: Option.none(),
       attributeAllowance: { rootLines: [waxwingRootLine] },
       pins,
+      checkCommands: [],
     })
   })
+
+  it("keeps the configured check commands in order, and none when the key is absent", keepsCheckCommands)
+
+  it("refuses each malformed check command, with a reason that names it", refusesEachMalformedCommand)
+
+  it("refuses a check command listed twice, naming it", refusesDuplicateCommand)
+
+  it("refuses a check command that is not a string, naming its index and kind", refusesNonStringCommand)
+
+  it("refuses a deeply nested check command by index and kind, with a short reason", refusesDeeplyNestedCommand)
+
+  it("refuses the check command 1e400 as a number, naming its index", refusesOverflowingNumberCommand)
 
   it("keeps a configured ledger directory and refuses a relative or unnormalized one", () => {
     expect(Result.map(decoded(file({ ledgerDir: "/ledger" })), (config) => config.ledgerDir)).toEqual(

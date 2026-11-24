@@ -3,11 +3,13 @@
 // whole template is checked through production in
 // test/program/production-profile.test.ts; here, the path binding, the
 // denials of both git directories (owner ruling of 2026-11-23,
-// dogfood-3a), and the paths the template refuses to bind.
+// dogfood-3a), the paths the template refuses to bind, and the check
+// commands: none leaves today's bytes, each is one exact rule after the
+// `git diff` rules, and a refused one fails (dogfood-3b).
 import { describe, expect, it } from "@effect/vitest"
-import { Array as Arr, Effect, Result, Schema, String as Str } from "effect"
+import { Array as Arr, Effect, Formatter, Result, Schema, String as Str } from "effect"
 import type { RecordedGitIdentity } from "../../src/domain/session.ts"
-import { claudeEditingSettings, ProfilePathUnsafe } from "../../src/format/claude-settings.ts"
+import { CheckCommandRefused, claudeEditingSettings, ProfilePathUnsafe } from "../../src/format/claude-settings.ts"
 
 const worktree = "/state/foreman_t-1/worktree"
 const gitDir = "/owner/.git/worktrees/worktree"
@@ -42,7 +44,7 @@ const isRecordedGitDirectory = (path: string) => path === gitDir || path === com
 const boundSandboxPath = (path: string) => insideWorktree(path) || isRecordedGitDirectory(path)
 
 const parsed = (bound: RecordedGitIdentity) =>
-  Effect.flatMap(Effect.fromResult(claudeEditingSettings(bound)), Schema.decodeUnknownEffect(Settings))
+  Effect.flatMap(Effect.fromResult(claudeEditingSettings(bound, [])), Schema.decodeUnknownEffect(Settings))
 
 const bindsEveryPath = () =>
   Effect.gen(function* () {
@@ -65,21 +67,129 @@ const unsafePaths = ["state/worktree", "//state/worktree", "/state//worktree", "
 
 const refusesUnsafeWorktree = () => {
   Arr.forEach(unsafePaths, (path) => {
-    expect(claudeEditingSettings(identityAt(path))).toEqual(Result.fail(new ProfilePathUnsafe({ path })))
+    expect(claudeEditingSettings(identityAt(path), [])).toEqual(Result.fail(new ProfilePathUnsafe({ path })))
   })
 }
 
 const refusesUnsafeGitDir = () => {
   Arr.forEach(unsafePaths, (path) => {
-    expect(claudeEditingSettings({ ...identity, gitDir: path })).toEqual(Result.fail(new ProfilePathUnsafe({ path })))
+    expect(claudeEditingSettings({ ...identity, gitDir: path }, [])).toEqual(Result.fail(new ProfilePathUnsafe({ path })))
   })
 }
 
 const refusesUnsafeCommonDir = () => {
   Arr.forEach(unsafePaths, (path) => {
-    expect(claudeEditingSettings({ ...identity, commonDir: path })).toEqual(Result.fail(new ProfilePathUnsafe({ path })))
+    expect(claudeEditingSettings({ ...identity, commonDir: path }, [])).toEqual(Result.fail(new ProfilePathUnsafe({ path })))
   })
 }
+
+/**
+ * Today's profile for `identity` with no check commands, written out
+ * (equal to production-profile.test.ts's `expectedProfile`): the byte pin
+ * that an empty list of check commands leaves the template as it was.
+ */
+const profileWithoutCheckCommands = {
+  permissions: {
+    defaultMode: "dontAsk",
+    disableBypassPermissionsMode: "disable",
+    allow: [
+      `Read(/${worktree}/**)`,
+      `Edit(/${worktree}/**)`,
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+    ],
+    deny: [
+      `Edit(/${worktree}/.git)`,
+      `Edit(/${worktree}/**/CLAUDE.md)`,
+      `Edit(/${worktree}/**/CLAUDE.local.md)`,
+      `Edit(/${worktree}/**/AGENTS.md)`,
+      `Edit(/${worktree}/**/.claude/**)`,
+      `Edit(/${worktree}/**/.codex/**)`,
+      `Edit(/${worktree}/**/.mcp.json)`,
+      `Edit(/${worktree}/**/.gitattributes)`,
+      `Edit(/${worktree}/**/.gitmodules)`,
+      "Bash(git commit)",
+      "Bash(git commit *)",
+      "Bash(git push)",
+      "Bash(git push *)",
+      "Bash(git config)",
+      "Bash(git config *)",
+      "Bash(curl)",
+      "Bash(curl *)",
+      "WebFetch",
+      "WebSearch",
+    ],
+  },
+  sandbox: {
+    enabled: true,
+    failIfUnavailable: true,
+    allowUnsandboxedCommands: false,
+    autoAllowBashIfSandboxed: false,
+    filesystem: {
+      denyWrite: [
+        `${worktree}/.git`,
+        `${worktree}/CLAUDE.md`,
+        `${worktree}/CLAUDE.local.md`,
+        `${worktree}/AGENTS.md`,
+        `${worktree}/.claude`,
+        `${worktree}/.codex`,
+        `${worktree}/.mcp.json`,
+        `${worktree}/.gitattributes`,
+        `${worktree}/.gitmodules`,
+        commonDir,
+        gitDir,
+      ],
+    },
+    network: { allowedDomains: [] },
+  },
+  autoMemoryEnabled: false,
+  disableClaudeAiConnectors: true,
+}
+
+const pinnedWithoutCheckCommands = () => {
+  expect(claudeEditingSettings(identity, [])).toEqual(
+    Result.succeed(`${Formatter.formatJson(profileWithoutCheckCommands, { space: 2 })}\n`),
+  )
+}
+
+/** Two check commands, in configuration order. */
+const twoCommands = ["bun run verify", "bun run test"]
+
+const exactRulesAfterGitDiff = () =>
+  Effect.gen(function* () {
+    const text = yield* Effect.fromResult(claudeEditingSettings(identity, twoCommands))
+    const settings = yield* Schema.decodeUnknownEffect(Settings)(text)
+    expect(settings.permissions.allow).toEqual([
+      ...profileWithoutCheckCommands.permissions.allow,
+      "Bash(bun run verify)",
+      "Bash(bun run test)",
+    ])
+    expect(settings.permissions.deny).toEqual(profileWithoutCheckCommands.permissions.deny)
+    expect(Arr.filter(settings.permissions.allow, Str.startsWith("Bash(bun"))).toEqual(["Bash(bun run verify)", "Bash(bun run test)"])
+  })
+
+const refusesCheckCommands = () => {
+  expect(claudeEditingSettings(identity, ["bun run verify", "git commit"])).toEqual(
+    Result.fail(new CheckCommandRefused({ command: "git commit" })),
+  )
+  expect(claudeEditingSettings(identity, ["curl x"])).toEqual(Result.fail(new CheckCommandRefused({ command: "curl x" })))
+  expect(claudeEditingSettings(identity, ["bun run verify", "bun run verify"])).toEqual(
+    Result.fail(new CheckCommandRefused({ command: "bun run verify" })),
+  )
+}
+
+const unsafePathWins = () => {
+  expect(claudeEditingSettings(identityAt("/a b"), ["git commit"])).toEqual(Result.fail(new ProfilePathUnsafe({ path: "/a b" })))
+}
+
+describe("claudeEditingSettings with check commands (dogfood-3b)", () => {
+  it("with none, renders exactly today's profile", pinnedWithoutCheckCommands)
+  it.effect("adds one exact rule per command, in order, right after the git diff rules", exactRulesAfterGitDiff)
+  it("refuses a check command the configuration decoder would refuse", refusesCheckCommands)
+  it("refuses an unsafe path before a refused check command", unsafePathWins)
+})
 
 describe("claudeEditingSettings", () => {
   it.effect("binds every file rule and every sandbox path to the worktree", bindsEveryPath)
@@ -87,8 +197,8 @@ describe("claudeEditingSettings", () => {
   it.effect("denies sandbox writes to the common git directory and the worktree's git directory, last", deniesBothGitDirectories)
 
   it("is the same text for the same path, ending with a newline", () => {
-    expect(claudeEditingSettings(identity)).toEqual(claudeEditingSettings(identity))
-    expect(Str.endsWith("}\n")(Result.getOrElse(claudeEditingSettings(identity), () => ""))).toBe(true)
+    expect(claudeEditingSettings(identity, [])).toEqual(claudeEditingSettings(identity, []))
+    expect(Str.endsWith("}\n")(Result.getOrElse(claudeEditingSettings(identity, []), () => ""))).toBe(true)
   })
 
   it.effect("keeps the sandbox on, with no unsandboxed commands and no network", () =>
@@ -100,7 +210,7 @@ describe("claudeEditingSettings", () => {
 
   it.effect("switches off claude.ai connectors", () =>
     Effect.gen(function* () {
-      const text = yield* Effect.fromResult(claudeEditingSettings(identity))
+      const text = yield* Effect.fromResult(claudeEditingSettings(identity, []))
       const { disableClaudeAiConnectors } = yield* Schema.decodeUnknownEffect(ConnectorSwitch)(text)
       expect(disableClaudeAiConnectors).toBe(true)
     }))

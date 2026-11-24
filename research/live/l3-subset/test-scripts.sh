@@ -1009,15 +1009,16 @@ rc=$?
 expect "the rendered settings deny writes to the common and the worktree's git directories" '[ "$rc" -eq 0 ]'
 
 # The rendered settings equal production's profile for the same worktree
-# and git directories, apart from the L3 stand-in Bash(sh check.sh),
-# which production leaves out until a ruling names the target's test
-# command. Order counts.
+# and git directories with no check commands, apart from the L3 stand-in
+# Bash(sh check.sh). Production allows only the check commands its
+# configuration names (dogfood-3b), and the L3 run names none. Order
+# counts.
 prod="$work/production-settings.json"
 (cd "$here/../../.." && bun -e '
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
 const [, path, gitDir, commonDir] = process.argv
-const rendered = claudeEditingSettings({ path, gitDir, commonDir })
+const rendered = claudeEditingSettings({ path, gitDir, commonDir }, [])
 if (Result.isFailure(rendered)) process.exit(3)
 process.stdout.write(rendered.success)
 ' "$wt" "$odd_git_dir" "$odd_common_dir") > "$prod" 2> "$work/production-settings.err"; rc=$?
@@ -1093,7 +1094,7 @@ production_accepts() {
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
 const [, path, gitDir, commonDir] = process.argv
-process.exit(Result.isFailure(claudeEditingSettings({ path, gitDir, commonDir })) ? 3 : 0)
+process.exit(Result.isFailure(claudeEditingSettings({ path, gitDir, commonDir }, [])) ? 3 : 0)
 ' "$1" "$2" "$3") > /dev/null 2>&1
 }
 canonical_parent=$(cd -P "$parent" && pwd -P)
@@ -1580,7 +1581,7 @@ ud_canonical=$(cd "$ud" && pwd -P)
 import { Result } from "effect"
 import { claudeEditingSettings } from "./src/format/claude-settings.ts"
 const [, path, gitDir, commonDir] = process.argv
-const rendered = claudeEditingSettings({ path, gitDir, commonDir })
+const rendered = claudeEditingSettings({ path, gitDir, commonDir }, [])
 if (Result.isFailure(rendered)) process.exit(3)
 process.stdout.write(rendered.success)
 ' "$ud_canonical/state/worktree" "$ud_canonical/owner/.git/worktrees/worktree" "$ud_canonical/owner/.git") > "$work/drift-production.json"

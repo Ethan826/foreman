@@ -206,7 +206,7 @@ entry:
 
 | Entry | Root's file | Production |
 |---|---|---|
-| `permissions.allow` `Bash(sh check.sh)` | present, right after `Bash(git diff *)` | absent: production allows no target test command until a ruling names one |
+| `permissions.allow` `Bash(sh check.sh)` | present, right after `Bash(git diff *)` | absent: production allows only the check commands its configuration names (dogfood-3b), and the L3 settings are rendered with none |
 
 C1 and C4 need `Bash(sh check.sh)`, so the difference stays. Before each
 Claude run, `run-case.sh` renders production's settings again and stops

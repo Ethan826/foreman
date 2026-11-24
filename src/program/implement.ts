@@ -4,7 +4,8 @@
 // Format's implementer brief of the session's recorded task file (checked
 // against its hash), the profile is
 // Claude's editing profile, published for the session's worktree before
-// admission (batch review B03), and classification reads Claude's
+// admission (batch review B03) with the configured check commands, which
+// the brief names too (dogfood-3b), and classification reads Claude's
 // stream-json. The handoff is the final message of Claude's last
 // `result` event, empty when it gave none (plan "Events",
 // `ReportRecorded`).
@@ -14,7 +15,7 @@ import { defaultRoleClients, Roles } from "../domain/roles.ts"
 import { Implement } from "../domain/session.ts"
 import type { OpenSession } from "../domain/session-state.ts"
 import { implementBrief } from "../format/brief.ts"
-import type { ProfilePathUnsafe } from "../format/claude-settings.ts"
+import type { CheckCommandRefused, ProfilePathUnsafe } from "../format/claude-settings.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
 import { type LaunchPlan, noHandoffFacts, runAttempt } from "./attempt.ts"
 import { claudeSettingsPath } from "./claude-profile.ts"
@@ -37,7 +38,7 @@ export const implement = (context: SessionContext, options: ImplementOptions) =>
 const implementPlan = (
   context: SessionContext,
   options: ImplementOptions,
-): LaunchPlan<TaskFileChanged | FileNotUtf8 | ProfilePathUnsafe | StateFileFailed> => ({
+): LaunchPlan<TaskFileChanged | FileNotUtf8 | ProfilePathUnsafe | CheckCommandRefused | StateFileFailed> => ({
   command: new Implement(),
   role: Roles.Implementer,
   provider: defaultRoleClients[Roles.Implementer],
@@ -47,8 +48,9 @@ const implementPlan = (
   prepare: ({ session }) =>
     Effect.gen(function* () {
       const task = yield* recordedTask(context, session)
-      yield* context.capabilities.publishClaudeProfile(session.opened.worktree)
-      return { brief: implementBrief({ task }), round: 0, consent: [] }
+      const { checkCommands } = context.settings
+      yield* context.capabilities.publishClaudeProfile(session.opened.worktree, checkCommands)
+      return { brief: implementBrief({ task, checkCommands }), round: 0, consent: [] }
     }),
   argv: (brief) => claudeEditingArgv({ brief, settingsFile: claudeSettingsPath(context.settings.stateDir) }),
   handoff: (_files, lines) => claudeHandoff(lines),

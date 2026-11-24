@@ -72,8 +72,9 @@ export type GitHomeReading = typeof GitHomeReading.Type
 
 /**
  * What `status` shows in production: the findings, the binding against
- * the configuration, the target it ran on, git's HOME and the status
- * report (re-review R03).
+ * the configuration, the target it ran on, git's HOME, the status report
+ * (re-review R03) and the check commands the decoded configuration names,
+ * in its order (dogfood-3b).
  */
 export class ProductionStatusReport extends Schema.TaggedClass<ProductionStatusReport>()("ProductionStatusReport", {
   findings: Schema.Array(StatusFinding),
@@ -81,6 +82,7 @@ export class ProductionStatusReport extends Schema.TaggedClass<ProductionStatusR
   inForce: TargetInForce,
   gitHome: GitHomeReading,
   report: StatusReport,
+  checkCommands: Schema.Array(Schema.String),
 }) {}
 
 /** What `status` prints: the report, or that the state is missing. */
@@ -134,6 +136,7 @@ export const productionStatus = (
       ...settled,
       gitHome: Result.match(homeJudged, { onSuccess: () => new GitHomeUsable({ path: home }), onFailure: (refused) => refused }),
       report: yield* status(context),
+      checkCommands: config.checkCommands,
     })
   })
 

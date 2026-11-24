@@ -15,9 +15,13 @@
 // The sandbox keys come through `--settings` because a `false` from
 // project settings would be ignored (same table).
 //
-// The template allows no target test command on purpose: the L3
-// template's `Bash(sh check.sh)` stands in for one, and no ruling names
-// production's. User settings and hooks stay out through the argv's
+// The template allows the check commands the owner's configuration names
+// (dogfood-3b; owner rulings of 2026-11-23 and 2026-11-24), each as one
+// exact `Bash(<command>)` rule after the `git diff` rules, and no others;
+// with none named the bytes are those of the template without them. An
+// exact rule limits the command line, not what runs: a command that runs
+// repository code lets the agent run any code inside the Bash sandbox,
+// which is the guard (check-command.ts). User settings and hooks stay out through the argv's
 // `--setting-sources project,local`, and MCP servers through its
 // `--strict-mcp-config` (owner ruling of 2026-11-20, L03; see
 // `claudeEditingArgv`). The template adds `disableClaudeAiConnectors` as
@@ -26,6 +30,7 @@
 // skips fetching the connectors.
 import { Array as Arr, Formatter, Option, Result, Schema } from "effect"
 import type { RecordedGitIdentity } from "../domain/session.ts"
+import { checkCommandsRefusal } from "./check-command.ts"
 
 /**
  * A path the template will not bind (the worktree's, its git directory
@@ -36,6 +41,16 @@ import type { RecordedGitIdentity } from "../domain/session.ts"
  */
 export class ProfilePathUnsafe extends Schema.TaggedError<ProfilePathUnsafe>()("ProfilePathUnsafe", {
   path: Schema.String,
+}) {}
+
+/**
+ * A check command the template will not allow: one the configuration
+ * decoder would refuse (check-command.ts). Decoding refuses it first;
+ * this is the profile's second guard (owner ruling of 2026-11-24). A
+ * launch stopped by it is a refusal and expires armed waivers.
+ */
+export class CheckCommandRefused extends Schema.TaggedError<CheckCommandRefused>()("CheckCommandRefused", {
+  command: Schema.String,
 }) {}
 
 /** The indent of the settings file's JSON, in spaces. */
@@ -64,14 +79,26 @@ const allowedCommands = ["git status", "git diff"] as const
 
 /**
  * The settings file's text for the session's recorded worktree
- * `identity`, with a final newline; the same identity always gives the
- * same bytes. Fails with {@link ProfilePathUnsafe} naming the first of
- * the worktree path, its git directory and the common git directory that
- * the template will not bind.
+ * `identity` and the configured `checkCommands`, with a final newline;
+ * the same inputs always give the same bytes, and an empty list gives the
+ * template without check commands. Fails with {@link ProfilePathUnsafe}
+ * naming the first of the worktree path, its git directory and the common
+ * git directory that the template will not bind; otherwise with
+ * {@link CheckCommandRefused} naming the first check command the
+ * configuration decoder would refuse. Nothing is rendered before both
+ * checks pass.
  */
-export const claudeEditingSettings = (identity: RecordedGitIdentity): Result.Result<string, ProfilePathUnsafe> =>
+export const claudeEditingSettings = (
+  identity: RecordedGitIdentity,
+  checkCommands: ReadonlyArray<string>,
+): Result.Result<string, ProfilePathUnsafe | CheckCommandRefused> =>
   Option.match(Arr.findFirst([identity.path, identity.gitDir, identity.commonDir], isUnsafe), {
-    onNone: () => Result.succeed(`${Formatter.formatJson(profileFor(identity), { space: jsonIndent })}\n`),
+    onNone: () =>
+      Option.match(checkCommandsRefusal(checkCommands), {
+        onNone: () =>
+          Result.succeed(`${Formatter.formatJson(profileFor(identity, checkCommands), { space: jsonIndent })}\n`),
+        onSome: ({ command }) => Result.fail(new CheckCommandRefused({ command })),
+      }),
     onSome: (path) => Result.fail(new ProfilePathUnsafe({ path })),
   })
 
@@ -83,13 +110,19 @@ const isUnsafe = (path: string): boolean => !plainAbsolutePath.test(path)
  * writes to the common git directory and the worktree's own git
  * directory as wholes, after the worktree's own entries, so code run in
  * the sandbox cannot write an object, a ref, a hook or the index (owner
- * ruling of 2026-11-23, dogfood-3a; L3 case C4).
+ * ruling of 2026-11-23, dogfood-3a; L3 case C4). Each check command is
+ * one exact rule, in configuration order, after the `git diff` rules.
  */
-const profileFor = ({ path: worktree, gitDir, commonDir }: RecordedGitIdentity) => ({
+const profileFor = ({ path: worktree, gitDir, commonDir }: RecordedGitIdentity, checkCommands: ReadonlyArray<string>) => ({
   permissions: {
     defaultMode: "dontAsk",
     disableBypassPermissionsMode: "disable",
-    allow: [`Read(/${worktree}/**)`, `Edit(/${worktree}/**)`, ...Arr.flatMap(allowedCommands, bareAndWithArguments)],
+    allow: [
+      `Read(/${worktree}/**)`,
+      `Edit(/${worktree}/**)`,
+      ...Arr.flatMap(allowedCommands, bareAndWithArguments),
+      ...Arr.map(checkCommands, exactRule),
+    ],
     deny: [
       `Edit(/${worktree}/.git)`,
       ...Arr.map(protectedNames, protectedRuleIn(worktree)),
@@ -121,6 +154,9 @@ const topLevelPathIn = (worktree: string) => (name: string) => `${worktree}/${na
 
 /** The protected names that are directories, whose contents the rule covers. */
 const isProtectedDirectory = (name: string) => name === ".claude" || name === ".codex"
+
+/** A check command's one Bash rule, exactly as written: no `<command> *` form. */
+const exactRule = (command: string) => `Bash(${command})`
 
 /** A command's two Bash rules: the bare command and the command with arguments. */
 const bareAndWithArguments = (command: string) => [`Bash(${command})`, `Bash(${command} *)`]

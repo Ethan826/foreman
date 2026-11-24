@@ -2,7 +2,7 @@
 // "Waivers"; review items B15 and R01). A launch attempt that a
 // deliberate refusal stops before `Intended` expires every armed waiver:
 // a changed task file, a task that is not UTF-8, an unreadable findings
-// file, an unsafe profile path, refused attribute sources and a snapshot
+// file, an unsafe profile path, a refused check command, refused attribute sources and a snapshot
 // preflight refusal, as well as the rules' own refusals. A storage failure or a crash expires
 // nothing, so the retry after batch W still launches with its waiver.
 import { describe, expect, it } from "@effect/vitest"
@@ -15,7 +15,7 @@ import { type ProjectEvent, SessionOpened, Waived, WaiverExpired } from "../../s
 import { WaiverId } from "../../src/domain/ids.ts"
 import type { RecordedGitIdentity } from "../../src/domain/session.ts"
 import { SnapshotPreflightRefused } from "../../src/domain/snapshot.ts"
-import { ProfilePathUnsafe } from "../../src/format/claude-settings.ts"
+import { CheckCommandRefused, ProfilePathUnsafe } from "../../src/format/claude-settings.ts"
 import { correct } from "../../src/program/correct.ts"
 import { implement } from "../../src/program/implement.ts"
 import { review } from "../../src/program/review.ts"
@@ -138,6 +138,24 @@ const profileRefused = (harness: Harness) =>
     yield* expiresWaiver(harness, Clients.Claude, attempt, Schema.is(ProfilePathUnsafe))
   })
 
+/**
+ * A context whose settings name a check command the profile refuses, as a
+ * configuration that bypassed decoding would; the harness publishes the
+ * profile with production's renderer.
+ */
+const refusedCheckCommand = (harness: Harness) => ({
+  ...harness.context,
+  settings: { ...harness.context.settings, checkCommands: ["bun run verify", "git commit"] },
+})
+
+const checkCommandRefused = (harness: Harness) =>
+  Effect.gen(function* () {
+    yield* opened(harness)
+    yield* armed(harness, Clients.Claude)
+    const attempt = implement(refusedCheckCommand(harness), { waive: false })
+    yield* expiresWaiver(harness, Clients.Claude, attempt, Schema.is(CheckCommandRefused))
+  })
+
 /** The retry after a stop that expired nothing: it launches with Claude's armed waiver. */
 const retryUsesWaiver = (harness: Harness) =>
   Effect.gen(function* () {
@@ -179,6 +197,7 @@ describe("a deliberate refusal before Intended expires every armed waiver", () =
     withHarness({ repository: true }, findingsMissing),
   )
   it.effect("an unsafe profile path, with Claude's waiver armed", () => withHarness({}, profileRefused))
+  it.effect("a refused check command, with Claude's waiver armed", () => withHarness({}, checkCommandRefused))
 })
 
 describe("a storage failure or a crash expires nothing", () => {

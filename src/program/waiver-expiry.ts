@@ -30,7 +30,7 @@ import type {
 import type { GitCommandFailed, GitOutputUndecodable, PathUnreadable } from "../domain/worktree.ts"
 import { foldSession } from "../features/session.ts"
 import { unusedWaivers } from "../features/waiver.ts"
-import type { ProfilePathUnsafe } from "../format/claude-settings.ts"
+import type { CheckCommandRefused, ProfilePathUnsafe } from "../format/claude-settings.ts"
 import type { RawOutputFailed } from "../runtime/spawn.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
 import { readLog } from "./command-start.ts"
@@ -52,6 +52,7 @@ export type AttemptStop =
   | AttributeSourcesRefused
   | AttributeSourcesUnread
   | ChangedPathsUnread
+  | CheckCommandRefused
   | ClientStartFailed
   | CommandRefused
   | FileNotUtf8
@@ -92,7 +93,8 @@ const failure = constant(false)
  * not launch: the rules (a worktree judged unready among them), quota, a
  * refused `--waive`, a lost race at batch I, a missing or changed
  * recorded file, a file that is not UTF-8, a missing or undecodable
- * findings file, an unsafe profile path, refused attribute sources and
+ * findings file, an unsafe profile path, a check command the profile
+ * refuses (owner ruling of 2026-11-24), refused attribute sources and
  * the snapshot's refusals. Attribute sources count as refused when any
  * source that was read is refused, even beside one that could not be
  * read. A failure is a store, file, git command or process that did not
@@ -112,6 +114,7 @@ export const isRefusal: (stop: AttemptStop) => boolean = Match.type<AttemptStop>
     AttributeSourcesRefused: refusal,
     AttributeSourcesUnread: failure,
     ChangedPathsUnread: failure,
+    CheckCommandRefused: refusal,
     ClientStartFailed: failure,
     CommandRefused: refusal,
     FileNotUtf8: refusal,

@@ -6,7 +6,7 @@
 // HOME: when the HOME is missing or fails B02's checks, status says so and
 // skips the git-based worktree check instead of running git with it.
 import { describe, expect, it } from "@effect/vitest"
-import { Effect, Schema } from "effect"
+import { Array as Arr, Effect, Schema } from "effect"
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import {
   configOf,
@@ -114,7 +114,28 @@ const mismatchReported = () =>
     }),
   )
 
+/** The check commands status prints. */
+const ShownCheckCommands = Schema.fromJsonString(Schema.Struct({ checkCommands: Schema.Array(Schema.String) }))
+
+/** The check commands `status` printed with the configuration at `config`. */
+const shownCheckCommands = (layout: Layout, config: string) =>
+  Effect.flatMap(succeeded(layout, ["status"], { config }), (run) =>
+    Schema.decodeUnknownEffect(ShownCheckCommands)(Arr.join(run.out, "\n")),
+  )
+
+const checkCommandsListed = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      expect((yield* shownCheckCommands(layout, layout.configPath)).checkCommands).toEqual([])
+      const commands = ["bun run verify", "bun run test"]
+      const copied = writeConfig(layout, configOf(layout, { checkCommands: commands }), `${layout.root}/copied.json`)
+      expect((yield* shownCheckCommands(layout, copied)).checkCommands).toEqual(commands)
+    }),
+  )
+
 describe("status in production", () => {
+  it.effect("lists the configured check commands, in order (dogfood-3b)", checkCommandsListed, endToEndMillis)
   it.effect("reports a missing git HOME, makes none and skips the worktree check", missingHomeReported, endToEndMillis)
   it.effect("reports a git HOME that fails the checks and leaves it as it is", unusableHomeLeftAlone, endToEndMillis)
   it.effect("runs the worktree check with a usable git HOME", usableHomeChecked, endToEndMillis)

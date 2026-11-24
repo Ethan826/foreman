@@ -5,14 +5,18 @@
 // It names no Claude settings file, since foreman writes the editing
 // profile itself (batch review B03), and no grant estimate, since every
 // role reserves the policy's `initialEstimate` (decision P5, batch review
-// B10). Decoding is strict: an unknown key, a relative path, a missing pin
-// or a malformed value refuses the whole file, because a key the decoder
-// ignored could be a setting the owner believes is in force.
-import { Option, Result, Schema, String } from "effect"
+// B10). It may name check commands, which the editing profile then
+// allows as exact Bash rules (dogfood-3b, check-command.ts); they are not
+// part of the target binding. Decoding is strict: an unknown key, a
+// relative path, a missing pin, a refused check command or a malformed
+// value refuses the whole file, because a key the decoder ignored could
+// be a setting the owner believes is in force.
+import { Array as Arr, Option, Predicate, Result, Schema, String } from "effect"
 import { ApprovedAttributeAllowance } from "../domain/attributes.ts"
 import { Client } from "../domain/clients.ts"
 import { ProjectId } from "../domain/ids.ts"
 import { withoutByteOrderMark } from "./byte-order-mark.ts"
+import { checkCommandsRefusal } from "./check-command.ts"
 
 /** The configuration file could not be decoded; `reason` says where. */
 export class ConfigUndecodable extends Schema.TaggedError<ConfigUndecodable>()(
@@ -47,6 +51,68 @@ const Pin = Schema.String.check(Schema.isNonEmpty())
 /** Where the supervisor worktree lives and the name of its branch. */
 const Supervisor = Schema.Struct({ path: AbsolutePath, name: BranchName })
 
+/** The kinds of JSON value that are not strings, each with how a reason names it. */
+const nonStringKinds: ReadonlyArray<readonly [Predicate.Predicate<unknown>, string]> = [
+  [Predicate.isNumber, "a number"],
+  [Predicate.isBoolean, "a boolean"],
+  [Predicate.isNull, "null"],
+  [Arr.isArray, "a list"],
+]
+
+/**
+ * How a reason names a JSON value that is not a string: by its kind
+ * alone, never by its contents, so the reason stays short and cannot fail
+ * however large or deep the value is (second correction, finding F2). A
+ * JSON value of no other kind is an object.
+ */
+const kindOf = (entry: unknown): string =>
+  Option.getOrElse(
+    Option.map(
+      Arr.findFirst(nonStringKinds, ([isKind]) => isKind(entry)),
+      ([, kind]) => kind,
+    ),
+    () => "an object",
+  )
+
+/** Why the entry at `index` is refused, when it is not a string. */
+const nonStringReason = (entry: unknown, index: number): Option.Option<string> =>
+  Predicate.isString(entry)
+    ? Option.none()
+    : Option.some(`the check command at index ${globalThis.String(index)} is ${kindOf(entry)}, not a string`)
+
+/**
+ * Whether every entry is a string, refusing the first that is not with a
+ * message that gives its index and kind (owner finding F2). It aborts, so
+ * no later check runs.
+ */
+const allStrings = Schema.makeFilter(
+  (entries: ReadonlyArray<unknown>) =>
+    Option.match(Arr.findFirst(entries, nonStringReason), {
+      onNone: () => true,
+      onSome: (reason) => reason,
+    }),
+  undefined,
+  true,
+)
+
+/** Narrows a list that {@link allStrings} passed to a list of strings. */
+const isStringList = (entries: ReadonlyArray<unknown>): entries is ReadonlyArray<string> =>
+  Arr.every(entries, Predicate.isString)
+
+/**
+ * The check commands as written: a list of strings, refused whole when
+ * any entry is not a string or is refused (`checkCommandsRefusal`), with
+ * a message that names the entry (owner ruling of 2026-11-24).
+ */
+const CheckCommands = Schema.Array(Schema.Unknown)
+  .check(allStrings)
+  .pipe(Schema.refine(isStringList))
+  .check(
+    Schema.makeFilter((commands: ReadonlyArray<string>) =>
+      Option.match(checkCommandsRefusal(commands), { onNone: () => true, onSome: (refusal) => refusal.reason }),
+    ),
+  )
+
 /** The file as written. */
 const ConfigFile = Schema.Struct({
   projectId: ProjectId,
@@ -56,6 +122,7 @@ const ConfigFile = Schema.Struct({
   ledgerDir: Schema.optionalKey(AbsolutePath),
   attributeAllowance: ApprovedAttributeAllowance,
   pins: Schema.Record(Client, Pin),
+  checkCommands: Schema.optionalKey(CheckCommands),
 })
 
 /** The decoded configuration. */
@@ -77,6 +144,12 @@ export interface ForemanConfig {
   readonly attributeAllowance: ApprovedAttributeAllowance
   /** Each client's pinned `--version` output, trimmed (decision P4). */
   readonly pins: Readonly<Record<Client, string>>
+  /**
+   * The commands Claude's editing profile allows as exact `Bash(...)`
+   * rules, in the file's order; empty when the key is absent. Not part
+   * of the target binding (dogfood-3b).
+   */
+  readonly checkCommands: ReadonlyArray<string>
 }
 
 const decodeFile = Schema.decodeUnknownResult(Schema.fromJsonString(ConfigFile), {
@@ -86,14 +159,19 @@ const decodeFile = Schema.decodeUnknownResult(Schema.fromJsonString(ConfigFile),
 /**
  * Decodes the configuration file's text. Fails with
  * {@link ConfigUndecodable} when the text is not JSON, a key is unknown
- * or missing, a path is not absolute, a pin is empty, or a value is
- * malformed. One leading byte order mark is dropped first (focused
- * re-review finding 2).
+ * or missing, a path is not absolute, a pin is empty, a check command is
+ * refused (the reason names the entry), or a value is malformed. An
+ * absent `checkCommands` is an empty list. One leading byte order mark is
+ * dropped first (focused re-review finding 2).
  */
 export const decodeForemanConfig = (text: string): Result.Result<ForemanConfig, ConfigUndecodable> =>
   Result.mapBoth(decodeFile(withoutByteOrderMark(text)), {
     onFailure: (error) => new ConfigUndecodable({ reason: String.trim(error.message) }),
-    onSuccess: ({ ledgerDir, ...rest }): ForemanConfig => ({ ...rest, ledgerDir: Option.fromNullishOr(ledgerDir) }),
+    onSuccess: ({ ledgerDir, checkCommands, ...rest }): ForemanConfig => ({
+      ...rest,
+      ledgerDir: Option.fromNullishOr(ledgerDir),
+      checkCommands: Option.getOrElse(Option.fromNullishOr(checkCommands), (): ReadonlyArray<string> => []),
+    }),
   })
 
 /**

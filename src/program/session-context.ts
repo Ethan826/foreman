@@ -158,6 +158,12 @@ export interface SessionSettings {
   /** Each role's grant estimate in points (decision P5). */
   readonly estimates: Readonly<Record<Role, number>>
   readonly admission: AdmissionContext
+  /**
+   * The check commands from the configuration, in its order: `implement`
+   * and `correct` pass this one list to both the editing profile and the
+   * brief, so the two cannot differ (dogfood-3b).
+   */
+  readonly checkCommands: ReadonlyArray<string>
 }
 
 /** A session command's capabilities and settings. */

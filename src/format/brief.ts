@@ -3,7 +3,9 @@
 // tree id, the base revision, the changed paths, the last handoff, the
 // coverage statement, and asks for a fenced JSON findings block; correct
 // takes the task, the owner's findings file, the prior handoff and the
-// tree id. Program reads the recorded files and passes their contents;
+// tree id. Implement and correct also take the configured check commands,
+// named in one line when there are any (dogfood-3b). Program reads the
+// recorded files and passes their contents;
 // these functions do no I/O and write nothing into a brief that was not
 // passed in, apart from their own fixed wording. Every brief says the
 // agent works in a fresh session, since each step starts a new client
@@ -83,12 +85,38 @@ const findingsRequest = Array.join([
   "An empty array, [], means you request no changes.",
 ], lineBreak)
 
-/** The implementer's brief: the task file's contents and the instruction. */
-export const implementBrief = (input: { readonly task: string }): string =>
+/**
+ * The line that ends "What to do" when the configuration names check
+ * commands (dogfood-3b): the commands in configuration order, each in
+ * backticks, on one unwrapped line. The profile allows each as one exact
+ * Bash rule; the timeout is in milliseconds.
+ */
+const checkCommandsLine = (commands: ReadonlyArray<string>) =>
+  "You may run these check commands with the Bash tool, each exactly as written: " +
+  `${Array.join(Array.map(commands, (command) => `\`${command}\``), ", ")}. ` +
+  "They run in the Bash sandbox, with no network and the git directories read-only; " +
+  "give the Bash tool a timeout of 600000 ms."
+
+/**
+ * The body of "What to do": `instruction`, then a blank line and the
+ * check commands line when `checkCommands` is non-empty. With none it is
+ * `instruction` alone, byte for byte.
+ */
+const whatToDo = (instruction: string, checkCommands: ReadonlyArray<string>) =>
+  Array.isReadonlyArrayNonEmpty(checkCommands)
+    ? `${instruction}${paragraphBreak}${checkCommandsLine(checkCommands)}`
+    : instruction
+
+/**
+ * The implementer's brief: the task file's contents and the instruction,
+ * which ends with the check commands line when `checkCommands`, the
+ * configured check commands, is non-empty.
+ */
+export const implementBrief = (input: { readonly task: string; readonly checkCommands: ReadonlyArray<string> }): string =>
   brief([
     opening(Roles.Implementer),
     section("Task", fileText(input.task)),
-    section("What to do", implementInstruction),
+    section("What to do", whatToDo(implementInstruction, input.checkCommands)),
   ])
 
 /**
@@ -119,13 +147,15 @@ export const reviewBrief = (input: {
 /**
  * The corrector's brief for snapshot `tree`: the task, the owner's
  * findings file (the only findings a corrector sees) and the prior
- * handoff, then the instruction.
+ * handoff, then the instruction, which ends with the check commands line
+ * when `checkCommands` is non-empty, as in {@link implementBrief}.
  */
 export const correctBrief = (input: {
   readonly task: string
   readonly findingsFile: string
   readonly priorHandoff: string
   readonly tree: Revision
+  readonly checkCommands: ReadonlyArray<string>
 }): string =>
   brief([
     opening(Roles.Corrector),
@@ -133,7 +163,7 @@ export const correctBrief = (input: {
     section("Task", fileText(input.task)),
     section("Findings to address", fileText(input.findingsFile)),
     section("Handoff from the previous step", fileText(input.priorHandoff)),
-    section("What to do", correctInstruction),
+    section("What to do", whatToDo(correctInstruction, input.checkCommands)),
   ])
 
 /** Paragraphs joined by blank lines, ending in one newline. */

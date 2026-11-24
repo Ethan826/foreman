@@ -161,6 +161,7 @@ const build = (dir: string, options: HarnessOptions) =>
         pins,
         estimates: { [Roles.Implementer]: 15, [Roles.Reviewer]: 15, [Roles.Corrector]: 15 },
         admission: { policy: defaultPolicy, retirement: ownerOnly, allocations: allocationsInFallback },
+        checkCommands: [],
       },
     }
     const ledgerReader = yield* Effect.flatMap(openLedgerReader(`${dir}/ledger.sqlite`, busyMillis), Effect.fromOption)

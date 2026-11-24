@@ -165,7 +165,36 @@ const refusedPublishesNothing = () =>
     }),
   )
 
+/** The check commands one case configures (dogfood-3b). */
+const configuredCommands = ["bun run verify", "bun run test"]
+
+const checkCommandsReachProfileAndBrief = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      writeConfig(layout, configOf(layout, { checkCommands: configuredCommands }))
+      yield* implementedOver(layout, "{}")
+      const expected = expectedProfile(layout.supervisor, yield* gitDirectoriesOf(layout))
+      const allow = [...expected.permissions.allow, "Bash(bun run verify)", "Bash(bun run test)"]
+      const withCommands = { ...expected, permissions: { ...expected.permissions, allow } }
+      expect(JSON.parse(recorded(layout, "claude-settings-received") ?? "")).toEqual(withCommands)
+      expect(recorded(layout, "claude-argv")).toContain(
+        "each exactly as written: `bun run verify`, `bun run test`. They run in the Bash sandbox",
+      )
+    }),
+  )
+
+const refusedCheckCommandFailsDecoding = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      writeConfig(layout, configOf(layout, { checkCommands: ["git log"] }))
+      const run = yield* cli(layout, ["worktree", "create"])
+      expect([run.status, failureTag(run)]).toEqual([1, "ConfigUndecodable"])
+    }),
+  )
+
 describe("Claude's editing profile in production", () => {
+  it.effect("configured check commands reach the profile and the brief alike", checkCommandsReachProfileAndBrief, endToEndMillis)
+  it.effect("a refused check command fails the configuration's decoding", refusedCheckCommandFailsDecoding, endToEndMillis)
   it.effect("the configuration cannot name a settings file", settingsPathRefused, endToEndMillis)
   it.effect("implement launches with the generated profile, replacing an empty planted file", launchedWithProfile("{}"), endToEndMillis)
   it.effect(
