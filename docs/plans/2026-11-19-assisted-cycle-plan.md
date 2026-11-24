@@ -1954,3 +1954,29 @@ missing, 23 added, each of the eight findings among them; two
 independent mutants built by the coordinator (C6's targets emptied,
 the live-port refusal removed) each failed exactly their findings'
 cases under `--only`; `bun run verify` passes. Next: the live rerun.
+
+### L3 rerun, live (2026-11-24)
+
+Before preparing roots, `claude --version` read 2.1.331 (Claude Code
+updated itself); foreman pins 2.1.330, and path A ran on 2.1.330. Owner
+ruling: run the rerun on 2.1.331; if it passes, move foreman's pin to
+2.1.331, recorded with the rerun's version readings.
+
+Results ([results.md](../../research/live/l3-subset/results.md), second
+section): C1, C3, C4 and C5 PASS; C2 INCONCLUSIVE as in path A (the
+accepted read-first gap); C6 INCONCLUSIVE only because the client issued
+its two Bash calls in parallel, which the narrow pass's finding 3 rule
+does not accept, while its outputs matched git's reference, stderr was
+empty and the index was unchanged. C4's fourteen probes, `git-commit`
+among them, were all refused by the OS with their own targets named.
+About $0.89. Awaiting the owner's ruling on C6 before the pin moves and
+dogfood-3b starts.
+
+Owner ruling on the rerun (2026-11-24): C6 is accepted; its facts hold
+(output equal to git's reference, no warning, index unchanged), and
+the rerun counts as passing for the gate that held `checkCommands`.
+Follow-up: make C6's ordering rule accept parallel calls that read the
+same unchanged state. As ruled before the run, the Claude pin in
+`~/.config/foreman/dogfood-1.json` moved to `2.1.331 (Claude Code)`;
+`fm status` shows both pins matching. Next: dogfood-3b
+(`checkCommands = ["bun run verify"]`) as a foreman cycle.
