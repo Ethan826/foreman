@@ -2037,3 +2037,30 @@ ruling: the check commands are `bun run docs` and `bun run check`, which
 exit 0 inside the sandbox when the code is clean; the owner's check
 still runs the full suite outside. Follow-up: find which tests fail in
 the sandbox and why. The worktree was unchanged by the probe.
+
+## Dogfood-4: the rename to tarlatan (2026-11-24)
+
+[The task](2026-11-24-dogfood-4-task.md), read before the session by a
+fresh Opus reviewer ([review](2026-11-24-dogfood-4-task-review.md),
+150,226 tokens; two blocking, five important findings, all written in).
+Session `mwv2lmib-8fb12e` on base 3ebedd0, with the check commands
+`bun run docs` and `bun run check`; the coordinator staged the two file
+moves first. Implement ($3.91, 301 turns): the implementer ran both
+check commands itself and every owner check passed at once (docs,
+check, 1,681 tests, L3 script tests 468 of 468), a first for these
+cycles. Review 1: F1, a TSDoc presenting `tarlatan/<name>` as every
+recorded branch; correction 1 ($0.27). Review 2: F3, the same nuance in
+`docs/how-it-works.md` (corrected, $0.39, one sentence); F2, stale
+status text in the README and how-it-works, ruled out of scope and left
+to the coordinator at cutover. Review 3: no findings. The owner closed
+the session finished. The coordinator then renamed `AGENTS.md`,
+`package.json`, `bun.lock` and the `eslint.rules.js` header by hand,
+`bun install --frozen-lockfile` accepted the lockfile, verify passed,
+and the cycle was committed as c19a779. About $4.57 of Claude usage.
+
+Finding: under the editing profile, Claude Code 2.1.331 let the agent
+run read-only shell commands that no allow rule names (`cat`, `ls`,
+`find`, recursive `grep` piped to `cut`, `sort`, `uniq`, `wc`), while
+refusing others (`rg`, some `grep` forms). Writes stay in the sandbox;
+reads through Bash are not confined to the worktree, and the sandbox
+denies no read. Follow-up for the profile.
