@@ -117,3 +117,42 @@ through foreman, with the coordinator changing `AGENTS.md`,
 same cycle; the alias is `tl`; the ledger moves to `~/.tarlatan`. The
 artwork is committed after the cutover and `tarlatan.png` becomes a
 banner at the top of the README.
+
+## Cutover log (2026-11-24)
+
+With the owner's OK. Done by the coordinator from the old checkout:
+- `status`: session ended, nothing incomplete, no holds, no armed waiver.
+- The robustness roadmap committed (c2be6d6).
+- GitHub: `gh repo rename tarlatan`; `origin` is
+  `https://github.com/Ethan826/tarlatan.git`.
+- The old supervisor worktree (`foreman-wt/dogfood-1`, clean, all
+  commits on `main`) unlocked and removed; the branch `foreman/dogfood-1`
+  is kept.
+- `~/.foreman` moved to `~/.tarlatan` (the ledger, history kept under
+  project id `foreman`).
+- `~/.config/foreman` moved to `~/.config/tarlatan`, with a new
+  `tarlatan.json` (project id `tarlatan`, state
+  `~/Desktop/tarlatan-state`, checkout `~/Desktop/tarlatan`, supervisor
+  `~/Desktop/tarlatan-wt/dogfood` named `dogfood`, ledger `~/.tarlatan`,
+  pins claude 2.1.331 and codex 0.170.0, check commands `bun run docs`
+  and `bun run check`), the `tl` wrapper and `check.sh` (logs in
+  `~/Desktop/tarlatan-checks/`).
+- Archived in `~/Desktop/foreman-archive/`: the old state directory
+  (with its `checks/` logs), `dogfood-1.json` and `fm`.
+- Claude Code's project memory copied to the new checkout's key.
+
+The owner then moves the checkout (`~/Desktop/foreman` to
+`~/Desktop/tarlatan`) and opens a new Claude Code session there.
+
+Remaining, in the new session:
+1. `tl status` (expects `StateMissing` until the first command), then
+   `tl worktree create`; check `git worktree list` shows the new
+   worktree on `tarlatan/dogfood`, locked.
+2. README: the docs-site URL to `https://ethan826.github.io/tarlatan/`;
+   the stale status (review 2's F2 of dogfood-4) in README lines 11 to 15
+   and `docs/how-it-works.md` lines 7 and 218; the banner
+   `docs/artwork/tarlatan.png` at the top. Commit `docs/artwork/`.
+3. AGENTS.md's status paragraph (stale: the L3 rerun "is prepared").
+4. Verify, push `assisted`, Linux CI, fast-forward `main`, push; check
+   the docs workflow publishes at the new Pages URL.
+5. Then Waxwing onboarding (roadmap item 1).
