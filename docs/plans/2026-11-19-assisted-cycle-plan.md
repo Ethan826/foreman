@@ -1885,3 +1885,25 @@ quarters of the suite's time (several forks per entry); batching it is
 a follow-up needing the owner's approval, since its output is the live
 run's evidence and must stay byte-identical. The speed-up is reviewed
 in the narrow Codex pass with list A.
+
+### List A integrated (2026-11-23)
+
+`l3-list-a` integrated, 296,531 tokens, about 50 minutes (mutants ran
+under `--only`, several at a time on separate ports). Every list-A item
+is fixed with its counterexample as an offline case and a mutant
+caught by it (14 mutants): the Write's result must be the client's
+acknowledgment and come before the check, its content's digest must
+equal check.sh's after the run, tool-call ids must be non-empty and
+unique; C6 pairs one call and one result per command, status before
+diff, and reads `tool_use_result` (top-level on the record holding the
+tool_result; `stdout`, `stderr`, `interrupted`), with non-empty stderr
+INCONCLUSIVE; curl runs with `-q --noproxy "*"` and must name
+127.0.0.1:47613; ref and commit ties match both as written and after
+`realpath`; push must name exactly `<root>/remote.git`; LANDED in any
+C4 Bash result is FAIL and any other Bash call INCONCLUSIVE. The
+package's `plan.md` has a section "What a PASS establishes" with the
+five written blind spots. No existing case changed outcome. Coordinator
+check: a full run on the default port passes 445 cases (none of the 426
+earlier PASS lines missing, 19 added); `bun run verify` passes; the
+Write acknowledgment rule matches path A's real C4 stream. Next: the
+narrow Codex pass over list A and the speed-up.

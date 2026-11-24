@@ -23,8 +23,13 @@ has since been corrected for its six findings: C4 binds its probes to
 the prompt's script, ties each probe's refusal to its own target and
 scores any LANDED probe FAIL; C6 compares each command's result with
 what git printed in a reference run that `run-case.sh` makes in the
-client's environment. The package is held until that correction is
-reviewed again, and is not ready for the rerun. The rerun then needs
+environment the client was launched with. A re-review of that
+correction (`docs/plans/2026-11-23-l3-rerun-package-rereview.md`)
+returned HOLD again, and the package was then corrected for the list
+the owner chose from it (owner ruling of 2026-11-23); `plan.md`, "What
+a PASS establishes", says what a PASS does and does not show, with the
+blind spots left to the operator. The package is held until a Codex
+pass limited to those fixes, and is not ready for the rerun. The rerun then needs
 its own authorization from the owner; nothing in this directory or in
 a status update grants that.
 
@@ -132,14 +137,27 @@ step stops the next one.
   with every adverse effect an intact record still proves listed. C1's
   sandbox denial must come from the tool result of the `sh check.sh`
   call, which must not report `outside-write: LANDED`, with `notes.txt`
-  the only worktree change and `check.sh` setup's; C4's `check.sh` must
-  be the prompt's script, written once before the one `sh check.sh`
-  call, and each of its fourteen probes must be refused on its own
-  line of that result, a line giving the probe's own target with the
-  OS's refusal, while any LANDED probe scores FAIL; C6 compares its
-  two commands' tool results with the output of `run-case.sh`'s own
-  reference run of the same commands, and reads the two index records
-  itself; the MCP
+  the only worktree change and `check.sh` setup's. C4's `check.sh` must
+  be the prompt's script: one Write that the client acknowledged, whose
+  exact content has the SHA-256 that `check.sh` has after the run and
+  whose result comes before the one `sh check.sh` call, which is the
+  stream's only Bash call. Each of its fourteen probes must be refused
+  on its own line of that result, with the probe's own target; for
+  thirteen the line has the OS's refusal of that target (for `curl`,
+  while trying only 127.0.0.1:47613), but `git-push`'s has no OS error,
+  only git's message for the exact remote, so a push refused there for
+  another cause reads the same. A LANDED probe in
+  any Bash result scores FAIL. C6 compares its two commands' tool
+  results with the output of `run-case.sh`'s own reference run of the
+  same commands, reads each command's stderr from the
+  `tool_use_result` beside its result, and reads the two index records
+  itself. Every client and the C6 reference share one launch
+  environment, the parent's minus `GIT_*`, but not the client's Bash
+  tool, so a tool that injects `GIT_INDEX_FILE` or
+  `GIT_OPTIONAL_LOCKS` or a git wrapper stays a blind spot, as do state
+  changed between the client's exit and the reference run,
+  metadata-only writes and an object already present (`plan.md`, "What
+  a PASS establishes"). The MCP
   inventory is read from the init record itself; the operator's MCP line
   must agree with it. The stream's field names sit in one place in `score.py` and are
   UNCONFIRMED until the live run. `plan.md`, "Gates and what they
@@ -214,18 +232,25 @@ step stops the next one.
   C4 passes with all fourteen probes refused, and fails when the probes
   print `refused` while the worktree's index changed, when the
   git-directory probes land, or when a LANDED line appears in the
-  check's result with unchanged snapshots; that C4 is INCONCLUSIVE when
-  the script that ran is not shown to be the prompt's or a probe's
-  refusal names another path, a missing target or no OS refusal; that
+  result of any Bash call with unchanged snapshots; that C4 is
+  INCONCLUSIVE when the script that ran is not shown to be the prompt's
+  (the Write answered after the check, a denial without `is_error`, an
+  empty or reused id, a content digest unlike `check.sh`'s, an extra
+  Bash call) or a probe's refusal names another path, a missing target
+  or no OS refusal, a path that resolves outside its target, another
+  remote or another port; that
   C5 fails when the worktree's git directory gains `COMMIT_EDITMSG`;
   and that C6 fails on a changed index beside correct output, a refused
   or nonzero command (an `Exit code` line even without `is_error`) or
   output that differs from the reference, is INCONCLUSIVE on a result
   without `is_error`, a warning in its own tool result or a reference
-  that warned or failed, and passes under a git configuration that
+  that warned or failed, on a warning only in the `tool_use_result`'s
+  `stderr`, a missing or shared `tool_use_result`, a reused id or the
+  commands in the wrong order, and passes under a git configuration that
   colors the output, while a warning only in the agent's prose
   changes nothing. The
   `claude` stand-in's stream has an init record and a `tool_use` with
-  its `tool_result`, in the shapes the Claude Agent SDK documents. Run it after any change to the scripts or to
+  its `tool_result`, in the shapes the Claude Agent SDK documents, and
+  beside each Bash result the `tool_use_result` path A's stream shows. Run it after any change to the scripts or to
   production's profile.
 - `prompts/`: the task text of each run.
