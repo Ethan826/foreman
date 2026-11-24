@@ -111,6 +111,19 @@ slice does not authorize it.
 - Next: the owner's choice of the next cycle or follow-ups (state and
   ledger directory creation, the spawn-test leak, the moved-ref check,
   the commit guard before any test command).
+- 2026-11-23: dogfood-2, 2b and 3a landed (b5c7f80). The L3 rerun
+  package is in correction after a Codex HOLD; then the harness speed-up,
+  a Codex re-review, the live rerun (coordinator-operated), dogfood-3b.
+  A prior-art miss (virtengine/bosun) led to a re-sweep: nothing fits,
+  so foreman continues ([sweep](2026-11-23-prior-art-sweep.md),
+  [lessons](2026-11-23-prior-art-lessons.md)). Follow-up candidates from
+  the lessons, each needing its own slice: Codex review flags
+  `--ephemeral --ignore-user-config --ignore-rules` (the owner's Codex
+  config shapes reviews today); Claude `--no-session-persistence`; named
+  tests for the four fail-closed reading cases; a tree comparison after
+  review. The check-step direction is approved
+  ([proposal](2026-11-23-check-step-proposal.md)), after dogfood-3b.
+  The plan's execution record has every ruling.
 - The rest of B11 (the protected digest, the commit procedure and the
   review worktree) and B12 to B18 remain unauthorized. L4 waits on B13 to
   B15. Each push needs the owner's OK.

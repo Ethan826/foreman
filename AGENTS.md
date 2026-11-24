@@ -119,6 +119,27 @@ the entry in `docs/dependency-intake.md`, and tell the owner.
 Ralph (MIT) was studied and none of it was copied. Write adapters independently and
 record conceptual provenance. Waxwing is not a dependency or submodule.
 
+## Prior art
+
+The first fit assessment (2026-11-14) recorded no search method and
+missed tools that already existed. The 2026-11-23 re-sweep
+(`docs/plans/2026-11-23-prior-art-sweep.md`) logged every hit with how it
+was found and read the closest tools from source; none meets foreman's
+roles, pacing and approval requirements together.
+`docs/plans/2026-11-23-prior-art-lessons.md` maps what those tools do well
+to foreman's parts.
+
+- Before designing or planning a component (a design revision, a slice,
+  a proposal), read the lessons note's rows for that area and cite the
+  ones that apply, or say that none does.
+- Before a decision that rests on "nothing else does this", search
+  again with the sweep's written method for what has appeared since its
+  date, and record the new hits beside it. The field adds tools daily.
+- A dependency or a borrowed rule from these tools goes through
+  `docs/dependency-intake.md`; their defaults (bypass flags,
+  auto-continue, auto-merge, approval by a model) are the questions to
+  ask of it.
+
 ## Documentation
 
 Every exported declaration in `src/` has a TSDoc comment (`/** ... */`)
