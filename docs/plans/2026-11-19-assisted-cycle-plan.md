@@ -1980,3 +1980,41 @@ same unchanged state. As ruled before the run, the Claude pin in
 `~/.config/foreman/dogfood-1.json` moved to `2.1.331 (Claude Code)`;
 `fm status` shows both pins matching. Next: dogfood-3b
 (`checkCommands = ["bun run verify"]`) as a foreman cycle.
+
+## Dogfood-3b: configured check commands (2026-11-24)
+
+`assisted` landed on `main` first (11165c8; Linux CI green on the
+pushed branch and on `main`). [The task](2026-11-24-dogfood-3b-task.md)
+was read before the session by a fresh Opus reviewer
+([review](2026-11-24-dogfood-3b-task-review.md), 168,410 tokens): two
+blocking findings (unauthorized call sites the task forced; four L3
+`claudeEditingSettings` calls outside tsc and verify) and eight
+important ones, all written into the task. Owner rulings: a refused
+check command is caught at configuration decode; a launch refused for
+one is a refusal that expires armed waivers.
+
+Session `mwuvhor1-ufgsbm` on base 11165c8, run by the coordinator
+through `~/.config/foreman/fm`; the supervisor branch was fast-forwarded
+to `main` first. Implement ($4.52): 26 files changed and one added.
+Owner checks: docs passed; ESLint failed once
+(`restrict-template-expressions`), the prose gate blocked twice; the
+rest of the suite passed (1,677 of 1,678) and the L3 script tests 468
+of 468. Review 1 asked for F1 to F4 (a prose block, a type-failure
+message without the value, a native `join`, README text overstating
+the tool rules); the owner's findings added F5 (the lint error) and F6
+(the second prose block). Correction 1 ($1.06): every check green
+(1,679 tests, L3 468). Review 2: F2 (formatting an arbitrary entry
+could throw on deep nesting and misreport `1e400`), F7 (a comment
+overstating the character check). Correction 2 ($0.64): green (1,681
+tests, L3 468). Review 3: no findings. The owner closed the session
+finished with attestation (the classifier refused the coordinator's
+close and its first `correct` launch until the owner approved; the
+owner ran the close). Committed as b106e11. About $6.21 of
+Claude usage plus three Codex reviews. No ignored path (`node_modules`,
+`site`, `.build`) changed during any step.
+
+First dogfood cycle to finish on its own terms: every check green after
+one correction, and the final review clean, without an owner exception.
+Next: set `checkCommands: ["bun run verify"]`, probe verify inside the
+sandbox, then the rename ([plan](2026-11-24-rename-plan.md), awaiting
+the owner's rulings).
