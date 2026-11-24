@@ -1770,3 +1770,12 @@ readings. The coordinator re-checked the decisive awaywork and redline
 cells against source. Sweep gaps: no direct PyPI search, a few
 closed-source products seen only in summaries, 15 results per GitHub
 query.
+
+Owner ruling (2026-11-23): capture what the closest tools teach and
+move on. The lessons are in [a note](2026-11-23-prior-art-lessons.md);
+its candidates (Codex review flags `--ephemeral --ignore-user-config
+--ignore-rules`, Claude `--no-session-persistence`, named tests for
+redline's four fail-closed cases, a tree comparison after review) each
+need their own slice and authorization. The hold on the live rerun and
+dogfood-3b is lifted: next, integrate the L3 correction, the harness
+speed-up, the Codex re-review, then the rerun.
