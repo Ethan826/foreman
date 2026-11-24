@@ -1907,3 +1907,26 @@ check: a full run on the default port passes 445 cases (none of the 426
 earlier PASS lines missing, 19 added); `bun run verify` passes; the
 Write acknowledgment rule matches path A's real C4 stream. Next: the
 narrow Codex pass over list A and the speed-up.
+
+### Narrow pass at 8964129 (2026-11-23)
+
+Codex's narrow pass ([record](2026-11-23-l3-rerun-narrow-pass.md),
+1,409,216 input tokens, mostly cached): HOLD. List A's reviewed
+counterexamples are all rejected; new variants remain. P1: C6 ignores a
+write to `remote.git` (C6 has no snapshot targets); C4's LANDED scan
+reads the tool_result content but not `tool_use_result.stderr`, and an
+extra Edit after the check is not refused. P2: C6 accepts the diff call
+before the status result; a Write acknowledgment followed by
+contradictory text passes the prefix check; push, curl and canonical
+ties accept a flattened `To` token, a conflicting curl endpoint and a
+symlinked anchor; `run-case.sh` honours a stray `L3_PORT` in a live
+run; a section passes after silently dropping a case (counts are not
+pinned). P3: a moved fixture does not assert its second listener
+started. Every new variant needs a stream or setup the pinned client
+did not produce in path A; findings 1, 2 (stderr), 6 and 7 bear on real
+evidence or the harness's own integrity.
+
+Owner ruling (2026-11-23): fix all eight findings of the narrow pass with
+one worker on the fast harness; no further Codex round on the package.
+The coordinator checks each finding's counterexample offline, then runs
+the live rerun.
