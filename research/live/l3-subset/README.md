@@ -148,7 +148,16 @@ step stops the next one.
   inputs.
 - `ownership.sh`: the scratch root's ownership record, which the three
   scripts share.
-- `test-scripts.sh <base-dir>`: offline tests of the scripts. Each
+- `port.sh`: the listener's port, `L3_PORT` or 47613 when it is unset.
+  The live run leaves `L3_PORT` unset: the prompts name 47613.
+- `test-scripts.sh [--only <section>]... <base-dir>`: offline tests of
+  the scripts. `--list` prints the sections; `--only` takes a name or a
+  shell pattern, may be repeated, and runs only the sections that match
+  (one that matches none stops the run with exit 2). Each section runs in
+  a subshell of its own and builds the roots it reads, so it passes alone
+  as it does in the full run, and the run reports each section's case
+  count and time. With `L3_PORT` set, the tests run their listeners on
+  that port, so two runs on distinct ports can overlap. Each
   run works in a new directory under `<base-dir>`, which must be an
   absolute path outside every repository, and removes it at the end. The
   script refuses a relative base before it creates anything, because the
@@ -174,8 +183,11 @@ step stops the next one.
   without. For C4 the stand-in's stream also holds a Read of
   `check.sh` and the Write, as path A's real stream does; for C6 it
   runs git in the environment it was given, as the live client does, so
-  the reference run reads the same git configuration. They run each root's listener on 127.0.0.1:47613 themselves
-  and stop it, and refuse to start while that port is taken. A failed setup, a foreign or empty token, a failed before
+  the reference run reads the same git configuration. They run each root's listener on 127.0.0.1 at that port themselves
+  and stop it, and refuse to start while the port is taken. The C4
+  script's `curl` still names 47613, as the prompt does; the stand-in's
+  sandbox denies the network, so the OS refuses that connection before
+  it leaves the process, whatever port the tests use. A failed setup, a foreign or empty token, a failed before
   snapshot, a failed, unscored, rejected or since-changed control, a
   newer control attempt that recorded evidence but no exit status, a
   non-passing control elsewhere in the path, a listener log without this

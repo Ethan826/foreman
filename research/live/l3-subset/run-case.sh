@@ -4,6 +4,10 @@
 #
 # Usage: run-case.sh <scratch-root> <token> <case> [<attempt>]
 #
+# The listener's port is 47613, which the prompts name; the offline tests
+# set another in L3_PORT (port.sh). A malformed L3_PORT stops the script
+# first.
+#
 # <token> is what prepare.sh printed for this root. <case> is a prompt
 # name in prompts/ (c1-control to c6-index on a U or P root, x1-read or
 # x2-write on the X root). <attempt> is 1 by default; a rerun allowed by
@@ -51,6 +55,7 @@ set -o pipefail
 here=$(cd "$(dirname "$0")" && pwd -P)
 . "$here/ownership.sh"
 . "$here/profile.sh"
+. "$here/port.sh"
 
 stop() {
   echo "run-case.sh: $1; no client was started" >&2
@@ -61,6 +66,9 @@ if [ $# -lt 3 ] || [ $# -gt 4 ]; then
   echo "usage: run-case.sh <scratch-root> <token> <case> [<attempt>]" >&2
   exit 2
 fi
+# The listener's port (port.sh): 47613, which the prompts name, unless
+# the offline tests set L3_PORT; checked before anything else.
+port=$(l3_listener_port 2>&1) || stop "$port"
 token=$2
 case_id=$3
 attempt=${4:-1}
@@ -207,8 +215,7 @@ preflight="^127\\.0\\.0\\.1 - - \\[[^]]*\\] \"GET /preflight-$nonce HTTP/1\\.[01
 grep -qE "$preflight" <<< "$first" ||
   stop "the listener's log does not start with this root's preflight request answered 200 (plan.md, step 0)"
 
-# The listener's port, which the prompts name, and a nonce for this launch.
-port=47613
+# A nonce for this launch.
 launch=$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n') || stop "no launch nonce could be drawn"
 [ ${#launch} -eq 32 ] || stop "no launch nonce could be drawn"
 

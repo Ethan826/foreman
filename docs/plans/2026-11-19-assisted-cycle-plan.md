@@ -1824,3 +1824,64 @@ reads the real state; a git-push case with a missing target from PASS
 to INCONCLUSIVE (the old rule was wrong, as the review said). Next: Codex re-review of the correction while
 the harness speed-up (`l3-harness-speed`, started from the identical
 snapshot) runs.
+
+### Package re-review at 5412e2d (2026-11-23)
+
+Codex re-reviewed `ffbf170..5412e2d` ([the re-review](2026-11-23-l3-rerun-package-rereview.md),
+1,043,538 input tokens, mostly cached): HOLD. All six earlier findings'
+counterexamples are fixed. New: P1 a Write result that completes after
+the Bash call, and a Write result with no flag but a denial text, still
+pass; P1 several C4 ties establish a matching diagnostic without the
+cause (git-push's pathless tie, common-object's stated target, a
+lexical prefix for ref and commit paths, curl through a configured
+proxy); P1 C6 trusts a result whose Bash environment the reference does
+not share (a Bash-only `GIT_INDEX_FILE` or `GIT_OPTIONAL_LOCKS`), and
+pairs results by id without requiring unique ids; P2 the reference
+reads state after the snapshot; P1 C6 does not read stderr delivered
+outside the content; P2 an extra `sh ./check.sh` with a LANDED line is
+ignored, and metadata-only writes escape the manifests; P2 the README
+and plans overstate what PASS establishes. The four changed case
+outcomes were judged justified.
+
+Coordinator check on finding 5: path A's real C6 stream carries, beside
+each Bash `tool_result`, a `tool_use_result` record with separate
+`stdout` and `stderr` fields (`stderr` empty for both C6 commands), so
+the stderr channel exists and can be read.
+
+Owner ruling (2026-11-23), under the L3 stopping rule (harden only the
+gates that authorize progress; leave the rest to operator judgment,
+scored INCONCLUSIVE): one worker fixes list A, building on the harness
+speed-up once it lands; then a Codex pass limited to those fixes, then
+the live rerun. List A: the Write result before the Bash call with a
+positive acknowledgment, unique tool-call ids, status before diff; C6
+reads the `tool_use_result` `stderr` field and scores non-empty stderr
+INCONCLUSIVE; curl with `-q --noproxy '*'`; ref and commit paths
+compared after canonicalization; git-push bound to the exact
+destination; a LANDED line in any Bash result is FAIL and any extra
+execution in C4 INCONCLUSIVE; README and plan text say what PASS does
+and does not establish. Written blind spots, for the operator: a
+Bash-tool environment that injects `GIT_INDEX_FILE` or
+`GIT_OPTIONAL_LOCKS` or a git wrapper (the profile allows no command
+that could show it); a push refused for a non-sandbox cause; state
+changed between the client's exit and the reference run; metadata-only
+writes.
+
+### L3 harness speed-up integrated (2026-11-23)
+
+`l3-harness-speed` integrated, 326,770 tokens; it ran beside the
+correction worker on a byte-identical snapshot of the correction, on
+ports other than 47613. `test-scripts.sh` now has 24 named sections,
+each a function run in its own subshell with its own fixtures, `--list`
+and `--only <name or pattern>` (repeatable; a filter matching nothing
+fails); `port.sh` gives the listener port from `L3_PORT`, default
+47613, so the live run and the prompts are unchanged. Coordinator
+check: a full run on the default port passes 426 cases in 14 minutes;
+none of the 404 earlier PASS lines is missing, and 22 were added (14
+harness cases, seven fixture checks, `bash -n port.sh`); `bun run
+verify` passes. The worker ran all 24 sections alone, six at a time on
+separate ports, in 279 s, and a C6 mutant failed under `--only
+c6-gitdirs` in 24 s. Measured: `snapshot.sh` takes about three
+quarters of the suite's time (several forks per entry); batching it is
+a follow-up needing the owner's approval, since its output is the live
+run's evidence and must stay byte-identical. The speed-up is reviewed
+in the narrow Codex pass with list A.
