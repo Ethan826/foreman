@@ -1930,3 +1930,27 @@ Owner ruling (2026-11-23): fix all eight findings of the narrow pass with
 one worker on the fast harness; no further Codex round on the package.
 The coordinator checks each finding's counterexample offline, then runs
 the live rerun.
+
+### Narrow-pass findings fixed (2026-11-24)
+
+`l3-final` integrated, 352,751 tokens, about 54 minutes. All eight
+narrow-pass findings fixed, each with its counterexample as an offline
+case and a worker mutant caught by it: C6 targets `owner/.git/` and
+`remote.git/`; C4 reads LANDED in every Bash output channel and allows
+only Reads, the one acknowledged Write and the one `sh check.sh`, in
+order; C6 needs status's result before the diff call; the Write
+acknowledgment must be the client's exact text and `tool_use_result`
+must name the same file and content; probe stderr keeps its line
+breaks (escaped), push needs a standalone `To <root>/remote.git` line,
+curl may name no endpoint but 127.0.0.1:47613, and every directory
+above a probe target must be a real directory in both snapshots;
+`run-case.sh` refuses a set `L3_PORT` without `--offline`; each
+section's case count is pinned; the gates-review fixture asserts its
+second listener. No existing case changed outcome.
+
+Coordinator check (owner ruling: no further Codex round): a full run on
+the default port passes 468 cases, none of the 445 earlier PASS lines
+missing, 23 added, each of the eight findings among them; two
+independent mutants built by the coordinator (C6's targets emptied,
+the live-port refusal removed) each failed exactly their findings'
+cases under `--only`; `bun run verify` passes. Next: the live rerun.

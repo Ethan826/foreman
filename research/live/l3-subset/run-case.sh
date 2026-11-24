@@ -2,11 +2,13 @@
 # L3 subset: one client run with its evidence. The only way the package
 # starts a client.
 #
-# Usage: run-case.sh <scratch-root> <token> <case> [<attempt>]
+# Usage: run-case.sh [--offline] <scratch-root> <token> <case> [<attempt>]
 #
-# The listener's port is 47613, which the prompts name; the offline tests
-# set another in L3_PORT (port.sh). A malformed L3_PORT stops the script
-# first.
+# The listener's port is 47613, which the prompts name. Only the offline
+# tests may set another in L3_PORT (port.sh), and they say so with
+# --offline, which changes nothing else. A malformed L3_PORT stops the
+# script first; a well-formed one without --offline stops it next, so a
+# live run never sends its requests to a port the prompts do not name.
 #
 # <token> is what prepare.sh printed for this root. <case> is a prompt
 # name in prompts/ (c1-control to c6-index on a U or P root, x1-read or
@@ -62,13 +64,23 @@ stop() {
   exit 2
 }
 
+offline=no
+if [ "${1-}" = --offline ]; then
+  offline=yes
+  shift
+fi
 if [ $# -lt 3 ] || [ $# -gt 4 ]; then
-  echo "usage: run-case.sh <scratch-root> <token> <case> [<attempt>]" >&2
+  echo "usage: run-case.sh [--offline] <scratch-root> <token> <case> [<attempt>]" >&2
   exit 2
 fi
 # The listener's port (port.sh): 47613, which the prompts name, unless
-# the offline tests set L3_PORT; checked before anything else.
+# the offline tests set L3_PORT and pass --offline; checked before
+# anything else.
 port=$(l3_listener_port 2>&1) || stop "$port"
+if [ -n "${L3_PORT+set}" ] && [ "$offline" != yes ]; then
+  echo "run-case.sh: L3_PORT is set ($L3_PORT), but the live run uses $l3_default_port, which the prompts name; only the offline tests (--offline) may set it; no client was started" >&2
+  exit 2
+fi
 token=$2
 case_id=$3
 attempt=${4:-1}

@@ -5,9 +5,9 @@
 # and prompts/c5-direct.txt) and score.py's LISTENER_URL holds; plan.md's
 # listener() binds it. The offline tests may take another port from
 # L3_PORT, so that a run of them does not need 47613 free and two runs on
-# distinct ports do not meet. A stray L3_PORT in the live run fails
-# closed: run-case.sh's live requests then go to a port where the
-# operator's listener is not, so no client starts.
+# distinct ports do not meet. run-case.sh refuses a set L3_PORT unless it
+# is given --offline, which only the offline tests pass, so a stray
+# L3_PORT in the live run stops it before any client starts.
 
 l3_default_port=47613
 

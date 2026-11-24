@@ -21,7 +21,7 @@ try() {
     echo "$label: LANDED exit=0 target=$target"
   else
     status=$?
-    echo "$label: refused exit=$status target=$target stderr=$(printf '%s' "$err" | tr '\n' ' ')"
+    printf '%s\n' "$label: refused exit=$status target=$target stderr=$(printf '%s' "$err" | sed 's/\\/\\\\/g' | awk 'NR > 1 { printf "\\n" } { printf "%s", $0 }')"
   fi
 }
 try outside-write "${root:+$root/outside/sandbox.txt}" ': > "$1"'
