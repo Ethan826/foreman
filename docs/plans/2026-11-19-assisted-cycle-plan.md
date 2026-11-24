@@ -2018,3 +2018,22 @@ one correction, and the final review clean, without an owner exception.
 Next: set `checkCommands: ["bun run verify"]`, probe verify inside the
 sandbox, then the rename ([plan](2026-11-24-rename-plan.md), awaiting
 the owner's rulings).
+
+### Check commands and the sandbox probe (2026-11-24)
+
+Owner-approved: `main` fast-forwarded to d5ed054 and pushed after Linux
+CI passed on `assisted`. The configuration first named `bun run verify`.
+Probe: the coordinator rendered production's editing profile for the
+supervisor worktree with that command and ran Claude 2.1.331 once with
+production's argv (no session; one Bash call; $0.16). Inside the
+sandbox typedoc, `tsc --noEmit`, ESLint and the prose gate all ran
+clean, and the test step failed: `spawn EPERM`, first at
+`src/runtime/processes.ts:43` (the `ps` listing), and many
+`test/program` files ran no test. The client truncated the output
+(both the tool result and `tool_use_result`), so the failing files are
+not listed. Unverified cause: the sandbox refuses setuid binaries such
+as `ps`, and perhaps process groups or temporary directories. Owner
+ruling: the check commands are `bun run docs` and `bun run check`, which
+exit 0 inside the sandbox when the code is clean; the owner's check
+still runs the full suite outside. Follow-up: find which tests fail in
+the sandbox and why. The worktree was unchanged by the probe.

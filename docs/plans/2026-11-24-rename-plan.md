@@ -106,3 +106,14 @@ roughly the size of dogfood-3a (about $5 to $10 of Claude usage plus
 the Codex review). The cutover is an hour of coordinator work with no
 agent cost. Nothing about the cutover is reversible without effort once
 the GitHub repository is renamed, so it runs only with the owner's OK.
+
+## Owner rulings (2026-11-24)
+
+All six decisions as recommended: rename every local directory and the
+configuration at one cutover; rename the GitHub repository; history
+stays as written with a dated note; the code rename runs as dogfood-4
+through foreman, with the coordinator changing `AGENTS.md`,
+`CLAUDE.md`, `package.json` and `.github/workflows/` by hand in the
+same cycle; the alias is `tl`; the ledger moves to `~/.tarlatan`. The
+artwork is committed after the cutover and `tarlatan.png` becomes a
+banner at the top of the README.
