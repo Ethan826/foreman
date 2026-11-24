@@ -156,3 +156,12 @@ Remaining, in the new session:
 4. Verify, push `assisted`, Linux CI, fast-forward `main`, push; check
    the docs workflow publishes at the new Pages URL.
 5. Then Waxwing onboarding (roadmap item 1).
+
+Done in the new session (2026-11-24):
+- `tl status` gave `StateMissing`; `tl worktree create` made
+  `~/Desktop/tarlatan-wt/dogfood` on `tarlatan/dogfood` from 2486f47,
+  listed and locked.
+- README: the banner, the Pages URL, a current status, a section on
+  running a cycle, and the layout; `docs/how-it-works.md`'s status and
+  its pointer to `pace`; the artwork committed.
+- AGENTS.md: the status paragraph and the L3 rerun result.

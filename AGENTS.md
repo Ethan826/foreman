@@ -7,19 +7,19 @@ before the next tranche. It paces launches against the user's
 subscription windows, renews context with every step, and keeps durable
 checkpoints.
 
-Status (2026-11-20): the owner approved the design at revision 6.1; its
+Status (2026-11-24): the owner approved the design at revision 6.1; its
 open items stay open unless a later owner ruling resolves them. On
-`main`: Part A (2026-11-16), Part B milestone 1 (B1 to B10, 2026-11-17),
-B11a and B11b (2026-11-18) and B11c (2026-11-19). The local branch
-`assisted` holds work that waits for landing: B11d (the pinned runner), W1 (Waxwing's
-attribute line) and the assisted cycle, MVP-D0 slices A1 and A2
-(`docs/plans/2026-11-19-assisted-cycle-plan.md`), corrected for the
-batch review's findings and awaiting its re-review. Production git runs
-through `cleanGit`, `pinnedGitWith` and `snapshotGitWith` in
-`src/runtime/git.ts`, with a private git home that tarlatan creates and
-checks. Landing, push, the L3 subset's live run, the rest of B11 and B12
-to B18 each need the owner's authorization; scoping a slice does not
-authorize it.
+`main`: Part A, Part B milestone 1 (B1 to B10), B11a to B11d, W1
+(Waxwing's attribute line) and the assisted cycle (MVP-D0 slices A1 and
+A2, `docs/plans/2026-11-19-assisted-cycle-plan.md`), followed by the
+dogfood cycles 1 to 4 run by tarlatan on itself; dogfood-4 renamed the
+project from foreman. The plan's execution record holds every ruling.
+Production git runs through `cleanGit`, `pinnedGitWith` and
+`snapshotGitWith` in `src/runtime/git.ts`, with a private git home that
+tarlatan creates and checks. The next work is Waxwing onboarding, item 1
+of `docs/plans/2026-11-24-robustness-roadmap.md`. Landing, push, each
+live client run, the rest of B11 and B12 to B18 each need the owner's
+authorization; scoping a slice does not authorize it.
 
 Before any commit, `bun run check` (tsc, ESLint and the prose gate),
 `bun run test` and `bun run docs` must pass; the docs build must also be
@@ -29,13 +29,14 @@ Live tests L1 (Claude usage readings) and L2 (Codex usage windows) ran on
 2026-11-16 and both came back positive; results and limits are in
 `research/live/results-2026-11-16.md`. The L3 subset for the assisted
 cycle is in `research/live/l3-subset/`; path A ran on 2026-11-22 (C4
-FAIL, see its `results.md`), and a rerun of the six Claude cases under
-dogfood-3a's git-directory denials is prepared. The owner ruled L03 on
-2026-11-20: Claude's editing argv passes `--setting-sources
-project,local`, which keeps out user settings and hooks, and
-`--strict-mcp-config`, which starts no MCP server. Each run of the
-subset needs its own authorization. L4 (crash and
-restart) waits on B13 to B15. No live client call is authorized by this status update.
+FAIL, see its `results.md`), and the rerun under dogfood-3a's
+git-directory denials passed C4 on 2026-11-24 (the plan's "L3 rerun of
+the guard"). The owner ruled L03 on 2026-11-20: Claude's editing argv
+passes `--setting-sources project,local`, which keeps out user settings
+and hooks, and `--strict-mcp-config`, which starts no MCP server. Each
+run of the subset needs its own authorization. L4 (crash and restart)
+waits on B13 to B15. No live client call is authorized by this status
+update.
 Until the Codex windows enter the default policy, every Codex launch
 needs a waiver.
 
