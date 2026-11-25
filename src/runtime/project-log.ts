@@ -2,9 +2,14 @@
 // recovery": the event store with its conditional append). One table of
 // events numbered from 1; an append names the position it read, and runs
 // in one `BEGIN IMMEDIATE` transaction that refuses it, writing nothing,
-// if another writer appended first.
-import { Database } from "bun:sqlite"
-import { Array as Arr, Effect, Option, Schema, Semaphore } from "effect"
+// if another writer appended first. The file's format version is SQLite's
+// `user_version` header field (dogfood-5): `open` reads it before it opens
+// the file for writing, and again inside a `BEGIN IMMEDIATE` transaction
+// that creates the table and stamps a log at 0 with 1, so every open takes
+// the write lock briefly; a log stamped newer, or below 0, is refused and
+// left untouched (`openWriter` in `sqlite.ts`).
+import type { Database } from "bun:sqlite"
+import { Array as Arr, Effect, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
 import {
   type LoggedEvent,
@@ -14,7 +19,8 @@ import {
   type ProjectLog,
   ProjectLogError,
 } from "../domain/events.ts"
-import { isSqliteBusy, keepWalFiles, sqliteReason, transaction, type TxConnection, walRefusal } from "./sqlite.ts"
+import type { StoreVersionNewer } from "../domain/store-version.ts"
+import { isSqliteBusy, openWriter, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
 
 const toError = (error: unknown) =>
   new ProjectLogError({
@@ -119,44 +125,36 @@ const logOf = (db: Database, lock: Semaphore.Semaphore): ProjectLog => ({
 })
 
 /**
- * Opens the database, sets `busy_timeout`, keeps the WAL files on close
- * ({@link keepWalFiles}), takes WAL mode and creates any missing table.
+ * Opens the log's writer connection in the order of ruling P1
+ * (`openWriter` in `sqlite.ts`) with the log's error mapping: a lock
+ * timeout is `ProjectLogError` ("project log busy"), as are a refused
+ * journal mode and a negative format version, and a newer version is
+ * `StoreVersionNewer`.
  */
 const open = (path: string, busyTimeoutMillis: number) =>
-  Effect.flatMap(
-    withDb(() => {
-      const db = new Database(path, { create: true })
-      db.exec(`PRAGMA busy_timeout=${String(busyTimeoutMillis)}`)
-      const walKept = keepWalFiles(db)
-      return { db, refusal: walRefusal(db.query("PRAGMA journal_mode=WAL").get(), walKept) }
-    }),
-    ({ db, refusal }) =>
-      Option.match(refusal, {
-        onNone: () =>
-          withDb(() => {
-            Arr.forEach(schemaSql, (sql) => {
-              db.exec(sql)
-            })
-            return db
-          }),
-        onSome: (reason) =>
-          Effect.andThen(
-            Effect.sync(() => {
-              db.close()
-            }),
-            Effect.fail(new ProjectLogError({ reason })),
-          ),
-      }),
-  )
+  openWriter<ProjectLogError>({
+    path,
+    busyTimeoutMillis,
+    schemaSql,
+    failure: toError,
+    refused: (reason) => new ProjectLogError({ reason }),
+    connection: connectionOf,
+  })
 
 /**
  * Opens (creating if needed) the project log at `path` for the scope, in
  * WAL mode with `busy_timeout` set, and closes it when the scope ends.
+ * The open takes the write lock briefly, so it can wait up to
+ * `busyTimeoutMillis` and then fail with "project log busy". A log at
+ * format version 0 (written by v0.1.0) is stamped 1 and a new one is
+ * created at 1. A log stamped by a newer release fails with
+ * `StoreVersionNewer`, and one stamped below 0 with `ProjectLogError`;
+ * either is left as it was, read and written by nothing.
  */
 export const openProjectLog = (
   path: string,
   busyTimeoutMillis: number,
-): Effect.Effect<ProjectLog, ProjectLogError, Scope.Scope> =>
+): Effect.Effect<ProjectLog, ProjectLogError | StoreVersionNewer, Scope.Scope> =>
   Effect.map(
     Effect.acquireRelease(open(path, busyTimeoutMillis), (db) =>
       Effect.sync(() => {

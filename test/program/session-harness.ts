@@ -165,7 +165,7 @@ const build = (dir: string, options: HarnessOptions) =>
       },
     }
     const ledgerReader = yield* Effect.flatMap(openLedgerReader(`${dir}/ledger.sqlite`, busyMillis), Effect.fromOption)
-    const status = statusOver(context, ledgerReader.read)
+    const status = statusOver(context, Effect.catchTag(ledgerReader.read, "StoreVersionNewer", Effect.die))
     return {
       context, dir, taskFile, trace, shown, client, inject, worktree, base, gitCalls, rawLedger: ledger, status,
     } satisfies Harness

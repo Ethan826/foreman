@@ -151,7 +151,7 @@ export interface CliOptions {
 const ignored = () => undefined
 
 /** A console that keeps `log` lines in `out` and `error` lines in `err`. */
-const capturing = (out: Array<string>, err: Array<string>): Console.Console => ({
+export const capturing = (out: Array<string>, err: Array<string>): Console.Console => ({
   assert: ignored, clear: ignored, count: ignored, countReset: ignored, debug: ignored, dir: ignored,
   dirxml: ignored, group: ignored, groupCollapsed: ignored, groupEnd: ignored, info: ignored,
   table: ignored, time: ignored, timeEnd: ignored, timeLog: ignored, trace: ignored, warn: ignored,

@@ -8,6 +8,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Effect } from "effect"
 import { readdirSync, writeFileSync } from "node:fs"
+import { setVersion, versionOf } from "../runtime/store-version-fixtures.ts"
 import { implementerEnded, interruptedAttempt } from "./interrupted-attempt.ts"
 import {
   cli,
@@ -15,10 +16,12 @@ import {
   endToEndMillis,
   failureTag,
   type Layout,
+  ledgerPath,
   openedSession,
   recorded,
   withLayout,
 } from "./production-harness.ts"
+import { treeOf } from "./state-tree.ts"
 
 const homeOf = (layout: Layout) => `${layout.state}/git-home`
 
@@ -96,6 +99,30 @@ const gitCommandsStillRefused = () =>
       expect(recorded(layout, "claude-launches")).toBeUndefined()
     }),
   )
+
+// A ledger stamped by a newer release refuses `session close --abandoned`,
+// which must write it to settle (dogfood-5, owner ruling P4). The log is
+// opened first, so a log at 0 is stamped 1 before the ledger is refused;
+// the ruling accepts that, since 1 is the format the log already has.
+const newerLedgerRefusesClose = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      const log = `${layout.state}/log.sqlite`
+      yield* openedSession(layout)
+      yield* setVersion(log, 0)
+      yield* setVersion(ledgerPath(layout), 2)
+      const before = treeOf(layout.ledgerDir)
+      const run = yield* cli(layout, ["session", "close", "--abandoned"])
+      expect(outcome(run)).toEqual([1, "StoreVersionNewer"])
+      expect(treeOf(layout.ledgerDir)).toEqual(before)
+      expect(yield* versionOf(ledgerPath(layout))).toBe(2)
+      expect(yield* versionOf(log)).toBe(1)
+    }),
+  )
+
+describe("the owner's exits in production over a newer ledger", () => {
+  it.effect("session close --abandoned fails with StoreVersionNewer and leaves the ledger as it was", newerLedgerRefusesClose, endToEndMillis)
+})
 
 describe("the owner's exits in production with a contaminated git HOME", () => {
   it.effect("session close --abandoned closes the session", abandonedDespiteHome, endToEndMillis)

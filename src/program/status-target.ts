@@ -11,6 +11,7 @@
 import { Array as Arr, Effect, Option, Result, Schema } from "effect"
 import { constant } from "effect/Function"
 import { type CanonicalLayout, LayoutRefused } from "../domain/layout.ts"
+import { StoreVersionNewer } from "../domain/store-version.ts"
 import { TargetBinding, TargetBindingUnreadable, TargetMismatch } from "../domain/target.ts"
 import { checkLayout } from "../features/layout.ts"
 import { compareTarget } from "../features/target-binding.ts"
@@ -33,8 +34,32 @@ export class RecordedLayoutRefused extends Schema.TaggedClass<RecordedLayoutRefu
   reasons: Schema.NonEmptyArray(Schema.String),
 }) {}
 
-/** One problem status found with the configuration, the binding or a layout, reported and never refused. */
-export const StatusFinding = Schema.Union([ConfiguredLayoutRefused, TargetBindingUnreadable, RecordedLayoutRefused])
+/**
+ * The ledger at `path` is stamped with format version `found`, below 0,
+ * which no tarlatan release writes (owner ruling P2); `reason` says so.
+ * Status read none of its rows (owner ruling P6).
+ */
+export class LedgerVersionInvalid extends Schema.TaggedClass<LedgerVersionInvalid>()("LedgerVersionInvalid", {
+  path: Schema.String,
+  found: Schema.Int,
+  reason: Schema.String,
+}) {}
+
+/**
+ * One problem status found, reported and never refused: with the
+ * configuration, the binding or a layout, or with the shared ledger's
+ * format version. A ledger stamped by a newer release is
+ * `StoreVersionNewer`, with its `path`, the version `found` and the one
+ * `known`; one stamped below 0 is {@link LedgerVersionInvalid}. Either
+ * way status read none of the ledger's rows (owner ruling P6).
+ */
+export const StatusFinding = Schema.Union([
+  ConfiguredLayoutRefused,
+  TargetBindingUnreadable,
+  RecordedLayoutRefused,
+  StoreVersionNewer,
+  LedgerVersionInvalid,
+])
 /** One problem status found; see {@link StatusFinding}. */
 export type StatusFinding = typeof StatusFinding.Type
 

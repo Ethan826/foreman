@@ -3,7 +3,7 @@
 import { describe, expect, it } from "@effect/vitest"
 import { Database } from "bun:sqlite"
 import { Array as Arr, Effect, Exit, Option, Order } from "effect"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { Clients } from "../../src/domain/clients.ts"
 import { GrantId, OpId, ProjectId } from "../../src/domain/ids.ts"
@@ -13,6 +13,7 @@ import {
   GrantCanceled,
   GrantSettled,
   LedgerBusy,
+  LedgerError,
   type LedgerRow,
   type LedgerSnapshot,
   type LedgerStore,
@@ -20,9 +21,11 @@ import {
   ReadingRow,
   Reserve,
 } from "../../src/domain/ledger.ts"
+import { StoreVersionNewer } from "../../src/domain/store-version.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { startChild } from "./child-process.ts"
+import { dataVersionWatch, hasWalFiles, rollbackStoreAt, setVersion, versionOf } from "./store-version-fixtures.ts"
 
 const busyMillis = 50
 const fiveHour = [{ window: Windows.FiveHour, points: 15 }]
@@ -205,6 +208,83 @@ describe("SQLite ledger store across processes", () => {
   it.live("waits within busy_timeout for another process's write lock, then writes", () =>
     withDir(waitsThenSucceeds),
   )
+})
+
+// The ledger's format version (dogfood-5, owner rulings P1 and P2).
+const ledgerIn = (dir: string) => `${dir}/ledger.sqlite`
+
+/** Opens the ledger at `path` for a scope of its own and runs `use` on it. */
+const openedOnce = <A, E>(path: string, use: (store: LedgerStore) => Effect.Effect<A, E>) =>
+  Effect.scoped(Effect.flatMap(openLedger(path, busyMillis), use))
+
+const newLedgerAtOne = (dir: string) =>
+  Effect.gen(function* () {
+    yield* openedOnce(ledgerIn(dir), () => Effect.void)
+    expect(yield* versionOf(ledgerIn(dir))).toBe(1)
+  })
+
+const unstampedLedgerStamped = (dir: string) =>
+  Effect.gen(function* () {
+    const path = ledgerIn(dir)
+    yield* openedOnce(path, (store) => appendIn(store, [grant("g-1"), reading, charged("g-1")]))
+    yield* setVersion(path, 0)
+    expect(yield* versionOf(path)).toBe(0)
+    const rows = yield* openedOnce(path, rowsOf)
+    expect(yield* versionOf(path)).toBe(1)
+    expect(rows).toEqual([grant("g-1"), reading, charged("g-1")])
+  })
+
+const newerLedgerUntouched = (dir: string) =>
+  Effect.gen(function* () {
+    const path = ledgerIn(dir)
+    yield* rollbackStoreAt(path, 2)
+    const before = readFileSync(path)
+    const refused = yield* Effect.flip(openedOnce(path, () => Effect.void))
+    expect(refused).toEqual(new StoreVersionNewer({ path, found: 2, known: 1 }))
+    expect(readFileSync(path)).toEqual(before)
+    expect(hasWalFiles(path)).toBe(false)
+  })
+
+const negativeLedgerUntouched = (dir: string) =>
+  Effect.gen(function* () {
+    const path = ledgerIn(dir)
+    yield* rollbackStoreAt(path, -1)
+    const before = readFileSync(path)
+    const refused = yield* Effect.flip(openedOnce(path, () => Effect.void))
+    expect(refused).toEqual(new LedgerError({ reason: "store format version -1 is not one tarlatan writes" }))
+    expect(readFileSync(path)).toEqual(before)
+    expect(hasWalFiles(path)).toBe(false)
+  })
+
+// A current ledger's open commits nothing: another connection's
+// `data_version` is the same before and after it. The control at the end
+// shows the watch sees a commit: an unconditional `user_version = 1`
+// from another connection, as a stamp without the condition would run,
+// changes it.
+const currentLedgerCommitsNothing = (dir: string) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const path = ledgerIn(dir)
+      yield* openedOnce(path, (store) => appendIn(store, [grant("g-1")]))
+      const dataVersion = yield* dataVersionWatch(path)
+      const before = yield* dataVersion
+      yield* openedOnce(path, () => Effect.void)
+      expect(yield* dataVersion).toBe(before)
+      yield* setVersion(path, 1)
+      expect(yield* dataVersion).not.toBe(before)
+    }),
+  )
+
+describe("SQLite ledger store format version", () => {
+  it.effect("creates a new ledger at version 1", () => withDir(newLedgerAtOne))
+  it.effect("stamps a ledger at 0 with 1 and keeps every row", () => withDir(unstampedLedgerStamped))
+  it.effect("refuses a newer ledger with StoreVersionNewer and leaves its bytes and no WAL files", () =>
+    withDir(newerLedgerUntouched),
+  )
+  it.effect("refuses a ledger below 0 with LedgerError and leaves its bytes and no WAL files", () =>
+    withDir(negativeLedgerUntouched),
+  )
+  it.effect("commits nothing when it opens a current ledger", () => withDir(currentLedgerCommitsNothing))
 })
 
 describe("SQLite ledger store", () => {

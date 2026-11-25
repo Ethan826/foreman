@@ -6,12 +6,17 @@
 // HOME: when the HOME is missing or fails B02's checks, status says so and
 // skips the git-based worktree check instead of running git with it.
 import { describe, expect, it } from "@effect/vitest"
-import { Array as Arr, Effect, Schema } from "effect"
+import { Array as Arr, Effect, Option, Schema } from "effect"
 import { existsSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { StoreVersionNewer } from "../../src/domain/store-version.ts"
+import { ledgerTaken } from "../../src/program/production-status.ts"
+import { openLedgerReader } from "../../src/runtime/state-read.ts"
+import { rawExec, setVersion, versionOf } from "../runtime/store-version-fixtures.ts"
 import {
   configOf,
   endToEndMillis,
   type Layout,
+  ledgerPath,
   openedSession,
   succeeded,
   withLayout,
@@ -133,6 +138,93 @@ const checkCommandsListed = () =>
       expect((yield* shownCheckCommands(layout, copied)).checkCommands).toEqual(commands)
     }),
   )
+
+/** The store versions status printed, kept as printed so a missing key stays missing. */
+const ShownStoreVersions = Schema.fromJsonString(Schema.Struct({ storeVersions: Schema.Unknown }))
+
+/** The `storeVersions` `status` printed for the layout's own configuration. */
+const shownStoreVersions = (layout: Layout) =>
+  Effect.map(
+    Effect.flatMap(succeeded(layout, ["status"]), (run) =>
+      Schema.decodeUnknownEffect(ShownStoreVersions)(Arr.join(run.out, "\n")),
+    ),
+    (shown) => shown.storeVersions,
+  )
+
+const logOf = (layout: Layout) => `${layout.state}/log.sqlite`
+
+// A log at 1 beside a ledger at 0, which only a raw value can show: a
+// stamped ledger would read 1.
+const rawVersionsShown = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      yield* setVersion(ledgerPath(layout), 0)
+      expect(yield* versionOf(logOf(layout))).toBe(1)
+      expect(yield* shownStoreVersions(layout)).toStrictEqual({ log: 1, ledger: 0 })
+      expect(yield* versionOf(ledgerPath(layout))).toBe(0)
+    }),
+  )
+
+const noTargetOmitsLedger = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      writeFileSync(`${layout.state}/target-binding.json`, "{ damaged")
+      expect(yield* shownStoreVersions(layout)).toStrictEqual({ log: 1 })
+    }),
+  )
+
+const noLedgerFileOmitsLedger = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      Arr.forEach(readdirSync(layout.ledgerDir), (name) => {
+        rmSync(`${layout.ledgerDir}/${name}`, { recursive: false, force: false })
+      })
+      expect(yield* shownStoreVersions(layout)).toStrictEqual({ log: 1 })
+    }),
+  )
+
+/** How long the test's ledger reader waits for a lock, in milliseconds. */
+const readerBusyMillis = 1_000
+
+/**
+ * Review finding F6, one level below `main`: production status opens and
+ * reads the ledger in one call, so no seam lets a test stamp between the
+ * two. Here the ledger is opened at 1, another connection stamps it 2 and
+ * adds a row that would not decode, and the read's snapshot goes through
+ * `ledgerTaken`, the function status turns a ledger read into its finding
+ * with. A read that decided on the open's version would read the bad row.
+ */
+const stampedBetweenOpenAndRead = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      const path = ledgerPath(layout)
+      const taken = yield* Effect.scoped(
+        Effect.gen(function* () {
+          const reader = yield* Effect.flatMap(openLedgerReader(path, readerBusyMillis), Effect.fromOption)
+          yield* rawExec(path, "INSERT INTO readings (seq, body, grantId) VALUES (99, 'not a row', NULL)")
+          yield* setVersion(path, 2)
+          return ledgerTaken(path)(yield* reader.snapshot)
+        }),
+      )
+      expect(taken.finding).toEqual(Option.some(new StoreVersionNewer({ path, found: 2, known: 1 })))
+      expect(taken.version).toEqual(Option.some(2))
+      expect(taken.rows).toEqual(Option.none())
+    }),
+  )
+
+describe("status in production: a ledger stamped between its open and its read (review finding F6)", () => {
+  it.effect("gives P6's finding, the version found and no rows", stampedBetweenOpenAndRead, endToEndMillis)
+})
+
+describe("status in production: store format versions (dogfood-5)", () => {
+  it.effect("shows the log's and the ledger's versions as read, and stamps neither", rawVersionsShown, endToEndMillis)
+  it.effect("shows no ledger version when no target is in force", noTargetOmitsLedger, endToEndMillis)
+  it.effect("shows no ledger version when no ledger file is found", noLedgerFileOmitsLedger, endToEndMillis)
+})
 
 describe("status in production", () => {
   it.effect("lists the configured check commands, in order (dogfood-3b)", checkCommandsListed, endToEndMillis)
