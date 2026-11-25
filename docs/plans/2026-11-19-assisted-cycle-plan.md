@@ -2155,3 +2155,12 @@ release; the session closed finished and the change was committed as
 2a332ec on `tarlatan/dogfood` and cherry-picked onto `assisted`.
 About $9.54 of Claude usage across both sessions, plus five Codex
 reviews.
+
+## Owner ruling for the v0.2.0 design note (2026-11-25)
+
+The owner wants a way back to additional review rounds inside the same
+session, without opening a new session, when the correction limit is
+reached. This reopens ruling 1 of 2026-11-14 ("no extra rounds" after
+`maxCorrectionRounds`) for the design note on retry and back-up, task
+review with structured rulings and the owner override; the note
+proposes the mechanism, and the owner approves it.
