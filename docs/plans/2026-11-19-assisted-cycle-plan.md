@@ -2143,3 +2143,15 @@ session abandoned, the worktree keeping round 1, and wrote
 [dogfood-5b](2026-11-25-dogfood-5b-task.md) for F8 alone, run under
 the standing authorization above. Follow-up for the roadmap: the
 correction limit had no owner override.
+
+Dogfood-5b session `mww70ny2-232q7v` on the kept worktree (base
+e7f3060). Implement ($0.63) added a one-permit semaphore per reader
+and a concurrency test per reader; the owner's check passed, 1,714 of
+1,714 tests. The coordinator removed the semaphore in an isolated copy:
+both new tests failed with `cannot start a transaction within a
+transaction`, the other 8 in the file passed. Review 1: no findings.
+The owner approved closing finished, landing, pushing and the v0.1.1
+release; the session closed finished and the change was committed as
+2a332ec on `tarlatan/dogfood` and cherry-picked onto `assisted`.
+About $9.54 of Claude usage across both sessions, plus five Codex
+reviews.
