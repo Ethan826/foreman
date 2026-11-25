@@ -6,6 +6,27 @@ counts as a breaking change, are in
 Each entry lists changes to on-disk formats, the CLI, the configuration
 and behaviour.
 
+## 0.1.1 (2026-11-25)
+
+The store version check (dogfood-5 and 5b), so that a release refuses a
+store written by a newer one instead of misreading it.
+
+- Formats: both SQLite stores, the shared ledger and each project's
+  log, hold a format version in SQLite's `PRAGMA user_version`. The
+  format is unchanged and is version 1. A store at 0, written by
+  v0.1.0, is stamped 1 by the first command that opens it; v0.1.0 never
+  reads the field, so it keeps working on a stamped store.
+- CLI: a store stamped higher than 1 fails every command that opens it
+  with `StoreVersionNewer` (`path`, `found`, `known`), and a negative
+  version with the store's own error. `status` gains `storeVersions`
+  (`log`, and `ledger` when a ledger is read), the header values as
+  read, and reports a newer or negative shared ledger as a finding
+  without reading its rows, still exiting 0.
+- Configuration: unchanged.
+- Behaviour: opening the project log now takes its write lock briefly,
+  as opening the ledger already did. `status` reads each store's version
+  and rows from one snapshot.
+
 ## 0.1.0 (2026-11-24, tag only)
 
 The first release, tagged at 1c564bd so that Waxwing and durable-effect
