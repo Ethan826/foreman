@@ -2111,3 +2111,35 @@ closes. P5: `ProductionStatusReport.storeVersions`, the raw header
 values, the ledger's omitted when there is none; a newer log fails
 `status`. P6: a newer or negative shared ledger is a status finding,
 its rows unread, and status exits 0.
+
+Owner authorization (2026-11-25, standing): once the owner has approved
+a task draft and its rulings, the coordinator runs the non-automated
+loop to completion without asking for each step: `session open`, the
+waived `implement`, the owner's check, and waived `review` and
+`correct` rounds until a review comes back with no findings. Launch
+output goes to files so the coordinator's context does not fill. The
+coordinator still stops for the owner at a product decision, before
+`session close --finished`, and before landing or pushing.
+
+Dogfood-5 session `mwvuqidx-7tz72k` on base e7f3060. The worktree had
+no `node_modules` at implement (a coordinator miss), so the implementer
+($5.33) could not run its checks; the owner's check found one tsc error
+and five blocking prose findings. Review 1 (five findings, among them
+F2: the reader checked the version outside the snapshot it read rows
+from); correction 1 ($1.45); the owner's check then failed one new test
+in its own setup. Review 2 (four findings, among them F6: the
+coordinator's F2 ruling, an equality check between the open's version
+and the read's, refused a concurrent 0-to-1 stamp and let a newer stamp
+escape P6; the coordinator replaced it with Domain's decision on the
+snapshot's own version); correction 2 ($2.13); the owner's check
+passed, 1,712 of 1,712 tests. The coordinator ran the
+unconditional-stamp mutant in an isolated copy: both "commits nothing
+when it opens a current ..." tests failed (`data_version` 3, expected
+2), the other 23 passed. Review 3: F8, concurrent reads on one reader
+fail (minor), and F9, the mutation run, already done. A third
+correction was refused (`CorrectionsExhausted`, two a session). The
+owner chose a second session; the coordinator rejected and closed the
+session abandoned, the worktree keeping round 1, and wrote
+[dogfood-5b](2026-11-25-dogfood-5b-task.md) for F8 alone, run under
+the standing authorization above. Follow-up for the roadmap: the
+correction limit had no owner override.
