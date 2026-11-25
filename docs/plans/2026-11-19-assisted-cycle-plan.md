@@ -2088,3 +2088,26 @@ Owner rulings for it (2026-11-24, do not reopen):
 
 The prior-art lessons note has no row on store versioning; the design
 note says so.
+
+## Dogfood-5: the store version check (2026-11-24)
+
+[The task](2026-11-24-dogfood-5-task.md), read before the session by a
+fresh Opus reviewer ([review](2026-11-24-dogfood-5-task-review.md),
+144,615 tokens; no blocking, eight important and nine minor findings,
+all written in). Before drafting, the coordinator read bytes 60 to 63
+of the live ledger's and tarlatan's log's headers: both `00000000`,
+both WAL files empty.
+
+Owner rulings (2026-11-24, do not reopen): the coordinator's proposals
+P1 to P5 in the task, as written, and P6 as recommended. P1: the first
+version read runs on a separate read-only connection, and the stamp is
+set only by a read inside the `BEGIN IMMEDIATE` that creates the
+tables. P2: a negative version is refused with the store's own error.
+P3: `StoreVersionNewer { path, found, known }` and a four-outcome
+decision as tagged classes in `src/domain/store-version.ts`. P4: every
+command refuses a newer store; a log at 0 beside a newer ledger is
+stamped first; a newer ledger blocks the abandoned and interrupted
+closes. P5: `ProductionStatusReport.storeVersions`, the raw header
+values, the ledger's omitted when there is none; a newer log fails
+`status`. P6: a newer or negative shared ledger is a status finding,
+its rows unread, and status exits 0.
