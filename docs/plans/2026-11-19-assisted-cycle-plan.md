@@ -2064,3 +2064,27 @@ run read-only shell commands that no allow rule names (`cat`, `ls`,
 refusing others (`rg`, some `grep` forms). Writes stay in the sandbox;
 reads through Bash are not confined to the worktree, and the sandbox
 denies no read. Follow-up for the profile.
+
+## Waxwing-1 and the stage-1 rulings (2026-11-24)
+
+Waxwing ran its first cycles on release v0.1.0; the record is in
+[the roadmap's Progress](2026-11-24-robustness-roadmap.md), with the
+staging plan and the versioning policy the owner adopted. Stage 1
+begins with the ledger version check, for v0.1.1.
+
+Owner rulings for it (2026-11-24, do not reopen):
+
+1. Scope: both SQLite stores, the shared ledger and each project's
+   log, get a format version.
+2. The mechanism is SQLite's `PRAGMA user_version` (a published
+   header field). A store at version 0 was written by v0.1.0 and has
+   today's format, version 1: the first opening command stamps it 1.
+   A store stamped higher than the release knows is refused with a new
+   tagged error (for example `StoreVersionNewer`), never read. `status`
+   stays read-only: it reports each store's version and stamps
+   nothing.
+3. Stamping the shared ledger while another project runs v0.1.0 is
+   approved: v0.1.0 never reads the header.
+
+The prior-art lessons note has no row on store versioning; the design
+note says so.

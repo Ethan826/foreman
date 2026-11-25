@@ -159,7 +159,7 @@ tarlatan's own cycles, and Waxwing and durable-effect as targets.
 | Stage | Tarlatan | Targets |
 |---|---|---|
 | 0 | The waxwing-1 record; this plan | Waxwing-1 finished; durable-effect onboarded, its first tranche; all on v0.1.0 |
-| 1 (v0.1.1) | The ledger version check first, then quiet stdout and the pin naming the binary | Waxwing's next task and durable-effect's second tranche on v0.1.0; upgrade at a session boundary |
+| 1 (v0.1.1) | The ledger version check first (rulings in the assisted-cycle plan, "Waxwing-1 and the stage-1 rulings"), then quiet stdout and the pin naming the binary | Waxwing's next task and durable-effect's second tranche on v0.1.0; upgrade at a session boundary |
 | 2 (v0.2.0) | One design note for retry and back-up, task review with structured rulings, and the owner override, which all change the session state machine; then three or four cycles | Continue on v0.1.x and log friction against the design |
 | 3 | Pacing: the clock and the readings wired into admission | Three streams make waivers the main toil |
 
