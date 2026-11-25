@@ -44,6 +44,17 @@ Start with `docs/plans/2026-11-14-agent-supervisor-design.md`; its
 decision record and the finished Ralph trial are beside it. Do not repeat
 the Ralph trial.
 
+## Releases
+
+Targets other than tarlatan itself run a tagged release from its own
+worktree (`~/Desktop/tarlatan-release/<tag>`), never this checkout.
+Tarlatan follows semantic versioning; the compatibility surface, the
+patch and minor rules, and the release steps are in the roadmap's
+"Versioning" (`docs/plans/2026-11-24-robustness-roadmap.md`). A change
+to the project log, the ledger, the target binding or the state files
+needs a minor release and a migration or an explicit refusal, never a
+silent misread. Record each release in `CHANGELOG.md`.
+
 ## Architecture
 
 Use the decision-core architecture (skill `decision-core-architecture`):

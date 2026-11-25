@@ -76,3 +76,114 @@ restart, live). Each is in the [implementation plan](2026-11-15-implementation-p
 
 Items 1 to 3 make Waxwing work comfortable; 4 to 8 are what "pretty
 reliably in another repository" needs.
+
+## Progress
+
+### Waxwing onboarding (2026-11-24)
+
+- Waxwing's checkout was on `r005b-replan`, whose commits are all on
+  Waxwing's `main`. The unlanded work was `scope-a-impl` (Scope A,
+  2026-11-14). With the owner's approval the coordinator merged `main`
+  and `research/effect-kinds` into it as `integrate/scope-a`, carried
+  the loose notes over and moved non-Waxwing files to
+  `~/Desktop/waxwing-loose/`. The merge does not build: `main` renamed
+  `Add` to `Arith` and three Scope A modules still match `Add`.
+- Tarlatan for Waxwing runs from a release: tag `v0.1.0` (1c564bd,
+  local), checked out at `~/Desktop/tarlatan-release/v0.1.0`, through
+  `~/.config/tarlatan/tl-waxwing` with `waxwing.json` (project
+  `waxwing`, state `~/Desktop/waxwing-state`, supervisor
+  `~/Desktop/waxwing-wt/work` on `tarlatan/work`, base faf4c6bb, the
+  shared ledger `~/.tarlatan`). Dogfooding stays on the checkout with
+  `tl`. The ledger has no schema version, so a ledger change needs a
+  new release and, first, a version check (follow-up).
+- `worktree create` accepted Waxwing's attribute line and its 15
+  symbolic links.
+- Sandbox probe (production's profile and argv, Claude 2.1.331, one
+  run, $0.20): `node scripts/build.mjs` (spago and purs),
+  `node scripts/width.mjs`, `purs-tidy check src tools/style/src`,
+  `node --test test/width.test.mjs` and `go run bootstrap/answer.go`
+  all ran in the sandbox; only the build failed, on the three known
+  errors. The worktree was unchanged. The check commands are the first
+  three. Correction (found by the durable-effect session): the probe's
+  command used `\|` alternation in a basic sed regex, which macOS sed
+  does not support, so it stripped no `CLAUDE*` or `GIT_*` variable and
+  the probe ran with the coordinator session's environment. The
+  cycles, launched through `tl`, ran the same three commands in the
+  sandbox, so the conclusion stands. The reusable
+  `~/.config/tarlatan/probe.sh` uses `sed -E` and is fixed. The full
+  `verify` runs outside through
+  `~/.config/tarlatan/check-waxwing.sh` (logs in
+  `~/Desktop/waxwing-checks/`).
+- First task: [waxwing-1](2026-11-24-waxwing-1-task.md), the build
+  fix. Implement succeeded ($1.58). The owner interrupted the review
+  (its output streams through `tl`'s stdout and would flood the
+  coordinator's context), and the session could only close
+  interrupted. Getting back to review cost a second session,
+  [waxwing-1b](2026-11-24-waxwing-1b-task.md), and an implement launch.
+
+### New items from Waxwing-1 (owner, 2026-11-24)
+
+| Item | Today | Needed | Size |
+|---|---|---|---|
+| Retry and back up | An owner-ended attempt leaves only `session close --interrupted`; a step cannot be re-run. | After `step-ended`, the session returns to its state before that attempt, so the step can run again. Each step's snapshot is kept as a commit on a private ref (`refs/tarlatan/<session>/<opId>`), so a session can resume or back up to any logged step. Design with the commit procedure (A2). Needs a design revision. | M |
+| Quiet stdout | `tl` passes the client's event stream through to stdout. | Print only tarlatan's result; keep the stream in the state directory, as the raw files already are. | S |
+| Ledger version | The ledger has no schema version, and a release and the checkout share it. | A version check, so a release refuses a ledger it does not know. | S |
+| Task review and structured rulings (includes "rulings reach the reviewer") | The task file is drafted and reviewed outside `tl`: no log entry, no admission, no record tying the approved task to the review it passed. The owner's findings file reaches the corrector, not the reviewer; in waxwing-1b the third review flagged the owner's ruling O4 as a major violation of the task's O1, and with corrections spent the session could only end abandoned. The pre-session task review caught three blocking problems in waxwing-1's draft. | (1) `tl task review <draft>`: a fresh read-only reviewer against the base, its findings recorded and the draft hashed; `session open` requires a reviewed draft of that hash, or the owner's waiver. (2) Rulings as structured data: a section `tl` parses and carries into every brief (implement, review, correct), and a logged command for adding a ruling mid-session that reaches the next reviewer; an owner override cites a ruling by id. Drafting the task and approving it stay with the owner and the coordinator (no approval by a model). A design note first, citing the prior-art lessons. Owner ruling needed on the form. | M |
+| Owner overrules a finding | Only a review with no findings allows `close --finished`, so a finding the owner overrules forces `--abandoned` and a commit by exception (dogfood-2, 3a, waxwing-1b). | A recorded owner override, such as `close --finished --overrule <finding> --note`, logged with its reason. Owner design ruling needed: which findings may be overruled, and whether the override needs a fresh review. | S-M |
+| Pin selects the binary | The pin is checked against whatever `claude` is first on PATH. Claude Code updated itself mid-session; the check refused the launch (fail closed), and recovery needed a PATH entry in the wrapper. | The pin names the executable (a path or a version directory), so tarlatan launches that build and checks it. | S |
+| Agent-run tests | Check commands are exact Bash rules, so the agent cannot run one test file, and the full suite outruns a Bash call. Six of waxwing-1's failures surfaced only in the owner's verify. | With the check step (A2): an allowed argument pattern for a test runner, limited to the target's test files, examined for containment first. | M |
+
+Recommended order: retry and back up, then task review and structured
+rulings and the owner override, before item 2 below. The fresh task
+review before each session caught three blocking problems in
+waxwing-1's draft and stays part of the procedure.
+
+## Staging and releases (owner, 2026-11-24)
+
+Three streams share the owner's attention and the usage windows:
+tarlatan's own cycles, and Waxwing and durable-effect as targets.
+
+- Targets run a tagged release, never the checkout, and upgrade only
+  between sessions, with no session open.
+- Frictions found on a target go to its feedback log
+  (`~/Desktop/tarlatan-feedback/`) and into this roadmap in batches.
+  Tarlatan changes through its own dogfood cycles.
+- At most two live cycles at once. A step whose result depends on
+  timing (a performance run, a growth proof) needs the machine to
+  itself: on 2026-11-24 Waxwing's `partialfirst-growth` proof measured
+  2.995 against 3 while another session's checker held load1 near 40.
+  Sequence those by hand until tarlatan can express it.
+- Count frictions per target cycle as new or repeated. When a couple of
+  cycles bring mostly repeats, build instead of gathering.
+
+| Stage | Tarlatan | Targets |
+|---|---|---|
+| 0 | The waxwing-1 record; this plan | Waxwing-1 finished; durable-effect onboarded, its first tranche; all on v0.1.0 |
+| 1 (v0.1.1) | The ledger version check first, then quiet stdout and the pin naming the binary | Waxwing's next task and durable-effect's second tranche on v0.1.0; upgrade at a session boundary |
+| 2 (v0.2.0) | One design note for retry and back-up, task review with structured rulings, and the owner override, which all change the session state machine; then three or four cycles | Continue on v0.1.x and log friction against the design |
+| 3 | Pacing: the clock and the readings wired into admission | Three streams make waivers the main toil |
+
+### Versioning
+
+Tarlatan follows semantic versioning, 0.x for now. Its compatibility
+surface is the CLI (commands, flags, exit codes and printed JSON), the
+configuration schema, and what it writes to disk (the project log, the
+shared ledger, the target binding and the state files). Briefs and the
+published profile are not a compatibility surface, but changes to them
+go in the changelog.
+
+- A patch release reads and writes the same on-disk formats and makes
+  no incompatible change to the CLI or configuration, so a target may
+  take it between sessions.
+- A minor release may change formats or commands, with a migration or
+  an explicit refusal: a release refuses a log or ledger written by a
+  newer one and never misreads it. The ledger version check makes this
+  enforced rather than conventional.
+- 1.0 follows when the formats and the session model have held across
+  several cycles on both targets.
+
+Each release bumps `package.json`, adds a `CHANGELOG.md` entry (formats,
+CLI, configuration, behaviour), is tagged on `main` after Linux CI
+passes, and gets a release worktree at `~/Desktop/tarlatan-release/<tag>`.
+Tags are pushed only with the owner's leave.
+
