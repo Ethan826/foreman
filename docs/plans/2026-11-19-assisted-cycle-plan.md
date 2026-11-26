@@ -2177,3 +2177,24 @@ coordinator's restore oracle, and two adversarial reviews (the first
 stopped early after running git in this repository by accident; the
 coordinator reverted its stray commit and configuration). Next: the
 implementation plan, in slices run as dogfood cycles.
+
+## Dogfood-6 (2026-11-26)
+
+Coordinator amendment to the task's ruling 8 (2026-11-26): the golden
+review brief in `test/format/brief.test.ts` gains the one line ruling 6
+requires ("Each finding's \"id\" must be distinct from every other
+finding's id."). Ruling 6 forces it; no other expected value changes.
+Review 1 asked for this record (F1).
+
+Dogfood-6 session `mwxu4mfx-wb2o2r` on base 328187a. Implement ($6.86)
+passed the owner's check at once (1,737 tests). Review 1: F1 (the
+golden brief line outside ruling 8; the coordinator amended ruling 8,
+above), F2 (a quadratic duplicate-id check), F3 (a README sentence);
+correction 1 ($0.51), check 1,738 of 1,738. Review 2: F4 (the
+current-log test now on format 1), F5 (a fixture already in id order);
+correction 2 ($0.54), check passed. Review 3: F1 (correction 2 dropped
+the format-1 "commits nothing" case), F2 (asked to revert the golden
+line: the reviewer could not see the amendment; overruled, its
+insertion-check suggestion taken). Corrections exhausted; the owner
+chose a second session. Rejected and closed abandoned, worktree kept;
+[dogfood-6c](2026-11-26-dogfood-6c-task.md) carries the two test fixes.
