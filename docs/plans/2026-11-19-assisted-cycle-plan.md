@@ -2208,3 +2208,10 @@ as 98c06b4 on `tarlatan/dogfood` and cherry-picked onto `assisted`.
 About $9.30 of Claude usage across dogfood-6 and 6c, the task review
 (167,022 tokens) and four Codex reviews. No release: v0.2.0 ships
 after slice 3.
+
+## Dogfood-6b (2026-11-26)
+
+Owner ruling (2026-11-26, review finding I6 of the task review):
+overrules stand once recorded; superseding the ruling an `overrule`
+added changes what the briefs show, not whether the finding is
+overruled.
