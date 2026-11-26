@@ -1,6 +1,6 @@
 # Session recovery and owner rulings (design for v0.2.0)
 
-Status: draft for the owner's approval (2026-11-25). Approach 1 chosen
+Status: approved by the owner (2026-11-25). Approach 1 chosen
 by the owner on 2026-11-25.
 
 ## Intent

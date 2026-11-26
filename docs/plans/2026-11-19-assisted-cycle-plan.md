@@ -2169,3 +2169,11 @@ Owner rulings on the v0.2.0 design's open questions (2026-11-25):
 `close --finished` is allowed once every finding of the last review is
 overruled, with no further review; corrections superseded by a back-up
 are refunded by default, and `back-up --keep-count` keeps them counted.
+
+Owner approval (2026-11-25): the v0.2.0 design
+[session recovery and owner rulings](2026-11-25-session-recovery-and-rulings-design.md)
+is approved as committed at 13d24ac, after a builder check, the
+coordinator's restore oracle, and two adversarial reviews (the first
+stopped early after running git in this repository by accident; the
+coordinator reverted its stray commit and configuration). Next: the
+implementation plan, in slices run as dogfood cycles.
