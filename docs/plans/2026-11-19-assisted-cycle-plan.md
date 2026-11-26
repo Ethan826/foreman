@@ -2164,3 +2164,8 @@ reached. This reopens ruling 1 of 2026-11-14 ("no extra rounds" after
 `maxCorrectionRounds`) for the design note on retry and back-up, task
 review with structured rulings and the owner override; the note
 proposes the mechanism, and the owner approves it.
+
+Owner rulings on the v0.2.0 design's open questions (2026-11-25):
+`close --finished` is allowed once every finding of the last review is
+overruled, with no further review; corrections superseded by a back-up
+are refunded by default, and `back-up --keep-count` keeps them counted.
