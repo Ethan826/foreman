@@ -2,8 +2,8 @@
 // "Close rules"): `reject [--note]` and `session close --finished
 // --attest`. Each takes the lock, reads the log, asks the command rules
 // and appends one batch. `reject` needs only a usable attempt awaiting
-// its handoff and appends [`HandoffRejected`]; afterwards only `close
-// --abandoned` remains. `close --finished` runs the settle step, checks
+// its handoff and appends [`HandoffRejected`]; afterwards only `ruling
+// add` and `close --abandoned` remain. `close --finished` runs the settle step, checks
 // its rules with the snapshot presumed equal to the reviewed tree, and
 // only then reads the worktree's HEAD with `git rev-parse HEAD` alone,
 // with no identity or attribute check, through the runner pinned to the

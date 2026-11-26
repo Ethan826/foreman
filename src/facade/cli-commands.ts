@@ -3,7 +3,7 @@
 // as given and decide nothing; `--attest` in particular is passed on, and
 // Program refuses a handoff without it.
 import { Schema } from "effect"
-import { GrantId, OpId, TrancheId } from "../domain/ids.ts"
+import { GrantId, OpId, RulingId, TrancheId } from "../domain/ids.ts"
 import { CloseKind } from "../domain/session.ts"
 
 /** `worktree create`: create and record the supervisor worktree. */
@@ -43,8 +43,21 @@ export class FinishSession extends Schema.TaggedClass<FinishSession>()("FinishSe
   attest: Schema.Boolean,
 }) {}
 
+/** `ruling add --text <t> [--supersedes <id>]`: the text as given, non-blank. */
+export class RecordRuling extends Schema.TaggedClass<RecordRuling>()("RecordRuling", {
+  text: Schema.String,
+  supersedes: Schema.Option(RulingId),
+}) {}
+/** `overrule <findingId> --note <reason>`: the note as given, non-blank. */
+export class OverruleFinding extends Schema.TaggedClass<OverruleFinding>()("OverruleFinding", {
+  findingId: Schema.String,
+  note: Schema.String,
+}) {}
+
 /** Any command the CLI reads. */
 export type CliCommand =
+  | RecordRuling
+  | OverruleFinding
   | CreateWorktree
   | OpenSession
   | RunImplement

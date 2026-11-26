@@ -13,8 +13,14 @@
 //   step-ended <opId> --grant <grantId>
 //   session close --abandoned|--interrupted [--note <text>]
 //   session close --finished --attest [--note <text>]
+//   ruling add --text <text> [--supersedes <rulingId>]
+//   overrule <findingId> --note <reason>
+//
+// The texts of `ruling add` and `overrule` are required and kept as
+// given, line breaks included; one that is empty or only whitespace is a
+// usage error (v0.2.0, dogfood-6b).
 import { Array as Arr, Option, Record, Result, Schema, String } from "effect"
-import { GrantId, OpId, TrancheId } from "../domain/ids.ts"
+import { GrantId, OpId, RulingId, TrancheId } from "../domain/ids.ts"
 import { CloseKinds } from "../domain/session.ts"
 import {
   type CliCommand,
@@ -23,6 +29,8 @@ import {
   EndStep,
   FinishSession,
   OpenSession,
+  OverruleFinding,
+  RecordRuling,
   RejectHandoff,
   RunCorrect,
   RunImplement,
@@ -37,6 +45,8 @@ export {
   EndStep,
   FinishSession,
   OpenSession,
+  OverruleFinding,
+  RecordRuling,
   RejectHandoff,
   RunCorrect,
   RunImplement,
@@ -85,7 +95,8 @@ export const usage =
   "usage: tarlatan --config <path> (worktree create | session open --tranche <id> --task <path> | " +
   "implement [--waive] | review [--waive] --attest | correct --findings <file> [--waive] --attest | " +
   "reject [--note <text>] | status | step-ended <opId> --grant <grantId> | " +
-  "session close --abandoned|--interrupted [--note <text>] | session close --finished --attest [--note <text>])\n" +
+  "session close --abandoned|--interrupted [--note <text>] | session close --finished --attest [--note <text>] | " +
+  "ruling add --text <text> [--supersedes <rulingId>] | overrule <findingId> --note <reason>)\n" +
   "A launch waits until its client's output closes, and tarlatan never signals a client. If a launch does " +
   "not return after its client exited, a process the client started still holds its output: interrupt " +
   "tarlatan, then run status, step-ended <opId> --grant <grantId>, then session close --interrupted."
@@ -115,6 +126,8 @@ const commands: ReadonlyArray<CommandParser> = [
   [["reject"], (rest) => Result.map(flagsOf(rest, { valued: ["--note"], switches: [] }), rejectOf)],
   [["status"], (rest) => withNoArguments(rest, new ShowStatus())],
   [["step-ended"], (rest) => stepEndedOf(rest)],
+  [["ruling", "add"], (rest) => Result.flatMap(flagsOf(rest, { valued: ["--text", "--supersedes"], switches: [] }), rulingOf)],
+  [["overrule"], (rest) => overruleOf(rest)],
 ]
 
 /** The command the words name, parsed with its own flags. */
@@ -224,6 +237,42 @@ const stepEndedOf = (rest: ReadonlyArray<string>): Result.Result<CliCommand, Usa
 const endStepOf = (opId: string, grantId: string) =>
   Result.flatMap(decoded(OpId, opId), (op) =>
     Result.map(decoded(GrantId, grantId), (grant) => new EndStep({ opId: op, grantId: grant })),
+  )
+
+/** `ruling add`: `--text` is required and non-blank; `--supersedes`, if given, is a ruling id. */
+const rulingOf = (flags: Flags) =>
+  Result.flatMap(requiredText(flags, "--text"), (text) =>
+    Result.map(supersedesOf(flags), (supersedes) => new RecordRuling({ text, supersedes })),
+  )
+
+/** The ruling `--supersedes` names, decoded, or none when it is not given. */
+const supersedesOf = (flags: Flags): Result.Result<Option.Option<RulingId>, UsageError> =>
+  Option.match(Record.get(flags.values, "--supersedes"), {
+    onNone: () => Result.succeed(Option.none()),
+    onSome: (value) => Result.map(decoded(RulingId, value), Option.some),
+  })
+
+/**
+ * `overrule <findingId> --note <reason>`: the first word is always the
+ * finding id, any non-empty word, even one that starts with `--` (as
+ * `Finding.id` allows); then the required, non-blank note.
+ */
+const overruleOf = (rest: ReadonlyArray<string>): Result.Result<CliCommand, UsageError> =>
+  Option.match(Option.filter(Arr.head(rest), String.isNonEmpty), {
+    onNone: () => failed("overrule needs a finding id"),
+    onSome: (findingId) =>
+      Result.flatMap(flagsOf(Arr.drop(rest, 1), { valued: ["--note"], switches: [] }), (flags) =>
+        Result.map(requiredText(flags, "--note"), (note) => new OverruleFinding({ findingId, note })),
+      ),
+  })
+
+/**
+ * The value of a required text flag, kept as given; one that is empty or
+ * only whitespace is a usage error.
+ */
+const requiredText = (flags: Flags, flag: string) =>
+  Result.flatMap(required(flags, flag), (value) =>
+    String.isEmpty(String.trim(value)) ? failed<string>(`${flag} must not be empty`) : Result.succeed(value),
   )
 
 /** The value of a required flag. */

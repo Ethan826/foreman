@@ -153,4 +153,9 @@ describe("usage", () => {
     expect(usage).toMatch(/status, step-ended <opId> --grant <grantId>, then session close --interrupted/)
     expect(usage).toMatch(/tarlatan never signals/)
   })
+
+  it("names ruling add and overrule with their flags", () => {
+    expect(usage).toContain("ruling add --text <text> [--supersedes <rulingId>]")
+    expect(usage).toContain("overrule <findingId> --note <reason>")
+  })
 })

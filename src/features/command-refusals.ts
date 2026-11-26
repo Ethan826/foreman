@@ -5,7 +5,7 @@
 import { Array as Arr, Option, Schema } from "effect"
 import { Client } from "../domain/clients.ts"
 import { Hold } from "../domain/holds.ts"
-import { GrantId, OpId, Revision } from "../domain/ids.ts"
+import { GrantId, OpId, Revision, RulingId } from "../domain/ids.ts"
 import type { StepEnded } from "../domain/session.ts"
 import { type SessionAttempt, SessionState } from "../domain/session-state.ts"
 import { openSessionOf } from "./session-phases.ts"
@@ -101,6 +101,34 @@ export class HeadMoved extends Schema.TaggedClass<HeadMoved>()(
   { base: Revision, head: Revision },
 ) {}
 
+/** `ruling add --supersedes` names ruling `rulingId`, which this session has not recorded. */
+export class RulingUnknown extends Schema.TaggedClass<RulingUnknown>()(
+  "RulingUnknown",
+  { rulingId: RulingId },
+) {}
+
+/** `ruling add --supersedes` names ruling `rulingId`, which a later ruling already superseded. */
+export class RulingSuperseded extends Schema.TaggedClass<RulingSuperseded>()(
+  "RulingSuperseded",
+  { rulingId: RulingId },
+) {}
+
+/**
+ * The review awaiting its handoff recorded no finding `findingId`: no
+ * such id, or no `FindingsRecorded` at all (a review run before
+ * dogfood-6).
+ */
+export class FindingNotRecorded extends Schema.TaggedClass<FindingNotRecorded>()(
+  "FindingNotRecorded",
+  { findingId: Schema.String },
+) {}
+
+/** Finding `findingId` of the review awaiting its handoff is already overruled. */
+export class FindingOverruledAlready extends Schema.TaggedClass<FindingOverruledAlready>()(
+  "FindingOverruledAlready",
+  { findingId: Schema.String },
+) {}
+
 /** Schema for any reason a command is refused. */
 export const Refusal = Schema.Union([
   LockNotHeld,
@@ -117,6 +145,10 @@ export const Refusal = Schema.Union([
   WrongGrant,
   AlreadyAttested,
   HeadMoved,
+  RulingUnknown,
+  RulingSuperseded,
+  FindingNotRecorded,
+  FindingOverruledAlready,
 ])
 /** Any reason a command is refused; see {@link Refusal}. */
 export type Refusal = typeof Refusal.Type

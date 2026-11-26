@@ -1,11 +1,12 @@
 // The assisted session's events in the project log (plan "Events"): a
 // session's opening and close, each attempt's recorded brief and report, the
-// snapshots and handoffs between attempts, the review check, and the
-// owner's attestation that a step ended, and a usable review's findings.
+// snapshots and handoffs between attempts, the review check, the
+// owner's attestation that a step ended, a usable review's findings, and
+// the owner's rulings and overrules (v0.2.0).
 // Re-exported by events.ts, which holds the union.
 import { Schema } from "effect"
 import { Findings } from "./findings.ts"
-import { GrantId, OpId, Revision, TrancheId } from "./ids.ts"
+import { GrantId, OpId, Revision, RulingId, TrancheId } from "./ids.ts"
 import { Role } from "./roles.ts"
 import {
   Attestation,
@@ -17,6 +18,7 @@ import {
 
 const pathText = Schema.String.check(Schema.isNonEmpty())
 const epochMillis = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
+const nonEmptyText = Schema.String.check(Schema.isNonEmpty())
 
 /**
  * A session opened for tranche `tranche` on the task file `taskPath`
@@ -67,6 +69,39 @@ export class FindingsRecorded extends Schema.TaggedClass<FindingsRecorded>()(
   "FindingsRecorded",
   { sessionId: SessionId, reviewOpId: OpId, findings: Findings },
 ) {}
+
+/**
+ * The owner's ruling `rulingId` in session `sessionId` (v0.2.0 design,
+ * "Commands and events"): its `text`, non-empty and kept as given, line
+ * breaks included, and the earlier ruling it `supersedes`, if any. Every
+ * later brief of the session lists it. Appended by `ruling add`, and by
+ * `overrule` beside its `FindingOverruled`. v0.1.1 does not decode it,
+ * so it raises a log at format 1 to 2.
+ */
+export class RulingAdded extends Schema.TaggedClass<RulingAdded>()("RulingAdded", {
+  sessionId: SessionId,
+  rulingId: RulingId,
+  text: nonEmptyText,
+  supersedes: Schema.OptionFromOptionalKey(RulingId),
+}) {}
+
+/**
+ * The owner overruled finding `findingId` of review `reviewOpId` in
+ * session `sessionId`, with `note`, non-empty, saying why; `rulingId` is
+ * the ruling appended in the same batch, whose text quotes the finding
+ * (v0.2.0 design, "Commands and events", "Closing after overrules"). A
+ * finding id names a finding within its review only, so the pair of
+ * `reviewOpId` and `findingId` names it. An overrule stands once
+ * recorded, whatever later supersedes its ruling. v0.1.1 does not decode
+ * it, so it raises a log at format 1 to 2.
+ */
+export class FindingOverruled extends Schema.TaggedClass<FindingOverruled>()("FindingOverruled", {
+  sessionId: SessionId,
+  reviewOpId: OpId,
+  findingId: nonEmptyText,
+  rulingId: RulingId,
+  note: nonEmptyText,
+}) {}
 
 /**
  * The exact brief attempt `opId` was launched with (review item B14):

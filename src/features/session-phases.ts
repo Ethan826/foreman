@@ -1,6 +1,6 @@
 // Questions the command rules ask of a session state (plan "Commands and
 // their prerequisites"): whether a session is open, and which handoff,
-// if any, the last attempt awaits.
+// if any, the last attempt awaits, overrules included (v0.2.0).
 import { Match, Option, Schema } from "effect"
 import { ChangesRequested, Success } from "../domain/outcomes.ts"
 import { Roles } from "../domain/roles.ts"
@@ -13,6 +13,7 @@ import {
   SessionEnded,
   type SessionState,
 } from "../domain/session-state.ts"
+import { everyFindingOverruled, someFindingOverruled } from "./rulings.ts"
 
 /** The open session's facts in `state`, or none when no session is open. */
 export const openSessionOf = (
@@ -49,8 +50,26 @@ export const awaitsCorrection = (state: SessionState): boolean =>
   state.role === Roles.Reviewer &&
   Schema.is(ChangesRequested)(state.outcome)
 
-/** A review with no changes requested awaits the close (`close --finished`). */
+/**
+ * A usable review awaits the close (`close --finished`): one with no
+ * changes requested, or one that asked for changes, recorded at least one
+ * finding and has every recorded finding overruled (v0.2.0 design,
+ * "Closing after overrules"; owner ruling 1, 2026-11-25). An unusable
+ * review never does.
+ */
 export const awaitsClose = (state: SessionState): boolean =>
   Schema.is(AwaitingHandoff)(state) &&
   state.role === Roles.Reviewer &&
-  Schema.is(Success)(state.outcome)
+  (Schema.is(Success)(state.outcome) ||
+    (Schema.is(ChangesRequested)(state.outcome) && everyFindingOverruled(state.session, state.opId)))
+
+/**
+ * A review that asked for changes awaits its handoff and at least one of
+ * its recorded findings is overruled, so `review` may run again on the
+ * reviewed tree (design, "Closing after overrules").
+ */
+export const awaitsReReview = (state: SessionState): boolean =>
+  Schema.is(AwaitingHandoff)(state) &&
+  state.role === Roles.Reviewer &&
+  Schema.is(ChangesRequested)(state.outcome) &&
+  someFindingOverruled(state.session, state.opId)

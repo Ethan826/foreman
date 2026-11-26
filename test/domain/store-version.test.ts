@@ -6,7 +6,7 @@
 // encoding fixture.
 import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Option, Record, Result, Schema } from "effect"
-import { FindingsRecorded, ProjectEvent } from "../../src/domain/events.ts"
+import { FindingOverruled, FindingsRecorded, ProjectEvent, RulingAdded } from "../../src/domain/events.ts"
 import {
   decideStoreVersion,
   firstStoreVersion,
@@ -115,9 +115,9 @@ describe("raisesLogFormat", () => {
     expect(Arr.length(fixtureEvents)).toBe(Arr.length(ProjectEvent.members))
   })
 
-  it("is true for FindingsRecorded alone, over every fixture row", () => {
-    const isFindings = Schema.is(FindingsRecorded)
-    expect(Arr.map(fixtureEvents, raisesLogFormat)).toEqual(Arr.map(fixtureEvents, (event) => isFindings(event)))
-    expect(Arr.length(Arr.filter(fixtureEvents, raisesLogFormat))).toBe(1)
+  it("is true for exactly FindingsRecorded, RulingAdded and FindingOverruled, over every fixture row", () => {
+    const isNewFormat = Schema.is(Schema.Union([FindingsRecorded, RulingAdded, FindingOverruled]))
+    expect(Arr.map(fixtureEvents, raisesLogFormat)).toEqual(Arr.map(fixtureEvents, (event) => isNewFormat(event)))
+    expect(Arr.length(Arr.filter(fixtureEvents, raisesLogFormat))).toBe(3)
   })
 })

@@ -32,6 +32,14 @@ describe("bun src/facade/main.ts", () => {
     expect(run.stderr).toContain("usage: tarlatan --config <path>")
   })
 
+  it("names ruling add and overrule in the usage it prints", () => {
+    const run = runEntry("--config", "/nonexistent/tarlatan.json", "ruling", "add")
+    expect({ error: run.error, status: run.status, stdout: run.stdout }).toEqual({ error: undefined, status: 2, stdout: "" })
+    expect(run.stderr).toContain("--text is required")
+    expect(run.stderr).toContain("ruling add --text <text> [--supersedes <rulingId>]")
+    expect(run.stderr).toContain("overrule <findingId> --note <reason>")
+  })
+
   it("passes the owner's words, after the runtime and script path, to main", () => {
     const run = runEntry("--config", "/nonexistent/tarlatan.json", "bogus")
     expect({ error: run.error, status: run.status, stdout: run.stdout }).toEqual({ error: undefined, status: 2, stdout: "" })

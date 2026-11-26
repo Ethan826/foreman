@@ -119,8 +119,8 @@ const needsNewFormat = () => true
 /**
  * Whether appending `event` raises a project log at format 1 to
  * {@link knownLogVersion}: true exactly for the events v0.1.1 does not
- * decode, which today is `FindingsRecorded` alone (v0.2.0 design,
- * "Constraints"). The match names every event tag, so a new event fails
+ * decode, which today are `FindingsRecorded`, `RulingAdded` and
+ * `FindingOverruled` (v0.2.0 design, "Constraints"). The match names every event tag, so a new event fails
  * to compile until it is classified here.
  */
 export const raisesLogFormat = (event: ProjectEvent): boolean =>
@@ -159,6 +159,8 @@ export const raisesLogFormat = (event: ProjectEvent): boolean =>
     SessionClosed: keepsFormat,
     BriefRecorded: keepsFormat,
     FindingsRecorded: needsNewFormat,
+    RulingAdded: needsNewFormat,
+    FindingOverruled: needsNewFormat,
   })
 
 /**

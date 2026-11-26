@@ -7,10 +7,13 @@
 import { Array as Arr, Match, Option } from "effect"
 import { Clients } from "../domain/clients.ts"
 import type {
+  FindingOverruled,
+  FindingsRecorded,
   HandoffApproved,
   Intended,
   ProjectEvent,
   ReportRecorded,
+  RulingAdded,
   SessionClosed,
   SessionOpened,
 } from "../domain/events.ts"
@@ -60,7 +63,10 @@ interface OpenRunning {
  * every incomplete attempt has it; `Rejected` after the owner's
  * rejection; and `AwaitingHandoff` after the last attempt finished, with
  * its role, outcome and usability. An incomplete attempt outranks a
- * rejection, and a rejection outranks the last finished attempt.
+ * rejection, and a rejection outranks the last finished attempt. The
+ * open session also carries its rulings in order with their supersede
+ * marks, each usable review's recorded findings and the overruled
+ * findings (v0.2.0); none of these changes the state's tag.
  */
 export const foldSession = (log: ReadonlyArray<ProjectEvent>): SessionFold => ({
   state: stateOf(Arr.reduce(log, initial, step)),
@@ -90,6 +96,9 @@ const openedBy = (opened: SessionOpened): Running => ({
       reports: [],
       corrections: 0,
       reviewedTree: Option.none(),
+      rulings: [],
+      findings: [],
+      overrules: [],
     },
     rejected: Option.none(),
   }),
@@ -131,6 +140,9 @@ const openStep = (open: OpenRunning, event: ProjectEvent): OpenRunning =>
         rejected: Option.some(rejection.fromOpId),
       })),
     ),
+    Match.tag("FindingsRecorded", (recorded) => inSession(open, recorded.sessionId, withFindings(recorded))),
+    Match.tag("RulingAdded", (added) => inSession(open, added.sessionId, withRuling(added))),
+    Match.tag("FindingOverruled", (overruled) => inSession(open, overruled.sessionId, withOverrule(overruled))),
     Match.orElse(() => open),
   )
 
@@ -182,6 +194,45 @@ const withHandoff = (handoff: HandoffApproved) => (open: OpenRunning): OpenRunni
   handoff.toRole === Roles.Reviewer
     ? { ...open, session: { ...open.session, reviewedTree: Option.some(handoff.tree) } }
     : open
+
+/** Keeps a usable review's recorded findings. */
+const withFindings = (recorded: FindingsRecorded) => (open: OpenRunning): OpenRunning => ({
+  ...open,
+  session: { ...open.session, findings: Arr.append(open.session.findings, recorded) },
+})
+
+/**
+ * Adds a ruling at the end of the session's rulings, and marks the ruling
+ * it supersedes, if any, as superseded by it. A ruling already marked
+ * keeps its first mark; the command rules refuse a second supersession.
+ */
+const withRuling = (added: RulingAdded) => (open: OpenRunning): OpenRunning => ({
+  ...open,
+  session: {
+    ...open.session,
+    rulings: Arr.append(
+      Arr.map(open.session.rulings, (ruling) =>
+        Option.contains(added.supersedes, ruling.id) && Option.isNone(ruling.supersededBy)
+          ? { ...ruling, supersededBy: Option.some(added.rulingId) }
+          : ruling,
+      ),
+      { id: added.rulingId, text: added.text, supersedes: added.supersedes, supersededBy: Option.none() },
+    ),
+  },
+})
+
+/** Keeps an overruled finding, named by its review and its finding id. */
+const withOverrule = (overruled: FindingOverruled) => (open: OpenRunning): OpenRunning => ({
+  ...open,
+  session: {
+    ...open.session,
+    overrules: Arr.append(open.session.overrules, {
+      reviewOpId: overruled.reviewOpId,
+      findingId: overruled.findingId,
+      rulingId: overruled.rulingId,
+    }),
+  },
+})
 
 /** The state the running fold ends in. */
 const stateOf = (running: Running): SessionState =>

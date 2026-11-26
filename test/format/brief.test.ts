@@ -40,10 +40,32 @@ const twoCommandsLine =
   "You may run these check commands with the Bash tool, each exactly as written: `bun run verify`, `bun run test`. " +
   "They run in the Bash sandbox, with no network and the git directories read-only; give the Bash tool a timeout of 600000 ms."
 
-describe("implementBrief", () => {
-  it("gives the task and asks for a handoff", () => {
-    expect(implementBrief({ task: "Add a greeting.\n", checkCommands: [] })).toBe(
-      `You are the implementer for one task in this repository.
+/** The lines dogfood-6b adds to every brief with no ruling: the "Owner rulings" section saying `None.`. */
+const noRulingsLines = ["## Owner rulings", "", "None.", ""]
+
+/** The sentence dogfood-6b adds to the review brief's rulings section (its ruling 7). */
+const rulingsSettleLine =
+  "A ruling settles its point. A finding that contradicts a ruling must cite the ruling's id " +
+  "and say why the ruling does not cover the case, or be left out."
+
+/**
+ * `text` with `inserted` added as lines of their own just before the
+ * first line equal to `before`, and nothing else changed; none if `text`
+ * has no such line.
+ */
+const insertedBefore = (text: string, before: string, inserted: ReadonlyArray<string>) => {
+  const lines = Str.split(text, "\n")
+  return Option.map(Arr.findFirstIndex(lines, (line) => line === before), (index) =>
+    Arr.join([...Arr.take(lines, index), ...inserted, ...Arr.drop(lines, index)], "\n"),
+  )
+}
+
+/**
+ * The golden implementer brief as it was before dogfood-6b, without the
+ * rulings section. The expected brief derives from it, so every byte of
+ * it stays pinned.
+ */
+const originalImplement = `You are the implementer for one task in this repository.
 ${fresh}
 
 ## Task
@@ -55,23 +77,29 @@ Add a greeting.
 Carry out the task in the working directory. Do not commit. End your
 reply with a short handoff: what you changed, what you left undone, and
 what the reviewer should check.
-`,
+`
+
+describe("implementBrief", () => {
+  it("gives the task and asks for a handoff", () => {
+    expect(Str.includes("Owner rulings")(originalImplement)).toBe(false)
+    expect(Option.some(implementBrief({ task: "Add a greeting.\n", rulings: [], checkCommands: [] }))).toEqual(
+      insertedBefore(originalImplement, "## What to do", noRulingsLines),
     )
   })
 
   it("marks an empty task file as empty", () => {
-    expect(implementBrief({ task: "", checkCommands: [] })).toContain("## Task\n\n(empty)\n")
+    expect(implementBrief({ task: "", rulings: [], checkCommands: [] })).toContain("## Task\n\n(empty)\n")
   })
 
   it("ends What to do with one line naming the check commands, in order, when there are any", () => {
-    const without = implementBrief({ task: "Add a greeting.\n", checkCommands: [] })
-    const withCommands = implementBrief({ task: "Add a greeting.\n", checkCommands: twoCommands })
+    const without = implementBrief({ task: "Add a greeting.\n", rulings: [], checkCommands: [] })
+    const withCommands = implementBrief({ task: "Add a greeting.\n", rulings: [], checkCommands: twoCommands })
     expect(withCommands).toBe(`${without}\n${twoCommandsLine}\n`)
     expect(withCommands).toContain(`what the reviewer should check.\n\n${twoCommandsLine}\n`)
   })
 
   it("names a single check command alone", () => {
-    expect(implementBrief({ task: "Add a greeting.\n", checkCommands: ["bun run verify"] })).toContain(
+    expect(implementBrief({ task: "Add a greeting.\n", rulings: [], checkCommands: ["bun run verify"] })).toContain(
       "\n\nYou may run these check commands with the Bash tool, each exactly as written: `bun run verify`. They run",
     )
   })
@@ -79,6 +107,7 @@ what the reviewer should check.
 
 const reviewInput = {
   task: "Add a greeting.\n",
+  rulings: [],
   tree,
   baseRevision: base,
   changedPaths: [single("M", "src/a b.ts"), moved("R100", "old", "new\nline")],
@@ -162,10 +191,20 @@ const expectedReview = Option.map(
   Arr.join("\n"),
 )
 
+/**
+ * `expectedReview` with dogfood-6b's rulings section, `None.` and the
+ * closing sentence, inserted just before "## Changed paths", and nothing
+ * else changed.
+ */
+const expectedReviewWithRulings = Option.flatMap(expectedReview, (text) =>
+  insertedBefore(text, "## Changed paths", [...noRulingsLines, rulingsSettleLine, ""]),
+)
+
 describe("reviewBrief", () => {
   it("states tree, base, coverage, changes, handoff; asks for findings", () => {
     expect(Arr.contains(originalLines, distinctIdsLine)).toBe(false)
-    expect(Option.some(reviewBrief(reviewInput))).toEqual(expectedReview)
+    expect(Str.includes("Owner rulings")(originalReview)).toBe(false)
+    expect(Option.some(reviewBrief(reviewInput))).toEqual(expectedReviewWithRulings)
   })
 
   it("says so when no path changed", () => {
@@ -211,12 +250,17 @@ describe("correctBrief", () => {
   it("gives the tree, task, the owner's findings and the prior handoff", () => {
     const brief = correctBrief({
       task: "Add a greeting.\n",
+      rulings: [],
       findingsFile: "# Findings\n\n## F1 (major)\n\nWrong name.\n",
       priorHandoff: "No changes requested? No: one finding.\n",
       tree,
       checkCommands: [],
     })
-    expect(brief).toBe(`You are the corrector for one task in this repository.
+    /**
+     * The golden corrector brief as it was before dogfood-6b, without the
+     * rulings section; the expected brief derives from it.
+     */
+    const originalCorrect = `You are the corrector for one task in this repository.
 ${fresh}
 
 You correct tree ${tree}. The working directory holds that tree, and
@@ -243,11 +287,13 @@ No changes requested? No: one finding.
 Address each finding in the working directory. Do not commit. End your
 reply with a short handoff: what you changed for each finding and what
 you left open.
-`)
+`
+    expect(Str.includes("Owner rulings")(originalCorrect)).toBe(false)
+    expect(Option.some(brief)).toEqual(insertedBefore(originalCorrect, "## Findings to address", noRulingsLines))
   })
 
   it("ends What to do with one line naming the check commands, in order, when there are any", () => {
-    const input = { task: "Add a greeting.\n", findingsFile: "Wrong name.\n", priorHandoff: "Done.\n", tree }
+    const input = { task: "Add a greeting.\n", rulings: [], findingsFile: "Wrong name.\n", priorHandoff: "Done.\n", tree }
     const without = correctBrief({ ...input, checkCommands: [] })
     const withCommands = correctBrief({ ...input, checkCommands: twoCommands })
     expect(withCommands).toBe(`${without}\n${twoCommandsLine}\n`)
@@ -274,14 +320,14 @@ describe("briefs hold only their inputs", () => {
   const strayInput = /MARK|[0-9a-f]{40}/
 
   it("leaves no other input or object id once its own are removed", () => {
-    const implement = implementBrief({ task: marked.task, checkCommands: [] })
+    const implement = implementBrief({ task: marked.task, rulings: [], checkCommands: [] })
     const review = reviewBrief({
       ...reviewInput,
       task: marked.task,
       lastHandoff: marked.lastHandoff,
       changedPaths: [single("A", marked.changed)],
     })
-    const correct = correctBrief({ ...marked, tree, checkCommands: [] })
+    const correct = correctBrief({ ...marked, rulings: [], tree, checkCommands: [] })
     expect(without(implement, [marked.task])).not.toMatch(strayInput)
     const reviewGiven = [
       marked.task, marked.lastHandoff, marked.changed, tree, base,

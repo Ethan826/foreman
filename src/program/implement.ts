@@ -2,7 +2,7 @@
 // The launch protocol is attempt.ts; this file is only the implementer's
 // plan: no handoff facts, no snapshot and no consent events, the brief is
 // Format's implementer brief of the session's recorded task file (checked
-// against its hash), the profile is
+// against its hash) and the session's owner rulings, the profile is
 // Claude's editing profile, published for the session's worktree before
 // admission (batch review B03) with the configured check commands, which
 // the brief names too (dogfood-3b), and classification reads Claude's
@@ -50,7 +50,7 @@ const implementPlan = (
       const task = yield* recordedTask(context, session)
       const { checkCommands } = context.settings
       yield* context.capabilities.publishClaudeProfile(session.opened.worktree, checkCommands)
-      return { brief: implementBrief({ task, checkCommands }), round: 0, consent: [] }
+      return { brief: implementBrief({ task, rulings: session.rulings, checkCommands }), round: 0, consent: [] }
     }),
   argv: (brief) => claudeEditingArgv({ brief, settingsFile: claudeSettingsPath(context.settings.stateDir) }),
   handoff: (_files, lines) => claudeHandoff(lines),

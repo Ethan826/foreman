@@ -4,21 +4,27 @@
 // are checked with the snapshot presumed to pass before anything is
 // staged; then the attribute check runs again and the snapshot is taken
 // and checked. Batch I is [`SnapshotTaken`, `HandoffApproved`,
-// `Intended`]. The brief holds the recorded task, the tree, the base
-// revision, the changed paths from `git diff-tree` through the pinned
-// runner, the previous step's recorded handoff and the coverage
-// statement. Codex's final message is the handoff; its findings block
+// `Intended`]. A review may also run again after a review that asked for
+// changes once one of its findings is overruled (v0.2.0 design, "Closing
+// after overrules"): its first check presumes the reviewed tree, as
+// `correct` does, the snapshot must equal that tree, and batch I is
+// [`SnapshotTaken`, `ReviewChecked`, `HandoffApproved`, `Intended`]. The
+// brief holds the recorded task, the session's owner rulings, the tree,
+// the base revision, the changed paths from `git diff-tree` through the
+// pinned runner, the last implementer's or corrector's recorded handoff
+// and the coverage statement. Codex's final message is the handoff; its findings block
 // decides the outcome, and when it decodes it is published as the
 // session's findings draft for the owner to edit. A usable review also
 // records its findings in the log: batch F ends with `FindingsRecorded`.
 import { type Cause, Effect, Option, Result, String } from "effect"
 import { MalformedFindings } from "../domain/findings.ts"
-import { FindingsRecorded, HandoffApproved, type ProjectEvent, SnapshotTaken } from "../domain/events.ts"
-import type { Revision } from "../domain/ids.ts"
+import { FindingsRecorded, HandoffApproved, type ProjectEvent, ReviewChecked, SnapshotTaken } from "../domain/events.ts"
+import type { OpId, Revision } from "../domain/ids.ts"
 import { codexReviewArgv } from "../domain/profiles.ts"
 import { defaultRoleClients, Roles } from "../domain/roles.ts"
 import { Attestations, Review } from "../domain/session.ts"
-import type { OpenSession } from "../domain/session-state.ts"
+import type { OpenSession, SessionState } from "../domain/session-state.ts"
+import { awaitsReReview } from "../features/session-phases.ts"
 import { reviewBrief, snapshotCoverage } from "../format/brief.ts"
 import { decodeFindingsBlock, renderFindingsDraft } from "../format/findings.ts"
 import { decodeNameStatus } from "../format/name-status.ts"
@@ -28,7 +34,15 @@ import type { AttemptFiles } from "./attempt-run.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
 import { codexDecoded, utf8Bytes } from "./client-output.ts"
 import { withBriefsIntact } from "./brief-files.ts"
-import { awaitedHandoff, handoffFacts, presumedPassing, handoffTextOf, takeSnapshot } from "./handoff-facts.ts"
+import {
+  awaitedHandoff,
+  handoffFacts,
+  handoffTextOf,
+  lastEdit,
+  presumedOnReviewedTree,
+  presumedPassing,
+  takeSnapshot,
+} from "./handoff-facts.ts"
 import { recordedTask } from "./implement.ts"
 import type { HandoffGitFailure, SessionContext } from "./session-context.ts"
 import { ChangedPathsUnread, type FileNotUtf8, type RecordedFileChanged, type TaskFileChanged } from "./session-errors.ts"
@@ -73,7 +87,7 @@ const reviewPlan = (context: SessionContext, options: ReviewOptions): LaunchPlan
   waive: options.waive,
   observe: (fold) =>
     withBriefsIntact(context, fold.state)(
-      handoffFacts(context, fold.state, options.attest, presumedPassing(fold.state)),
+      handoffFacts(context, fold.state, options.attest, presumedSnapshot(fold.state)),
     ),
   snapshot: (session) => Effect.map(takeSnapshot(context, session), Option.some),
   prepare: (input) => prepared(context, input),
@@ -103,24 +117,54 @@ const findingsRecorded = (input: FinishedInput): ReadonlyArray<ProjectEvent> =>
       )
     : []
 
-/** The brief, round and batch I's consent events, from recorded inputs and the snapshot. */
+/**
+ * The snapshot the first rules check presumes: on the reviewed tree when
+ * the review runs again after an overrule, as `correct` presumes, since
+ * the rules then compare the snapshot with that tree; otherwise one that
+ * passes the raw checks.
+ */
+const presumedSnapshot = (state: SessionState) =>
+  awaitsReReview(state) ? presumedOnReviewedTree(state) : presumedPassing(state)
+
+/**
+ * Batch I's `ReviewChecked` when the review runs again after an
+ * overrule: the reviewed tree against the fresh snapshot `tree`, as
+ * `correct` and `close --finished` append it. None after an edit.
+ */
+const reReviewCheck = (session: OpenSession, state: SessionState, reviewOpId: OpId, tree: Revision) =>
+  awaitsReReview(state)
+    ? Effect.map(Effect.fromOption(session.reviewedTree), (reviewedTree): ReadonlyArray<ProjectEvent> => [
+        new ReviewChecked({ sessionId: session.opened.sessionId, reviewOpId, reviewedTree, currentTree: tree }),
+      ])
+    : Effect.succeed<ReadonlyArray<ProjectEvent>>([])
+
+/**
+ * The brief, round and batch I's consent events, from recorded inputs and
+ * the snapshot. The brief's last handoff is the last implementer's or
+ * corrector's, which after an edit is the attempt awaiting review, and
+ * after an overrule is the edit the earlier review saw, never a
+ * reviewer's message. The round stays the session's corrections.
+ */
 const prepared = (context: SessionContext, input: PrepareInput) =>
   Effect.gen(function* () {
     const { session } = input
     const tree = yield* Effect.map(Effect.fromOption(input.snapshot), (snapshot) => snapshot.tree)
     const awaited = yield* Effect.fromOption(awaitedHandoff(input.state))
+    const edit = yield* Effect.fromOption(lastEdit(session))
     const base = session.opened.baseRevision
     const brief = reviewBrief({
       task: yield* recordedTask(context, session),
+      rulings: session.rulings,
       tree,
       baseRevision: base,
       changedPaths: yield* changedPaths(context, session, tree),
-      lastHandoff: yield* handoffTextOf(context, session, awaited.opId),
+      lastHandoff: yield* handoffTextOf(context, session, edit.intent.opId),
       coverage: snapshotCoverage,
     })
     const { sessionId } = session.opened
     const consent = [
       new SnapshotTaken({ sessionId, forOpId: awaited.opId, tree }),
+      ...(yield* reReviewCheck(session, input.state, awaited.opId, tree)),
       new HandoffApproved({
         sessionId,
         fromOpId: awaited.opId,

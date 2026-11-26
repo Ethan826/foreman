@@ -8,14 +8,17 @@
 import { Array as Arr, Match, Option, Schema } from "effect"
 import type { Client } from "../domain/clients.ts"
 import { type Hold, Quota } from "../domain/holds.ts"
-import type { Revision } from "../domain/ids.ts"
+import type { OpId, Revision } from "../domain/ids.ts"
 import {
+  type AddRuling,
   CloseKinds,
+  type Overrule,
   type SessionClose,
   type SessionCommand,
   type StepEnded,
 } from "../domain/session.ts"
 import {
+  AwaitingHandoff,
   Interrupted,
   OpenNoAttempt,
   type OpenSession,
@@ -23,6 +26,8 @@ import {
 } from "../domain/session-state.ts"
 import {
   CorrectionsExhausted,
+  FindingNotRecorded,
+  FindingOverruledAlready,
   HeldBy,
   LockNotHeld,
   movedHead,
@@ -30,6 +35,8 @@ import {
   PinMismatch,
   Refusal,
   ReportsNotIntact,
+  RulingSuperseded,
+  RulingUnknown,
   SnapshotRefused,
   TreeChanged,
   WorktreeCheckFailed,
@@ -37,9 +44,11 @@ import {
   stepEndedRefusals,
 } from "./command-refusals.ts"
 import { blocks } from "./holds.ts"
+import { isOverruled, recordedFinding, rulingOf } from "./rulings.ts"
 import {
   awaitsClose,
   awaitsCorrection,
+  awaitsReReview,
   awaitsReview,
   awaitsUsable,
   noneOpen,
@@ -51,7 +60,7 @@ import {
 export {
   LockNotHeld, WrongState, WorktreeCheckFailed, PinMismatch, HeldBy, ReportsNotIntact, NotAttested,
   SnapshotRefused, TreeChanged, CorrectionsExhausted, NotIncomplete, WrongGrant, AlreadyAttested,
-  HeadMoved, Refusal,
+  HeadMoved, RulingUnknown, RulingSuperseded, FindingNotRecorded, FindingOverruledAlready, Refusal,
 } from "./command-refusals.ts"
 
 /** Corrections allowed per session (plan decision P9). */
@@ -105,14 +114,20 @@ type Rule = (state: SessionState, checks: CommandChecks) => ReadonlyArray<Refusa
  * Decides `command` in `state` with `checks`, by the plan's matrix:
  * `status` always; `session open` with no session open; `implement` in
  * an open session with no attempt; `review` after a usable implement or
- * correct; `correct` after a review asking for changes, at most
- * {@link maxCorrections} times; `reject` while a usable attempt awaits
- * its handoff; `step-ended` for an incomplete attempt and its grant,
- * once; `close` by the close rules. Every command but `status` needs the
+ * correct, or again on the reviewed tree after a review asking for
+ * changes once one of its findings is overruled; `correct` after a
+ * review asking for changes, at most {@link maxCorrections} times;
+ * `reject` while a usable attempt awaits its handoff; `step-ended` for
+ * an incomplete attempt and its grant, once; `close` by the close rules;
+ * `ruling add` in an open session with no incomplete attempt,
+ * superseding only a recorded ruling not yet superseded; `overrule` of a
+ * recorded finding, not yet overruled, of a review asking for changes
+ * that awaits its handoff (v0.2.0). Every command but `status` needs the
  * lock; the launches also need the worktree check, a HEAD on the
  * session's base, the pin and no non-quota hold, and each handoff its
  * reports, attestation and snapshot; `close --finished` also needs the
- * HEAD on the base.
+ * HEAD on the base. `ruling add` and `overrule` launch nothing and need
+ * no HEAD.
  */
 export const allowed = (
   command: SessionCommand,
@@ -130,15 +145,70 @@ const rulesFor = (command: SessionCommand): ReadonlyArray<Rule> =>
     Match.tag("Status", () => []),
     Match.tag("SessionOpen", () => [lock, stateIs(noneOpen), worktree, noNonQuotaHold]),
     Match.tag("Implement", () => [lock, stateIs(Schema.is(OpenNoAttempt)), ...launch]),
-    Match.tag("Review", () => [lock, stateIs(awaitsReview), ...launch, ...handoff, snapshotPasses]),
+    Match.tag("Review", () => [lock, stateIs(reviewable), ...launch, ...handoff, reviewSnapshot]),
     Match.tag("Correct", () => [
       lock, stateIs(awaitsCorrection), correctionsLeft, ...launch, ...handoff, onReviewedTree,
     ]),
     Match.tag("Reject", () => [lock, stateIs(awaitsUsable)]),
     Match.tag("StepEnded", (ended) => [lock, attestable(ended)]),
     Match.tag("SessionClose", (close) => [lock, ...closeRules(close)]),
+    Match.tag("AddRuling", (add) => [lock, stateIs(openWithoutIncomplete), supersedable(add)]),
+    Match.tag("Overrule", (overrule) => [lock, stateIs(awaitsCorrection), overrulable(overrule)]),
     Match.exhaustive,
   )
+
+/**
+ * `review` runs after a usable implement or correct, or again after a
+ * review that asked for changes once one of its findings is overruled
+ * (v0.2.0 design, "Closing after overrules").
+ */
+const reviewable = (state: SessionState): boolean => awaitsReview(state) || awaitsReReview(state)
+
+/**
+ * The snapshot `review` needs: one that passes the raw checks after an
+ * edit, and one on the reviewed tree when it reviews again after an
+ * overrule, since nothing was edited in between.
+ */
+const reviewSnapshot: Rule = (state, checks) =>
+  awaitsReReview(state) ? onReviewedTree(state, checks) : snapshotPasses(state, checks)
+
+/**
+ * `ruling add --supersedes`: the ruling it names was recorded in this
+ * session and is not already superseded. Nothing to judge without
+ * `--supersedes` or with no session open, where the state rule refuses.
+ */
+const supersedable =
+  (add: AddRuling): Rule =>
+  (state) =>
+    Option.match(Option.product(openSessionOf(state), add.supersedes), {
+      onNone: () => [],
+      onSome: ([session, rulingId]) =>
+        Option.match(rulingOf(session, rulingId), {
+          onNone: () => [new RulingUnknown({ rulingId })],
+          onSome: (ruling) => (Option.isSome(ruling.supersededBy) ? [new RulingSuperseded({ rulingId })] : []),
+        }),
+    })
+
+/**
+ * `overrule`: the review awaiting its handoff recorded the finding in its
+ * `FindingsRecorded`, and the finding is not already overruled. Judged
+ * only while a review that asked for changes awaits its handoff; in any
+ * other state the state rule alone refuses.
+ */
+const overrulable =
+  (overrule: Overrule): Rule =>
+  (state) =>
+    Schema.is(AwaitingHandoff)(state) && awaitsCorrection(state)
+      ? findingRefusals(state.session, state.opId, overrule.findingId)
+      : []
+
+/** Why finding `findingId` of review `reviewOpId` may not be overruled; none when it may. */
+const findingRefusals = (session: OpenSession, reviewOpId: OpId, findingId: string): ReadonlyArray<Refusal> =>
+  Option.isNone(recordedFinding(session, reviewOpId, findingId))
+    ? [new FindingNotRecorded({ findingId })]
+    : isOverruled(session, reviewOpId, findingId)
+      ? [new FindingOverruledAlready({ findingId })]
+      : []
 
 /** `step-ended`'s own rule; see `stepEndedRefusals`. */
 const attestable =

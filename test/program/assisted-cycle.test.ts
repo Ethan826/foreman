@@ -110,6 +110,7 @@ const reviewArgv = (input: {
   codexReviewArgv({
     brief: reviewBrief({
       task: input.task,
+      rulings: [],
       tree: input.tree,
       baseRevision: input.base,
       changedPaths: [{ status: "M", source: Option.none(), path: "greeting.txt" }],
@@ -138,10 +139,10 @@ const recordedBriefs = (harness: Harness) =>
     expect(firstReviewReport?.role).toBe(Roles.Reviewer)
     const findingsFile = text(findingsFileOf(harness))
     expect(launches).toEqual([
-      claudeEditingArgv({ brief: implementBrief({ task, checkCommands: [] }), settingsFile }),
+      claudeEditingArgv({ brief: implementBrief({ task, rulings: [], checkCommands: [] }), settingsFile }),
       reviewArgv({ task, base, tree: firstTree ?? base, handoff: "Wrote the greeting.", lastMessageFile: lastMessageOf(harness, 1) }),
       claudeEditingArgv({
-        brief: correctBrief({ task, findingsFile, priorHandoff: "Wrote the greeting.", tree: firstTree ?? base, checkCommands: [] }),
+        brief: correctBrief({ task, rulings: [], findingsFile, priorHandoff: "Wrote the greeting.", tree: firstTree ?? base, checkCommands: [] }),
         settingsFile,
       }),
       reviewArgv({ task, base, tree: secondTree ?? base, handoff: "Named Ada.", lastMessageFile: lastMessageOf(harness, 3) }),

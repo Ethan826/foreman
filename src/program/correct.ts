@@ -10,7 +10,8 @@
 // the corrector: it is published in the state directory and its SHA-256
 // is recorded in `HandoffApproved`. The prior handoff in the brief is the
 // last implementer's or corrector's, not the reviewer's, whose final
-// message holds the reviewer's own findings. Claude's editing profile is
+// message holds the reviewer's own findings. The brief also lists the
+// session's owner rulings (v0.2.0). Claude's editing profile is
 // published for the session's worktree before admission (batch review B03)
 // with the configured check commands, which the brief names too (dogfood-3b).
 import { type Cause, Effect, Option } from "effect"
@@ -89,6 +90,7 @@ const prepared = (context: SessionContext, options: CorrectOptions, input: Prepa
     yield* context.capabilities.publishClaudeProfile(session.opened.worktree, checkCommands)
     const brief = correctBrief({
       task: yield* recordedTask(context, session),
+      rulings: session.rulings,
       findingsFile: findings.text,
       priorHandoff: yield* handoffTextOf(context, session, edit.intent.opId),
       tree,

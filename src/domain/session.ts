@@ -5,7 +5,7 @@
 // one. The session's states are in session-state.ts, its log events in
 // session-events.ts.
 import { Record, Schema } from "effect"
-import { GrantId, OpId } from "./ids.ts"
+import { GrantId, OpId, RulingId } from "./ids.ts"
 
 // A short slug, as in ids.ts: letters, digits, dot, underscore and
 // hyphen, 1 to 64 characters, the first a letter or digit.
@@ -98,7 +98,7 @@ export class Implement extends Schema.TaggedClass<Implement>()(
 export class Review extends Schema.TaggedClass<Review>()("Review", {}) {}
 /** `correct`: launches the corrector with the owner's findings file. */
 export class Correct extends Schema.TaggedClass<Correct>()("Correct", {}) {}
-/** `reject`: refuses the awaiting handoff; only close remains. */
+/** `reject`: refuses the awaiting handoff; only `ruling add` and `close --abandoned` remain. */
 export class Reject extends Schema.TaggedClass<Reject>()("Reject", {}) {}
 /**
  * `step-ended`: the owner attests that attempt `opId`, reserved by grant
@@ -114,6 +114,25 @@ export class SessionClose extends Schema.TaggedClass<SessionClose>()(
   { how: CloseKind },
 ) {}
 
+/**
+ * `ruling add --text <t> [--supersedes <id>]`: records an owner ruling
+ * that every later brief lists (v0.2.0 design, "Commands and events").
+ * `supersedes` names the earlier ruling it replaces, if any; the rules
+ * read only that, so the text is not part of the command.
+ */
+export class AddRuling extends Schema.TaggedClass<AddRuling>()("AddRuling", {
+  supersedes: Schema.Option(RulingId),
+}) {}
+/**
+ * `overrule <findingId> --note <reason>`: overrules finding `findingId`
+ * of the review awaiting its handoff, which also records a ruling
+ * (v0.2.0 design, "Closing after overrules"). The note is not part of
+ * the command; the rules read only the finding.
+ */
+export class Overrule extends Schema.TaggedClass<Overrule>()("Overrule", {
+  findingId: Schema.String.check(Schema.isNonEmpty()),
+}) {}
+
 /** Schema for any owner command of the assisted session. */
 export const SessionCommand = Schema.Union([
   Status,
@@ -124,6 +143,8 @@ export const SessionCommand = Schema.Union([
   Reject,
   StepEnded,
   SessionClose,
+  AddRuling,
+  Overrule,
 ])
 /** Any owner command; see {@link SessionCommand}. */
 export type SessionCommand = typeof SessionCommand.Type

@@ -9,12 +9,21 @@
 // `process.env` and exits with its status is in main.ts (owner ruling on
 // A1, 2026-11-19): run `bun src/facade/main.ts --config <path> <command>`.
 import { Cause, Console, Effect, Formatter, Match, Option, Result, Schema } from "effect"
-import { HandoffRejected, SessionClosed, SessionOpened, StepEndedByOwner, WorktreeCreated } from "../domain/events.ts"
+import {
+  FindingOverruled,
+  HandoffRejected,
+  RulingAdded,
+  SessionClosed,
+  SessionOpened,
+  StepEndedByOwner,
+  WorktreeCreated,
+} from "../domain/events.ts"
 import { AttemptRecorded } from "../program/attempt.ts"
 import { correct } from "../program/correct.ts"
 import { closeFinished, reject } from "../program/handoff.ts"
 import { implement } from "../program/implement.ts"
 import { review } from "../program/review.ts"
+import { addRuling, overrule } from "../program/rulings.ts"
 import { production, type Production } from "../program/production.ts"
 import {
   type ExitProduction,
@@ -108,6 +117,8 @@ const run = (command: Exclude<CliCommand, ShowStatus | EndStep | CloseSession>) 
     Match.tag("RunCorrect", (options) => printed(AttemptRecorded, correct(env.context, options))),
     Match.tag("RejectHandoff", (options) => printed(HandoffRejected, reject(env.context, options))),
     Match.tag("FinishSession", (finish) => printed(SessionClosed, closeFinished(env.context, finish))),
+    Match.tag("RecordRuling", (ruling) => printed(RulingAdded, addRuling(env.context, ruling))),
+    Match.tag("OverruleFinding", (finding) => printed(FindingOverruled, overrule(env.context, finding))),
     Match.exhaustive,
   )
 

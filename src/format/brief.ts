@@ -4,7 +4,9 @@
 // coverage statement, and asks for a fenced JSON findings block; correct
 // takes the task, the owner's findings file, the prior handoff and the
 // tree id. Implement and correct also take the configured check commands,
-// named in one line when there are any (dogfood-3b). Program reads the
+// named in one line when there are any (dogfood-3b). Every brief lists
+// the session's owner rulings right after the task (v0.2.0, "Briefs"),
+// so the brief's recorded hash covers them. Program reads the
 // recorded files and passes their contents;
 // these functions do no I/O and write nothing into a brief that was not
 // passed in, apart from their own fixed wording. Every brief says the
@@ -13,6 +15,7 @@
 import { Array, Formatter, Option, String } from "effect"
 import type { Revision } from "../domain/ids.ts"
 import { Roles, type Role } from "../domain/roles.ts"
+import type { Ruling } from "../domain/rulings.ts"
 import type { ChangedPath } from "./name-status.ts"
 
 /**
@@ -110,15 +113,59 @@ const whatToDo = (instruction: string, checkCommands: ReadonlyArray<string>) =>
     ? `${instruction}${paragraphBreak}${checkCommandsLine(checkCommands)}`
     : instruction
 
+/** What the rulings section says when the session has no ruling. */
+const noRulings = "None."
+
 /**
- * The implementer's brief: the task file's contents and the instruction,
- * which ends with the check commands line when `checkCommands`, the
- * configured check commands, is non-empty.
+ * What the review brief's rulings section adds after the rulings, on
+ * one unwrapped line, exactly as owner ruling 7 (dogfood-6b) words it
+ * (v0.2.0 design, "Briefs").
  */
-export const implementBrief = (input: { readonly task: string; readonly checkCommands: ReadonlyArray<string> }): string =>
+const rulingsSettle =
+  "A ruling settles its point. A finding that contradicts a ruling must cite the ruling's id " +
+  "and say why the ruling does not cover the case, or be left out."
+
+/**
+ * The marks after a ruling's id: `(supersedes Rn)` when it supersedes
+ * one, then `(superseded by Rm)` when a later one superseded it.
+ */
+const rulingMarks = (ruling: Ruling) =>
+  Array.join(
+    Array.appendAll(
+      Option.toArray(Option.map(ruling.supersedes, (id) => ` (supersedes ${id})`)),
+      Option.toArray(Option.map(ruling.supersededBy, (id) => ` (superseded by ${id})`)),
+    ),
+    "",
+  )
+
+/** One ruling as the briefs list it: `R1: <text>`, with its marks after the id. */
+const rulingEntry = (ruling: Ruling) => `${ruling.id}${rulingMarks(ruling)}: ${ruling.text}`
+
+/**
+ * The body of "Owner rulings" (v0.2.0 design, "Briefs"): every ruling of
+ * the session in order, its text as recorded, entries separated by a
+ * blank line; `None.` when there is none.
+ */
+const rulingsText = (rulings: ReadonlyArray<Ruling>) =>
+  Array.isReadonlyArrayNonEmpty(rulings) ? Array.join(Array.map(rulings, rulingEntry), paragraphBreak) : noRulings
+
+/** The "Owner rulings" section, placed right after the task in every brief. */
+const rulingsSection = (rulings: ReadonlyArray<Ruling>) => section("Owner rulings", rulingsText(rulings))
+
+/**
+ * The implementer's brief: the task file's contents, the session's owner
+ * `rulings`, and the instruction, which ends with the check commands
+ * line when `checkCommands`, the configured check commands, is non-empty.
+ */
+export const implementBrief = (input: {
+  readonly task: string
+  readonly rulings: ReadonlyArray<Ruling>
+  readonly checkCommands: ReadonlyArray<string>
+}): string =>
   brief([
     opening(Roles.Implementer),
     section("Task", fileText(input.task)),
+    rulingsSection(input.rulings),
     section("What to do", whatToDo(implementInstruction, input.checkCommands)),
   ])
 
@@ -127,10 +174,13 @@ export const implementBrief = (input: { readonly task: string; readonly checkCom
  * the `coverage` statement ({@link snapshotCoverage}), the task, the
  * `changedPaths` decoded from `git diff-tree -r --name-status -z`, each
  * path quoted as a JSON string so a newline cannot pass for a new entry,
- * and the last handoff. It ends with the request for findings.
+ * and the last handoff. After the task come the session's owner
+ * `rulings` and the rule that a ruling settles its point. It ends with
+ * the request for findings.
  */
 export const reviewBrief = (input: {
   readonly task: string
+  readonly rulings: ReadonlyArray<Ruling>
   readonly tree: Revision
   readonly baseRevision: Revision
   readonly changedPaths: ReadonlyArray<ChangedPath>
@@ -142,19 +192,22 @@ export const reviewBrief = (input: {
     reviewScope(input.tree, input.baseRevision),
     section("Coverage", input.coverage),
     section("Task", fileText(input.task)),
+    `${rulingsSection(input.rulings)}${paragraphBreak}${rulingsSettle}`,
     section("Changed paths", changesText(input.changedPaths)),
     section("Handoff from the previous step", fileText(input.lastHandoff)),
     section("Your reply", findingsRequest),
   ])
 
 /**
- * The corrector's brief for snapshot `tree`: the task, the owner's
- * findings file (the only findings a corrector sees) and the prior
- * handoff, then the instruction, which ends with the check commands line
- * when `checkCommands` is non-empty, as in {@link implementBrief}.
+ * The corrector's brief for snapshot `tree`: the task, the session's
+ * owner `rulings`, the owner's findings file (the only findings a
+ * corrector sees) and the prior handoff, then the instruction, which
+ * ends with the check commands line when `checkCommands` is non-empty,
+ * as in {@link implementBrief}.
  */
 export const correctBrief = (input: {
   readonly task: string
+  readonly rulings: ReadonlyArray<Ruling>
   readonly findingsFile: string
   readonly priorHandoff: string
   readonly tree: Revision
@@ -164,6 +217,7 @@ export const correctBrief = (input: {
     opening(Roles.Corrector),
     correctScope(input.tree),
     section("Task", fileText(input.task)),
+    rulingsSection(input.rulings),
     section("Findings to address", fileText(input.findingsFile)),
     section("Handoff from the previous step", fileText(input.priorHandoff)),
     section("What to do", whatToDo(correctInstruction, input.checkCommands)),

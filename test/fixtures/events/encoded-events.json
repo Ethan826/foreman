@@ -233,5 +233,20 @@
         "summary": "The changelog has no entry."
       }
     ]
+  },
+  {
+    "_tag": "RulingAdded",
+    "sessionId": "s-1",
+    "rulingId": "R2",
+    "text": "Keep the greeting in English.\nNo other language is in scope.",
+    "supersedes": "R1"
+  },
+  {
+    "_tag": "FindingOverruled",
+    "sessionId": "s-1",
+    "reviewOpId": "op-2",
+    "findingId": "F2",
+    "rulingId": "R3",
+    "note": "The changelog is written at release."
   }
 ]

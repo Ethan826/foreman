@@ -22,11 +22,13 @@ import {
 } from "./owner-events.ts"
 import {
   BriefRecorded,
+  FindingOverruled,
   FindingsRecorded,
   HandoffApproved,
   HandoffRejected,
   ReportRecorded,
   ReviewChecked,
+  RulingAdded,
   SessionClosed,
   SessionOpened,
   SnapshotTaken,
@@ -98,6 +100,8 @@ export {
   StepEndedByOwner,
   SessionClosed,
   FindingsRecorded,
+  RulingAdded,
+  FindingOverruled,
 } from "./session-events.ts"
 
 /** Any project log event. */
@@ -136,6 +140,8 @@ export const ProjectEvent = Schema.Union([
   SessionClosed,
   BriefRecorded,
   FindingsRecorded,
+  RulingAdded,
+  FindingOverruled,
 ])
 /** Any project log event; see {@link ProjectEvent}. */
 export type ProjectEvent = typeof ProjectEvent.Type

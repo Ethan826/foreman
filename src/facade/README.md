@@ -18,6 +18,10 @@ Per the [design](../../docs/plans/2026-11-14-agent-supervisor-design.md) ("Archi
 - `step-ended <opId> --grant <grantId>`
 - `session close --abandoned|--interrupted [--note <text>]`
 - `session close --finished --attest [--note <text>]`
+- `ruling add --text <text> [--supersedes <rulingId>]`
+- `overrule <findingId> --note <reason>`
+
+`ruling add` and `overrule` (v0.2.0) keep their text and note as given, line breaks included; one that is empty or only whitespace is a usage error, and so is a `--supersedes` that is not a ruling id (`R` and a positive integer). Each prints the event it appended as JSON, `RulingAdded` or `FindingOverruled`, as `reject` prints `HandoffRejected`. Program decides everything else.
 
 The usage text printed with a usage error ends with the owner's rule for a launch that does not return after its client exited. A process the client started still holds its output, and tarlatan never signals, so the owner interrupts tarlatan and then runs `status`, `step-ended` and `session close --interrupted`.
 
@@ -30,7 +34,7 @@ For `status`, `main` calls Program's `productionStatus`. It opens the state read
 The object is one of two:
 
 - `StateMissing`, when the configured state directory has no project log: `stateDir`, `logPath` and `findings`.
-- `ProductionStatusReport`, with seven fields: `findings`, `target`, `inForce`, `gitHome`, `report`, `checkCommands` and `storeVersions`. `storeVersions` holds each store's format version as its header reads, never stamped by status: `{"log": 1, "ledger": 0}`, or `{"log": 1}` when no target is in force or no ledger file is found. 0 means a store v0.1.0 wrote that no command has opened since. The log reads 1 until the first append holding an event v0.1.1 does not decode (today a usable review's `FindingsRecorded`) raises it to 2; both are read, and neither is a finding.
+- `ProductionStatusReport`, with seven fields: `findings`, `target`, `inForce`, `gitHome`, `report`, `checkCommands` and `storeVersions`. `storeVersions` holds each store's format version as its header reads, never stamped by status: `{"log": 1, "ledger": 0}`, or `{"log": 1}` when no target is in force or no ledger file is found. 0 means a store v0.1.0 wrote that no command has opened since. The log reads 1 until the first append holding an event v0.1.1 does not decode (today a usable review's `FindingsRecorded`, or the `RulingAdded` and `FindingOverruled` of `ruling add` and `overrule`) raises it to 2; both are read, and neither is a finding.
 
 `findings` lists each problem status found, in this order, and is empty when there is none:
 

@@ -58,6 +58,19 @@ export const GrantId = slug.pipe(Schema.brand("GrantId"))
 export type GrantId = typeof GrantId.Type
 
 /**
+ * Identifies one owner ruling of an assisted session (v0.2.0 design,
+ * "Commands and events"): `R` followed by a positive decimal integer
+ * with no leading zero, so `R1`, `R2`, ... in session order. The number
+ * counts every `RulingAdded` of the session, the rulings an `overrule`
+ * adds included.
+ */
+export const RulingId = Schema.String.check(Schema.isPattern(/^R[1-9][0-9]*$/)).pipe(
+  Schema.brand("RulingId"),
+)
+/** A ruling id; see {@link RulingId}. */
+export type RulingId = typeof RulingId.Type
+
+/**
  * Identifies one project (one target repository and its event log) in the
  * shared ledger. A slug, like the other identifiers.
  */
