@@ -2215,3 +2215,39 @@ Owner ruling (2026-11-26, review finding I6 of the task review):
 overrules stand once recorded; superseding the ruling an `overrule`
 added changes what the briefs show, not whether the finding is
 overruled.
+
+Finding (2026-11-26, the owner's check on dogfood-6b's implement,
+machine load average about 200 from other sessions): two tests failed
+by timing and passed on three reruns of the change and two of `main`
+(bd63d83): `test/facade/status-read-only.test.ts` "leaves an existing
+state's files as they were" (vitest's default 5,000 ms timeout) and
+`test/program/inherited-pipe.test.ts` "keeps the command waiting after
+the leader exits, until the descendant ends" (the attempt came back
+`Unclassified`). Both predate dogfood-6b. A pass on rerun is still a
+failure: follow-up to make both independent of machine load (an
+explicit timeout sized to the work, and the pipe test's ordering made
+deterministic), as its own small cycle after slice 1.
+The same class recurred on dogfood-6b's correction 2 (load average
+76 to 136): `test/program/handoff-refusals.test.ts` "a write after a
+clean review makes close --finished refuse" and "a third correction is
+refused", both at vitest's default 5,000 ms timeout, both passing on two
+reruns of the change and of `main`. The follow-up covers every test that
+runs real git or processes under the default timeout.
+
+Owner authorization (2026-11-26, standing, extends the 2026-11-25 one):
+when a session runs out of corrections with only minor findings left,
+the coordinator rejects, closes it abandoned keeping the worktree, and
+runs a second session for those findings without asking, until
+`rounds grant` exists. A finding that needs a product decision still
+goes to the owner.
+
+Dogfood-6b session `mwxwpc58-c4eb3a` on base 8caa00a. Implement ($8.83);
+the owner's check failed two load-sensitive tests (finding above), all
+else green. Review 1: F1, a finding id starting with `--` could not be
+overruled; correction 1 ($0.43), check 1,825 of 1,825. Review 2: F2
+(the overrule's two events not shown to be one batch), F3 (no re-review
+after a correction), F4 (two README passages); correction 2 ($0.57),
+check green apart from two more load-sensitive tests. Review 3: F5 to
+F7 (two test gaps, stale comments). Corrections exhausted; under the
+standing authorization above, rejected, closed abandoned with the
+worktree kept, and [dogfood-6d](2026-11-26-dogfood-6d-task.md) opened.
