@@ -2251,3 +2251,12 @@ check green apart from two more load-sensitive tests. Review 3: F5 to
 F7 (two test gaps, stale comments). Corrections exhausted; under the
 standing authorization above, rejected, closed abandoned with the
 worktree kept, and [dogfood-6d](2026-11-26-dogfood-6d-task.md) opened.
+
+Dogfood-6d session on the kept worktree. Implement ($0.80) covered all
+three foreign events in the fold test, status across two reviews and
+five stale comments; the owner's check passed, 1,826 of 1,826 tests;
+review 1 had no findings. The owner approved the close and landing; the
+session closed finished and the change was committed as 3eb6ead on
+`tarlatan/dogfood` and cherry-picked onto `assisted`. About $10.60 of
+Claude usage across dogfood-6b and 6d, the task review (165,991 tokens)
+and four Codex reviews. Slice 1 of the v0.2.0 plan is complete.
