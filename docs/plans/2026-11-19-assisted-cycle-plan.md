@@ -2198,3 +2198,13 @@ line: the reviewer could not see the amendment; overruled, its
 insertion-check suggestion taken). Corrections exhausted; the owner
 chose a second session. Rejected and closed abandoned, worktree kept;
 [dogfood-6c](2026-11-26-dogfood-6c-task.md) carries the two test fixes.
+
+Dogfood-6c session `mwxvx8y1-r3tkow` on the kept worktree. Implement
+($0.54) restored the format-1 "commits nothing" test and made the
+golden brief check an exact insertion; the owner's check passed, 1,739
+of 1,739 tests; review 1 had no findings. The owner approved the close
+and landing; the session closed finished and the change was committed
+as 98c06b4 on `tarlatan/dogfood` and cherry-picked onto `assisted`.
+About $9.30 of Claude usage across dogfood-6 and 6c, the task review
+(167,022 tokens) and four Codex reviews. No release: v0.2.0 ships
+after slice 3.
