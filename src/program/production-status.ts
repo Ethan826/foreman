@@ -19,7 +19,9 @@
 // It reports each store's format version as the header read in the
 // snapshot its rows came from (`storeVersions`; dogfood-5, owner rulings
 // P5 and P6; review finding F6) and stamps nothing, so 0 means a store
-// v0.1.0 wrote. A log stamped newer than this release knows, or below 0,
+// v0.1.0 wrote, and a log at 1 shows 1 until an append raises it to 2.
+// Each store is decided against its own known version (the log 2, the
+// ledger 1). A log stamped newer than that, or below 0,
 // at the open or in the read's snapshot, fails status, since without the
 // log there is nothing to report. The shared ledger can be stamped newer
 // by another project's newer release, so a refused ledger, at the open or
@@ -46,7 +48,7 @@ import { startGit } from "../runtime/git.ts"
 import { readProcesses } from "../runtime/processes.ts"
 import {
   invalidVersionReason,
-  knownStoreVersion,
+  knownLedgerVersion,
   StoreVersionNewer,
   type StoreVersionRefusal,
 } from "../domain/store-version.ts"
@@ -100,7 +102,8 @@ export type GitHomeReading = typeof GitHomeReading.Type
  * Each store's format version as status read it from the header, never
  * stamped (owner ruling P5): `log` always, and `ledger` when a target is
  * in force and its ledger file is there. 0 means a store v0.1.0 wrote that
- * no writer of this release has opened since. A ledger status refused for
+ * no writer has opened since; a log at 1 has not yet been raised to 2,
+ * and is reported as 1 with no finding. A ledger status refused for
  * its version shows the version found. Printed as `{"log": 1, "ledger": 0}`,
  * or `{"log": 1}` with no ledger.
  */
@@ -253,7 +256,7 @@ export const ledgerTaken =
 const versionFinding = (path: string, refusal: StoreVersionRefusal): StatusFinding =>
   Match.value(refusal).pipe(
     Match.withReturnType<StatusFinding>(),
-    Match.tag("StoreNewer", (newer) => new StoreVersionNewer({ path, found: newer.found, known: knownStoreVersion })),
+    Match.tag("StoreNewer", (newer) => new StoreVersionNewer({ path, found: newer.found, known: knownLedgerVersion })),
     Match.tag(
       "StoreVersionInvalid",
       (invalid) => new LedgerVersionInvalid({ path, found: invalid.found, reason: invalidVersionReason(invalid.found) }),

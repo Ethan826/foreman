@@ -166,6 +166,37 @@ const rawVersionsShown = () =>
     }),
   )
 
+/** The store versions and the findings status printed, kept as printed. */
+const ShownVersionsAndFindings = Schema.fromJsonString(
+  Schema.Struct({ storeVersions: Schema.Unknown, findings: Schema.Array(Schema.Unknown) }),
+)
+
+/** The `storeVersions` and `findings` `status` printed for the layout's own configuration. */
+const shownVersionsAndFindings = (layout: Layout) =>
+  Effect.flatMap(succeeded(layout, ["status"]), (run) =>
+    Schema.decodeUnknownEffect(ShownVersionsAndFindings)(Arr.join(run.out, "\n")),
+  )
+
+// v0.2.0 (dogfood-6): a log at 1, not yet raised, and a log at 2 are both
+// read; status shows each raw value and gives no finding for either.
+const logAtOneAndTwoShown = () =>
+  withLayout((layout) =>
+    Effect.gen(function* () {
+      yield* openedSession(layout)
+      expect(yield* versionOf(logOf(layout))).toBe(1)
+      expect(yield* shownVersionsAndFindings(layout)).toStrictEqual({
+        storeVersions: { log: 1, ledger: 1 },
+        findings: [],
+      })
+      yield* setVersion(logOf(layout), 2)
+      expect(yield* shownVersionsAndFindings(layout)).toStrictEqual({
+        storeVersions: { log: 2, ledger: 1 },
+        findings: [],
+      })
+      expect(yield* versionOf(logOf(layout))).toBe(2)
+    }),
+  )
+
 const noTargetOmitsLedger = () =>
   withLayout((layout) =>
     Effect.gen(function* () {
@@ -222,6 +253,7 @@ describe("status in production: a ledger stamped between its open and its read (
 
 describe("status in production: store format versions (dogfood-5)", () => {
   it.effect("shows the log's and the ledger's versions as read, and stamps neither", rawVersionsShown, endToEndMillis)
+  it.effect("shows a log at 1 and a log at 2 as read, with no finding (dogfood-6)", logAtOneAndTwoShown, endToEndMillis)
   it.effect("shows no ledger version when no target is in force", noTargetOmitsLedger, endToEndMillis)
   it.effect("shows no ledger version when no ledger file is found", noLedgerFileOmitsLedger, endToEndMillis)
 })

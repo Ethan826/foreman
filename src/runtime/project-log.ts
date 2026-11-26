@@ -6,10 +6,14 @@
 // `user_version` header field (dogfood-5): `open` reads it before it opens
 // the file for writing, and again inside a `BEGIN IMMEDIATE` transaction
 // that creates the table and stamps a log at 0 with 1, so every open takes
-// the write lock briefly; a log stamped newer, or below 0, is refused and
-// left untouched (`openWriter` in `sqlite.ts`).
+// the write lock briefly; a log stamped newer than `knownLogVersion` (2),
+// or below 0, is refused and left untouched (`openWriter` in `sqlite.ts`).
+// A log at 1 is read and appended to as it is. The one raise (v0.2.0
+// design, "Constraints"): an append holding an event that v0.1.1 does not
+// decode (`raisesLogFormat`) sets a log at 1 to 2 inside its own
+// transaction, so the raise commits and rolls back with the inserts.
 import type { Database } from "bun:sqlite"
-import { Array as Arr, Effect, Schema, Semaphore } from "effect"
+import { Array as Arr, Effect, Match, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
 import {
   type LoggedEvent,
@@ -19,8 +23,20 @@ import {
   type ProjectLog,
   ProjectLogError,
 } from "../domain/events.ts"
-import type { StoreVersionNewer } from "../domain/store-version.ts"
-import { isSqliteBusy, openWriter, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
+import {
+  knownLogVersion,
+  raisesLogFormat,
+  type StoreVersionNewer,
+} from "../domain/store-version.ts"
+import {
+  isSqliteBusy,
+  openWriter,
+  readStoreVersion,
+  sqliteReason,
+  type StoreVersionRead,
+  transaction,
+  type TxConnection,
+} from "./sqlite.ts"
 
 const toError = (error: unknown) =>
   new ProjectLogError({
@@ -75,6 +91,52 @@ const requireAt = (actual: LogPosition, expected: LogPosition) =>
     ? Effect.void
     : Effect.fail(new PositionMoved({ expected, actual }))
 
+/**
+ * The append's refusal when the version its transaction read, `found`, is
+ * newer than {@link knownLogVersion} or below 0: another connection
+ * stamped the log after this one opened it. Nothing is written.
+ */
+const unwritableVersion = (found: number) =>
+  new ProjectLogError({
+    reason: `project log format version ${String(found)} is not one this release appends to (it knows ${String(knownLogVersion)})`,
+  })
+
+/** Sets the log's `user_version` to {@link knownLogVersion}, inside the caller's transaction. */
+const raised = (db: Database) =>
+  withDb(() => {
+    db.exec(`PRAGMA user_version = ${String(knownLogVersion)}`)
+  })
+
+/**
+ * The log's version step inside the append's transaction, on the version
+ * `read` there: a log at 1, or at 0 (only
+ * after a raw reset, treated as 1), is raised to {@link knownLogVersion}
+ * when `events` holds one that needs it ({@link raisesLogFormat}) and is
+ * left as it is otherwise; a current log is left as it is; a newer or
+ * negative one fails the append with {@link unwritableVersion}.
+ */
+const versionStep = (
+  db: Database,
+  events: ReadonlyArray<ProjectEvent>,
+  read: StoreVersionRead,
+): Effect.Effect<void, ProjectLogError> =>
+  Match.value(read.decision).pipe(
+    Match.withReturnType<Effect.Effect<void, ProjectLogError>>(),
+    Match.tag("StoreUnstamped", "StoreOlderReadable", () =>
+      Arr.some(events, raisesLogFormat) ? raised(db) : Effect.void,
+    ),
+    Match.tag("StoreCurrent", () => Effect.void),
+    Match.tag("StoreNewer", "StoreVersionInvalid", () => Effect.fail(unwritableVersion(read.version))),
+    Match.exhaustive,
+  )
+
+/**
+ * The body of one append's `BEGIN IMMEDIATE` transaction: encodes the
+ * events, refuses with `PositionMoved` unless the log is at `expected`,
+ * reads the version and takes {@link versionStep} on it (the raise), then
+ * inserts. The raise and the inserts commit or roll back together, since
+ * `user_version` is on page 1.
+ */
 const appendTx = (
   db: Database,
   expected: LogPosition,
@@ -83,6 +145,7 @@ const appendTx = (
   Effect.gen(function* () {
     const bodies = yield* Effect.forEach(events, encodeEvent)
     yield* requireAt(yield* lastPosition(db), expected)
+    yield* versionStep(db, events, yield* readStoreVersion(db, knownLogVersion, toError))
     return yield* insertAfter(db, expected, bodies)
   })
 
@@ -134,6 +197,7 @@ const logOf = (db: Database, lock: Semaphore.Semaphore): ProjectLog => ({
 const open = (path: string, busyTimeoutMillis: number) =>
   openWriter<ProjectLogError>({
     path,
+    knownVersion: knownLogVersion,
     busyTimeoutMillis,
     schemaSql,
     failure: toError,
@@ -147,9 +211,13 @@ const open = (path: string, busyTimeoutMillis: number) =>
  * The open takes the write lock briefly, so it can wait up to
  * `busyTimeoutMillis` and then fail with "project log busy". A log at
  * format version 0 (written by v0.1.0) is stamped 1 and a new one is
- * created at 1. A log stamped by a newer release fails with
+ * created at 1; the open never writes 2. A log stamped above
+ * `knownLogVersion` (2) by a newer release fails with
  * `StoreVersionNewer`, and one stamped below 0 with `ProjectLogError`;
- * either is left as it was, read and written by nothing.
+ * either is left as it was, read and written by nothing. An append raises
+ * a log at 1 to 2 when it holds an event that needs the newer format, and
+ * fails with `ProjectLogError`, writing nothing, when its transaction
+ * reads a version newer than 2 or below 0.
  */
 export const openProjectLog = (
   path: string,

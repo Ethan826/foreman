@@ -10,9 +10,11 @@ import { Array as Arr, Effect, Option, Result } from "effect"
 import type { Scope } from "effect"
 import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { LedgerBound, LogPosition, ProjectLogError } from "../../src/domain/events.ts"
+import { FindingsRecorded, LedgerBound, LogPosition, ProjectLogError } from "../../src/domain/events.ts"
+import { OpId } from "../../src/domain/ids.ts"
 import { LedgerError } from "../../src/domain/ledger.ts"
-import { StoreNewer, StoreVersionNewer } from "../../src/domain/store-version.ts"
+import { SessionId } from "../../src/domain/session.ts"
+import { knownLogVersion, StoreNewer, StoreVersionNewer } from "../../src/domain/store-version.ts"
 import { Windows } from "../../src/domain/window.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
@@ -90,29 +92,35 @@ const ledgerReadLeavesFiles = (dir: string) =>
 const logAt = (dir: string) => `${dir}/log.sqlite`
 const ledgerAt = (dir: string) => `${dir}/ledger.sqlite`
 
-/** A log and a ledger written by this release, then set back to `version` as v0.1.0 or a newer release would leave them. */
-const storesAt = (dir: string, version: number) =>
+/**
+ * A log and a ledger written by this release, then set to `logVersion`
+ * and `ledgerVersion` as v0.1.0, v0.1.1 or a newer release would leave
+ * them. The stores have their own known versions (the log 2, the ledger
+ * 1), so each gets its own version.
+ */
+const storesAt = (dir: string, logVersion: number, ledgerVersion: number) =>
   Effect.gen(function* () {
     yield* writtenLog(logAt(dir))
     yield* writtenLedger(ledgerAt(dir))
-    yield* setVersion(logAt(dir), version)
-    yield* setVersion(ledgerAt(dir), version)
+    yield* setVersion(logAt(dir), logVersion)
+    yield* setVersion(ledgerAt(dir), ledgerVersion)
   })
 
 /**
- * Stores at `version` that each hold one row that would not decode, so a
- * reader that read rows before deciding would fail with a decode error.
+ * Stores at `logVersion` and `ledgerVersion` that each hold one row that
+ * would not decode, so a reader that read rows before deciding would fail
+ * with a decode error.
  */
-const undecodableStoresAt = (dir: string, version: number) =>
+const undecodableStoresAt = (dir: string, logVersion: number, ledgerVersion: number) =>
   Effect.gen(function* () {
-    yield* storesAt(dir, version)
+    yield* storesAt(dir, logVersion, ledgerVersion)
     yield* rawExec(logAt(dir), "INSERT INTO events (position, body) VALUES (2, 'not an event')")
     yield* rawExec(ledgerAt(dir), "INSERT INTO readings (seq, body, grantId) VALUES (99, 'not a row', NULL)")
   })
 
 const readersStampNothing = (dir: string) =>
   Effect.gen(function* () {
-    yield* storesAt(dir, 0)
+    yield* storesAt(dir, 0, 0)
     const versions = yield* Effect.scoped(
       Effect.gen(function* () {
         const log = yield* Effect.flatMap(openLogReader(logAt(dir), busyMillis), Effect.fromOption)
@@ -127,16 +135,16 @@ const readersStampNothing = (dir: string) =>
 
 const newerRefusedUnread = (dir: string) =>
   Effect.gen(function* () {
-    yield* undecodableStoresAt(dir, 2)
+    yield* undecodableStoresAt(dir, knownLogVersion + 1, 2)
     const log = yield* Effect.flip(openLogReader(logAt(dir), busyMillis))
     const ledger = yield* Effect.flip(openLedgerReader(ledgerAt(dir), busyMillis))
-    expect(log).toEqual(new StoreVersionNewer({ path: logAt(dir), found: 2, known: 1 }))
+    expect(log).toEqual(new StoreVersionNewer({ path: logAt(dir), found: 3, known: 2 }))
     expect(ledger).toEqual(new StoreVersionNewer({ path: ledgerAt(dir), found: 2, known: 1 }))
   })
 
 const negativeRefusedUnread = (dir: string) =>
   Effect.gen(function* () {
-    yield* undecodableStoresAt(dir, -1)
+    yield* undecodableStoresAt(dir, -1, -1)
     const reason = "store format version -1 is not one tarlatan writes"
     const log = yield* Effect.flip(openLogReader(logAt(dir), busyMillis))
     const ledger = yield* Effect.flip(openLedgerReader(ledgerAt(dir), busyMillis))
@@ -146,33 +154,34 @@ const negativeRefusedUnread = (dir: string) =>
 
 /**
  * Gives the already-written stores at `dir` one row each that would not
- * decode and stamps them `version`, all through raw connections, so no
- * writer of this release opens them (review finding F2).
+ * decode and stamps them `logVersion` and `ledgerVersion`, all through raw
+ * connections, so no writer of this release opens them (review finding
+ * F2).
  */
-const undecodableStampedRaw = (dir: string, version: number) =>
+const undecodableStampedRaw = (dir: string, logVersion: number, ledgerVersion: number) =>
   Effect.gen(function* () {
     yield* rawExec(logAt(dir), "INSERT INTO events (position, body) VALUES (2, 'not an event')")
     yield* rawExec(ledgerAt(dir), "INSERT INTO readings (seq, body, grantId) VALUES (99, 'not a row', NULL)")
-    yield* setVersion(logAt(dir), version)
-    yield* setVersion(ledgerAt(dir), version)
+    yield* setVersion(logAt(dir), logVersion)
+    yield* setVersion(ledgerAt(dir), ledgerVersion)
   })
 
 /**
  * Review findings F2 and F6: readers opened on stores at 1, then another
- * connection stamps the stores 2 and gives each a row that would not
- * decode. A read that took its rows before deciding on its own snapshot's
- * version would fail with a decode error; each read fails with
- * `StoreVersionNewer`, found 2, instead.
+ * connection stamps the log 3 and the ledger 2, each newer than its known
+ * version, and gives each a row that would not decode. A read that took
+ * its rows before deciding on its own snapshot's version would fail with
+ * a decode error; each read fails with `StoreVersionNewer` instead.
  */
 const stampedAfterOpenRefused = (dir: string) =>
   Effect.gen(function* () {
-    yield* storesAt(dir, 1)
+    yield* storesAt(dir, 1, 1)
     const log = yield* Effect.flatMap(openLogReader(logAt(dir), busyMillis), Effect.fromOption)
     const ledger = yield* Effect.flatMap(openLedgerReader(ledgerAt(dir), busyMillis), Effect.fromOption)
-    yield* undecodableStampedRaw(dir, 2)
+    yield* undecodableStampedRaw(dir, knownLogVersion + 1, 2)
     expect([log.version, ledger.version]).toEqual([1, 1])
     expect(yield* Effect.flip(log.readFrom(LogPosition.make(0)))).toEqual(
-      new StoreVersionNewer({ path: logAt(dir), found: 2, known: 1 }),
+      new StoreVersionNewer({ path: logAt(dir), found: 3, known: 2 }),
     )
     expect(yield* Effect.flip(ledger.read)).toEqual(new StoreVersionNewer({ path: ledgerAt(dir), found: 2, known: 1 }))
   })
@@ -184,9 +193,9 @@ const stampedAfterOpenRefused = (dir: string) =>
  */
 const stampedAfterOpenSnapshot = (dir: string) =>
   Effect.gen(function* () {
-    yield* storesAt(dir, 1)
+    yield* storesAt(dir, 1, 1)
     const ledger = yield* Effect.flatMap(openLedgerReader(ledgerAt(dir), busyMillis), Effect.fromOption)
-    yield* undecodableStampedRaw(dir, 2)
+    yield* undecodableStampedRaw(dir, knownLogVersion + 1, 2)
     const read = yield* ledger.snapshot
     expect(read.version).toBe(2)
     expect(read.rows).toEqual(Result.fail(new StoreNewer({ found: 2 })))
@@ -200,7 +209,7 @@ const stampedAfterOpenSnapshot = (dir: string) =>
  */
 const stampedOneAfterOpenRead = (dir: string) =>
   Effect.gen(function* () {
-    yield* storesAt(dir, 0)
+    yield* storesAt(dir, 0, 0)
     const log = yield* Effect.flatMap(openLogReader(logAt(dir), busyMillis), Effect.fromOption)
     const ledger = yield* Effect.flatMap(openLedgerReader(ledgerAt(dir), busyMillis), Effect.fromOption)
     const rowsAtZero = yield* ledger.read
@@ -219,7 +228,40 @@ const stampedOneAfterOpenRead = (dir: string) =>
     expect(yield* ledger.read).toEqual(rowsAtZero)
   })
 
+/** A review's findings, which v0.1.1 does not decode, so appending them raises a log at 1. */
+const findingsRecorded = new FindingsRecorded({
+  sessionId: SessionId.make("s-1"),
+  reviewOpId: OpId.make("op-2"),
+  findings: [{ id: "F1", severity: "major", file: Option.none(), summary: "Wrong." }],
+})
+
+/**
+ * v0.2.0 (dogfood-6): a reader opened on a log at 1 reads it, and reads it
+ * again after a writer raised it to 2 by appending `FindingsRecorded`;
+ * a reader opened on the raised log reads it at 2.
+ */
+const raisedLogRead = (dir: string) =>
+  Effect.gen(function* () {
+    yield* writtenLog(logAt(dir))
+    const atOne = yield* Effect.flatMap(openLogReader(logAt(dir), busyMillis), Effect.fromOption)
+    expect((yield* atOne.versionedFrom(LogPosition.make(0))).version).toBe(1)
+    yield* Effect.scoped(
+      Effect.flatMap(openProjectLog(logAt(dir), busyMillis), (log) =>
+        log.append(LogPosition.make(1), [findingsRecorded]),
+      ),
+    )
+    expect(yield* versionOf(logAt(dir))).toBe(knownLogVersion)
+    const expected = [new LedgerBound({ path: "/ledger/ledger.sqlite" }), findingsRecorded]
+    const raisedSinceOpen = yield* atOne.versionedFrom(LogPosition.make(0))
+    expect(raisedSinceOpen.version).toBe(2)
+    expect(Arr.map(raisedSinceOpen.events, (logged) => logged.event)).toEqual(expected)
+    const atTwo = yield* Effect.flatMap(openLogReader(logAt(dir), busyMillis), Effect.fromOption)
+    expect(atTwo.version).toBe(2)
+    expect(Arr.map(yield* atTwo.readFrom(LogPosition.make(0)), (logged) => logged.event)).toEqual(expected)
+  })
+
 describe("the read-only readers and the store format version", () => {
+  it.live("read a log at 1, and at 2 once a writer raised it", () => withDir(raisedLogRead))
   it.live("refuse a read with StoreVersionNewer when the store was stamped 2 after the open", () =>
     withDir(stampedAfterOpenRefused),
   )

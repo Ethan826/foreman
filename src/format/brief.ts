@@ -62,8 +62,10 @@ const noChanges = "No path changed between the base revision and the tree."
 /**
  * The reviewer's closing request: a final fenced `json` block holding an
  * array of findings in the shape `decodeFindingsBlock` (findings.ts)
- * accepts, with an example in that shape, and the rule that an empty
- * array requests no changes (plan "Outcomes and usable attempts").
+ * accepts, with an example in that shape, the rule that each finding's id
+ * is distinct (a repeated id makes the block malformed; v0.2.0 design,
+ * "Commands and events"), and the rule that an empty array requests no
+ * changes (plan "Outcomes and usable attempts").
  */
 const findingsRequest = Array.join([
   "Review the changes against the task. End your reply with a fenced code",
@@ -82,6 +84,7 @@ const findingsRequest = Array.join([
   "]",
   "```",
   "",
+  'Each finding\'s "id" must be distinct from every other finding\'s id.',
   "An empty array, [], means you request no changes.",
 ], lineBreak)
 

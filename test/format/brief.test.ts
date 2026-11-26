@@ -2,7 +2,7 @@
 // briefs", "Snapshot identity and raw checks"): exact text built only
 // from the recorded inputs passed in.
 import { describe, expect, it } from "@effect/vitest"
-import { Option, Result } from "effect"
+import { Array as Arr, Option, Result, String as Str } from "effect"
 import { Revision } from "../../src/domain/ids.ts"
 import {
   correctBrief,
@@ -86,7 +86,12 @@ const reviewInput = {
   coverage: snapshotCoverage,
 }
 
-const expectedReview = `You are the reviewer for one task in this repository.
+/**
+ * The golden review brief as it was before dogfood-6, without the line
+ * on distinct ids. The expected brief derives from it below, so every
+ * byte of it stays pinned.
+ */
+const originalReview = `You are the reviewer for one task in this repository.
 ${fresh}
 
 You review tree ${tree}, a snapshot of the working directory, against
@@ -136,9 +141,31 @@ every value is a non-empty string. For example:
 An empty array, [], means you request no changes.
 `
 
+/** The one line dogfood-6 adds to the review brief (its ruling 6). */
+const distinctIdsLine = `Each finding's "id" must be distinct from every other finding's id.`
+
+/** The line of `originalReview` the new line goes before. */
+const emptyArrayLine = "An empty array, [], means you request no changes."
+
+const originalLines = Str.split(originalReview, "\n")
+
+/**
+ * `originalReview` with `distinctIdsLine` inserted as a line of its own
+ * just before `emptyArrayLine`, and nothing else changed; none if
+ * `originalReview` has no such line.
+ */
+const expectedReview = Option.map(
+  Option.flatMap(
+    Arr.findFirstIndex(originalLines, (line) => line === emptyArrayLine),
+    (index) => Arr.insertAt(originalLines, index, distinctIdsLine),
+  ),
+  Arr.join("\n"),
+)
+
 describe("reviewBrief", () => {
   it("states tree, base, coverage, changes, handoff; asks for findings", () => {
-    expect(reviewBrief(reviewInput)).toBe(expectedReview)
+    expect(Arr.contains(originalLines, distinctIdsLine)).toBe(false)
+    expect(Option.some(reviewBrief(reviewInput))).toEqual(expectedReview)
   })
 
   it("says so when no path changed", () => {

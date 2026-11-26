@@ -25,19 +25,19 @@ The usage text printed with a usage error ends with the owner's rule for a launc
 
 ## The status output contract
 
-For `status`, `main` calls Program's `productionStatus`. It opens the state read-only, takes no lock, writes nothing (SQLite's `-shm` coordination file may change, by the owner's ruling on B11) and reports what is broken beside whatever it can read (re-review R03). It prints one JSON object on stdout and exits 0, whatever it found. It exits 1, with the failure on stderr, only when the configuration cannot be read or decoded, the project log or the ledger cannot be read, or the project log is stamped with a format version this release does not read (`StoreVersionNewer` for a newer one). A ledger stamped that way is a finding instead, because another project's newer release may share it. It exits 2 on a usage error, like every command.
+For `status`, `main` calls Program's `productionStatus`. It opens the state read-only, takes no lock, writes nothing (SQLite's `-shm` coordination file may change, by the owner's ruling on B11) and reports what is broken beside whatever it can read (re-review R03). It prints one JSON object on stdout and exits 0, whatever it found. It exits 1, with the failure on stderr, only when the configuration cannot be read or decoded, the project log or the ledger cannot be read, or the project log is stamped with a format version this release does not read (`StoreVersionNewer` for a newer one: above 2, the log's known version). A ledger stamped that way is a finding instead, because another project's newer release may share it. It exits 2 on a usage error, like every command.
 
 The object is one of two:
 
 - `StateMissing`, when the configured state directory has no project log: `stateDir`, `logPath` and `findings`.
-- `ProductionStatusReport`, with seven fields: `findings`, `target`, `inForce`, `gitHome`, `report`, `checkCommands` and `storeVersions`. `storeVersions` holds each store's format version as its header reads, never stamped by status: `{"log": 1, "ledger": 0}`, or `{"log": 1}` when no target is in force or no ledger file is found. 0 means a store v0.1.0 wrote that no command of this release has opened since.
+- `ProductionStatusReport`, with seven fields: `findings`, `target`, `inForce`, `gitHome`, `report`, `checkCommands` and `storeVersions`. `storeVersions` holds each store's format version as its header reads, never stamped by status: `{"log": 1, "ledger": 0}`, or `{"log": 1}` when no target is in force or no ledger file is found. 0 means a store v0.1.0 wrote that no command has opened since. The log reads 1 until the first append holding an event v0.1.1 does not decode (today a usable review's `FindingsRecorded`) raises it to 2; both are read, and neither is a finding.
 
 `findings` lists each problem status found, in this order, and is empty when there is none:
 
 - `ConfiguredLayoutRefused` with `reasons`: the configured layout breaks a rule or a path in it cannot be resolved (batch review B05).
 - `TargetBindingUnreadable` with `binding` and `reason`: the state directory's binding cannot be read or decoded (batch review B04).
 - `RecordedLayoutRefused` with `binding` and `reasons`: the recorded target's layout, with the state directory, breaks a rule.
-- `StoreVersionNewer` with `path`, `found` and `known`: the ledger of the target in force is stamped by a newer release. Status reads none of its rows, so `report.ledgerFound` is false and holds that rest on ledger rows are absent; `storeVersions.ledger` shows the version found.
+- `StoreVersionNewer` with `path`, `found` and `known`: the ledger of the target in force is stamped by a newer release, above the ledger's known version, 1, which `known` gives. Status reads none of its rows, so `report.ledgerFound` is false and holds that rest on ledger rows are absent; `storeVersions.ledger` shows the version found.
 - `LedgerVersionInvalid` with `path`, `found` and `reason`: the ledger is stamped below 0, which no tarlatan release writes, and is treated the same way.
 
 `target` compares the binding with the configuration: `TargetUnbound` when no binding is recorded, `TargetBound` when they agree, `TargetMismatch` with each difference, or `TargetUncompared` when the binding is unreadable or a configured path cannot be resolved. A mismatch is shown, never refused.

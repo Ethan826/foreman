@@ -1,9 +1,10 @@
 // The assisted session's events in the project log (plan "Events"): a
 // session's opening and close, each attempt's recorded brief and report, the
 // snapshots and handoffs between attempts, the review check, and the
-// owner's attestation that a step ended. Re-exported by events.ts, which
-// holds the union.
+// owner's attestation that a step ended, and a usable review's findings.
+// Re-exported by events.ts, which holds the union.
 import { Schema } from "effect"
+import { Findings } from "./findings.ts"
 import { GrantId, OpId, Revision, TrancheId } from "./ids.ts"
 import { Role } from "./roles.ts"
 import {
@@ -50,6 +51,21 @@ export class ReportRecorded extends Schema.TaggedClass<ReportRecorded>()(
     handoffPath: pathText,
     handoffSha256: Sha256,
   },
+) {}
+
+/**
+ * The findings of review `reviewOpId` in session `sessionId`, in the
+ * reviewer's order, as decoded from its findings block (v0.2.0 design,
+ * "Commands and events"). Appended in batch F after the review's
+ * `Finished` and `ReportRecorded`, only when the review's outcome is
+ * usable (`Success`, with an empty list, or `ChangesRequested`); a review
+ * whose block repeats an id is `Unclassified` and records none. The log,
+ * not the findings file, is what later command rules read. v0.1.1 does
+ * not decode it, so it raises a log at format 1 to 2.
+ */
+export class FindingsRecorded extends Schema.TaggedClass<FindingsRecorded>()(
+  "FindingsRecorded",
+  { sessionId: SessionId, reviewOpId: OpId, findings: Findings },
 ) {}
 
 /**

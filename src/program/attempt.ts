@@ -103,7 +103,24 @@ export interface LaunchPlan<E> {
   readonly decode: (lines: ReadonlyArray<StdoutLine>, handoff: Option.Option<string>) => DecodedAttempt
   /** Publishes what follows from the handoff's text, before batch F (a review's findings draft); not run when the handoff is not UTF-8. */
   readonly afterHandoff: (session: OpenSession, handoff: string) => Effect.Effect<void, E | StateFileFailed>
+  /**
+   * The events batch F appends after `Finished` and `ReportRecorded`, from
+   * the attempt's classified outcome and what was decoded: a usable
+   * review's `FindingsRecorded`; none for other roles. Pure.
+   */
+  readonly finishedExtras: (input: FinishedInput) => ReadonlyArray<ProjectEvent>
 }
+
+/** What {@link LaunchPlan.finishedExtras} decides from: the session, the attempt, its outcome and its decoded output. */
+export interface FinishedInput {
+  readonly session: OpenSession
+  readonly opId: OpId
+  readonly outcome: StepOutcome
+  readonly decoded: DecodedAttempt
+}
+
+/** Batch F's extra events for a role that records none (`implement`, `correct`). */
+export const noFinishedExtras = (): ReadonlyArray<ProjectEvent> => []
 
 /** The facts of a command with no handoff: `implement`. */
 export const noHandoffFacts: HandoffFacts = { attested: false, reportsIntact: true, snapshot: Option.none() }

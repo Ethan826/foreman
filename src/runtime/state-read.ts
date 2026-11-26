@@ -5,13 +5,15 @@
 // open reads the store's format version, SQLite's `user_version` header
 // field (dogfood-5), and stamps nothing: a reader exposes the version as
 // read, so 0 means a store v0.1.0 wrote that no writer has opened since.
-// A store stamped newer than this release knows, or below 0, fails the
-// open, so none of its rows is read. Each read of rows runs inside a
+// Each store is decided against its own known version (the log 2, the
+// ledger 1). A store stamped newer than that, or below 0, fails the open,
+// so none of its rows is read. Each read of rows runs inside a
 // deferred read transaction, which never takes the write lock, so it is a
 // consistent snapshot while another connection writes (WAL readers do not
 // block writers, sqlite.org/wal.html). Its first statement reads the
 // version again, and Domain's decision on that read governs the read
-// (review finding F6). At 0 or 1, the same format, the rows are read; a
+// (review finding F6). At any usable version (0, an older readable one
+// such as a log at 1, or the known one), the rows are read; a
 // store stamped newer or below 0 since the open is refused as at the open,
 // before any row is read. So the rows and the version come from one
 // snapshot, and `openLedgerReading` gives status that version with the
@@ -28,7 +30,12 @@ import type { Scope } from "effect"
 import { existsSync } from "node:fs"
 import { type LoggedEvent, LogPosition, ProjectLogError } from "../domain/events.ts"
 import { LedgerBusy, LedgerError, type LedgerSnapshot } from "../domain/ledger.ts"
-import type { StoreVersionNewer, StoreVersionRefusal } from "../domain/store-version.ts"
+import {
+  knownLedgerVersion,
+  knownLogVersion,
+  type StoreVersionNewer,
+  type StoreVersionRefusal,
+} from "../domain/store-version.ts"
 import { readAll } from "./ledger-sqlite.ts"
 import { readFromDb } from "./project-log.ts"
 import {
@@ -47,15 +54,17 @@ export interface LogReader {
   /**
    * The log's format version as its header read at the open, decoded as an
    * integer: 0 for a log v0.1.0 wrote and no writer has stamped since, 1
-   * for the format this release knows. The reader stamps nothing. Each
-   * read decides on the version its own snapshot reads, which another
-   * connection may have changed since the open.
+   * for a log not yet raised, 2 for the format this release knows. The
+   * reader stamps nothing. Each read decides on the version its own
+   * snapshot reads, which another connection may have changed since the
+   * open.
    */
   readonly version: number
   /**
    * Every event after `position`, in order, read in one deferred
    * transaction whose first statement reads the version and decides on it
-   * (review finding F6). At 0 or 1, the same format, the events are read.
+   * (review finding F6). At 0, 1 or 2, each a format this release reads,
+   * the events are read.
    * A newer log fails with `StoreVersionNewer` and one below 0 with
    * ProjectLogError (owner ruling P2), and no event is read.
    */
@@ -75,7 +84,7 @@ export interface LogReader {
 
 /** Events read from a log, with the format version their snapshot's header read. */
 export interface VersionedEvents {
-  /** The header's `user_version` as the snapshot read it: 0 or 1. */
+  /** The header's `user_version` as the snapshot read it: 0, 1 or 2. */
   readonly version: number
   /** The events, in order. */
   readonly events: ReadonlyArray<LoggedEvent>
@@ -86,8 +95,8 @@ export interface LedgerReader {
   /**
    * The ledger's format version as its header read at the open, decoded as
    * an integer: 0 for a ledger v0.1.0 wrote and no writer has stamped
-   * since, 1 for the format this release knows. The reader stamps nothing.
-   * Each read decides on the version its own snapshot reads, which another
+   * since, 1 for the format this release knows (`knownLedgerVersion`). The
+   * reader stamps nothing. Each read decides on the version its own snapshot reads, which another
    * connection may have changed since the open.
    */
   readonly version: number
@@ -115,8 +124,9 @@ export type ReaderOpening<A> = Result.Result<A, StoreVersionRefusal>
 /**
  * What one read of a store found, all from one snapshot (review finding
  * F6): the format `version` its header read, and either the `rows`, when
- * Domain's decision on that version allows reading (0 or 1, the same
- * format), or the decision that refused the store (newer, or below 0),
+ * Domain's decision on that version, against the store's known version,
+ * allows reading (unstamped, older readable or current), or the decision
+ * that refused the store (newer, or below 0),
  * with no row read.
  */
 export interface VersionedRead<A> {
@@ -129,32 +139,33 @@ export interface VersionedRead<A> {
 /**
  * Opens the project log at `path` read-only for the scope, or gives none
  * when no file is there; creates nothing and stamps nothing. A log stamped
- * newer than this release knows fails with `StoreVersionNewer`, and one
- * stamped below 0 with `ProjectLogError`, before any event is read.
+ * newer than `knownLogVersion` (2) fails with `StoreVersionNewer`, and one
+ * stamped below 0 with `ProjectLogError`, before any event is read; a log
+ * at 1 is read as it is.
  */
 export const openLogReader = (
   path: string,
   busyTimeoutMillis: number,
 ): Effect.Effect<Option.Option<LogReader>, ProjectLogError | StoreVersionNewer, Scope.Scope> =>
   Effect.flatMap(
-    presentOpen(path, busyTimeoutMillis, logFailure, logReader(path)),
-    refusedAsFailure(path, logRefused),
+    presentOpen(path, busyTimeoutMillis, knownLogVersion, logFailure, logReader(path)),
+    refusedAsFailure(path, knownLogVersion, logRefused),
   )
 
 /**
  * Opens the ledger at `path` read-only for the scope, or gives none when
  * no file is there; creates nothing, stamps nothing and never takes the
- * write lock. A ledger stamped newer than this release knows fails with
- * `StoreVersionNewer`, and one stamped below 0 with `LedgerError`, before
- * any row is read.
+ * write lock. A ledger stamped newer than `knownLedgerVersion` (1) fails
+ * with `StoreVersionNewer`, and one stamped below 0 with `LedgerError`,
+ * before any row is read.
  */
 export const openLedgerReader = (
   path: string,
   busyTimeoutMillis: number,
 ): Effect.Effect<Option.Option<LedgerReader>, LedgerError | LedgerBusy | StoreVersionNewer, Scope.Scope> =>
   Effect.flatMap(
-    presentOpen(path, busyTimeoutMillis, ledgerFailure, ledgerReader(path)),
-    refusedAsFailure(path, ledgerRefused),
+    presentOpen(path, busyTimeoutMillis, knownLedgerVersion, ledgerFailure, ledgerReader(path)),
+    refusedAsFailure(path, knownLedgerVersion, ledgerRefused),
   )
 
 /**
@@ -169,7 +180,7 @@ export const openLedgerReading = (
   path: string,
   busyTimeoutMillis: number,
 ): Effect.Effect<Option.Option<VersionedRead<LedgerSnapshot>>, LedgerError | LedgerBusy, Scope.Scope> =>
-  Effect.flatMap(presentOpen(path, busyTimeoutMillis, ledgerFailure, ledgerReader(path)), (opened) =>
+  Effect.flatMap(presentOpen(path, busyTimeoutMillis, knownLedgerVersion, ledgerFailure, ledgerReader(path)), (opened) =>
     Effect.transposeOption(Option.map(opened, snapshotOrRefusal)),
   )
 
@@ -197,7 +208,10 @@ const logReader =
   (db: Database, version: number): LogReader => {
     const lock = Semaphore.makeUnsafe(1)
     const versionedFrom = (position: LogPosition) =>
-      Effect.flatMap(versionedRead(db, lock, logFailure, readFromDb(db, position)), eventsOrFailure(path))
+      Effect.flatMap(
+        versionedRead(db, lock, knownLogVersion, logFailure, readFromDb(db, position)),
+        eventsOrFailure(path),
+      )
     return {
       version,
       versionedFrom,
@@ -210,7 +224,7 @@ const eventsOrFailure =
   (path: string) =>
   (versioned: VersionedRead<ReadonlyArray<LoggedEvent>>): Effect.Effect<VersionedEvents, ProjectLogError | StoreVersionNewer> =>
     Effect.map(
-      rowsOrFailure<ReadonlyArray<LoggedEvent>, ProjectLogError>(path, logRefused)(versioned),
+      rowsOrFailure<ReadonlyArray<LoggedEvent>, ProjectLogError>(path, knownLogVersion, logRefused)(versioned),
       (events): VersionedEvents => ({ version: versioned.version, events }),
     )
 
@@ -222,11 +236,14 @@ const ledgerReader =
   (path: string) =>
   (db: Database, version: number): LedgerReader => {
     const lock = Semaphore.makeUnsafe(1)
-    const snapshot = versionedRead(db, lock, ledgerFailure, readAll(db))
+    const snapshot = versionedRead(db, lock, knownLedgerVersion, ledgerFailure, readAll(db))
     return {
       version,
       snapshot,
-      read: Effect.flatMap(snapshot, rowsOrFailure<LedgerSnapshot, LedgerError | LedgerBusy>(path, ledgerRefused)),
+      read: Effect.flatMap(
+        snapshot,
+        rowsOrFailure<LedgerSnapshot, LedgerError | LedgerBusy>(path, knownLedgerVersion, ledgerRefused),
+      ),
     }
   }
 
@@ -246,17 +263,20 @@ const ledgerRefused = (reason: string) => new LedgerError({ reason })
 /**
  * Reads the store's version and, when Domain's decision on it allows,
  * `rows`, in one deferred read transaction on `db`, so both come from one
- * snapshot (review finding F6). The decision is made on this read, not on
- * the open's: 0 and 1 are the same format, so a store another connection
- * stamped from 0 to 1 since the open reads normally, and one stamped newer
- * or below 0 since then is refused as a value before any row is read.
- * The whole transaction holds `lock`'s one permit, so concurrent reads on
- * the one connection queue instead of failing with "cannot start a
- * transaction within a transaction" (review finding F8).
+ * snapshot (review finding F6). The decision is made on this read, against
+ * the store's known version `known`, not on the open's: every usable
+ * version is a format this release reads, so a store another connection
+ * stamped from 0 to 1, or a log raised from 1 to 2, since the open reads
+ * normally, and one stamped newer or below 0 since then is refused as a
+ * value before any row is read. The whole transaction holds `lock`'s one
+ * permit, so concurrent reads on the one connection queue instead of
+ * failing with "cannot start a transaction within a transaction" (review
+ * finding F8).
  */
 const versionedRead = <A, E>(
   db: Database,
   lock: Semaphore.Semaphore,
+  known: number,
   failure: (error: unknown) => E,
   rows: Effect.Effect<A, E>,
 ): Effect.Effect<VersionedRead<A>, E> =>
@@ -266,7 +286,7 @@ const versionedRead = <A, E>(
   )(
     transaction(
       readConnection(db, failure),
-      Effect.flatMap(readStoreVersion(db, failure), (read) => rowsIfUsable(read, rows)),
+      Effect.flatMap(readStoreVersion(db, known, failure), (read) => rowsIfUsable(read, rows)),
     ),
   )
 
@@ -282,21 +302,23 @@ const readRows = <A>(version: number, rows: A): VersionedRead<A> => ({ version, 
 
 /**
  * The rows of a versioned read, or its refusal as a failure:
- * `StoreVersionNewer` for a newer store, and the store's own error, built
- * by `refused`, for one below 0 (owner ruling P2).
+ * `StoreVersionNewer`, carrying the store's known version `known`, for a
+ * newer store, and the store's own error, built by `refused`, for one
+ * below 0 (owner ruling P2).
  */
 const rowsOrFailure =
-  <A, E>(path: string, refused: (reason: string) => E) =>
+  <A, E>(path: string, known: number, refused: (reason: string) => E) =>
   (versioned: VersionedRead<A>): Effect.Effect<A, E | StoreVersionNewer> =>
-    Effect.mapError(Effect.fromResult(versioned.rows), refusalFailure(path, refused))
+    Effect.mapError(Effect.fromResult(versioned.rows), refusalFailure(path, known, refused))
 
 /**
  * A store opened to read, with a refusing version turned into the open's
- * failure: `StoreVersionNewer` for a newer store, and the store's own
- * error, built by `refused`, for one below 0 (owner ruling P2).
+ * failure: `StoreVersionNewer`, carrying the store's known version
+ * `known`, for a newer store, and the store's own error, built by
+ * `refused`, for one below 0 (owner ruling P2).
  */
 const refusedAsFailure =
-  <A, E>(path: string, refused: (reason: string) => E) =>
+  <A, E>(path: string, known: number, refused: (reason: string) => E) =>
   (opened: Option.Option<ReaderOpening<A>>): Effect.Effect<Option.Option<A>, E | StoreVersionNewer> =>
     Effect.mapError(
       Effect.fromResult(
@@ -305,26 +327,28 @@ const refusedAsFailure =
           onSome: (opening) => Result.map(opening, (reader) => Option.some(reader)),
         }),
       ),
-      refusalFailure(path, refused),
+      refusalFailure(path, known, refused),
     )
 
 /**
  * Opens the database at `path` read-only with `busy_timeout` set, closes
- * it when the scope ends, reads its format version and, when the version
- * allows, builds `reader` over it with that version; none, with nothing
- * opened, when no file is at `path`. A refusing version gives its
- * decision, and `reader` is never built, so no row is read.
+ * it when the scope ends, reads its format version, decides on it against
+ * the store's known version `known` and, when the version allows, builds
+ * `reader` over it with that version; none, with nothing opened, when no
+ * file is at `path`. A refusing version gives its decision, and `reader`
+ * is never built, so no row is read.
  */
 const presentOpen = <A, E>(
   path: string,
   busyTimeoutMillis: number,
+  known: number,
   failure: (error: unknown) => E,
   reader: (db: Database, version: number) => A,
 ): Effect.Effect<Option.Option<ReaderOpening<A>>, E, Scope.Scope> =>
   Effect.suspend(() =>
     existsSync(path)
       ? Effect.map(
-          Effect.flatMap(readOnly(path, busyTimeoutMillis, failure), checkedReader(failure, reader)),
+          Effect.flatMap(readOnly(path, busyTimeoutMillis, failure), checkedReader(known, failure, reader)),
           (opening) => Option.some(opening),
         )
       : Effect.succeed(Option.none<ReaderOpening<A>>()),
@@ -348,11 +372,11 @@ const readOnly = <E>(path: string, busyTimeoutMillis: number, failure: (error: u
       }),
   )
 
-/** Reads the version on `db` and builds `reader` over it when the version allows. */
+/** Reads the version on `db`, decides on it against `known`, and builds `reader` over it when the version allows. */
 const checkedReader =
-  <A, E>(failure: (error: unknown) => E, reader: (db: Database, version: number) => A) =>
+  <A, E>(known: number, failure: (error: unknown) => E, reader: (db: Database, version: number) => A) =>
   (db: Database): Effect.Effect<ReaderOpening<A>, E> =>
-    Effect.map(readStoreVersion(db, failure), (read) =>
+    Effect.map(readStoreVersion(db, known, failure), (read) =>
       Result.map(usableVersion(read.decision), () => reader(db, read.version)),
     )
 

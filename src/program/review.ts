@@ -9,10 +9,11 @@
 // runner, the previous step's recorded handoff and the coverage
 // statement. Codex's final message is the handoff; its findings block
 // decides the outcome, and when it decodes it is published as the
-// session's findings draft for the owner to edit.
+// session's findings draft for the owner to edit. A usable review also
+// records its findings in the log: batch F ends with `FindingsRecorded`.
 import { type Cause, Effect, Option, Result, String } from "effect"
 import { MalformedFindings } from "../domain/findings.ts"
-import { HandoffApproved, SnapshotTaken } from "../domain/events.ts"
+import { FindingsRecorded, HandoffApproved, type ProjectEvent, SnapshotTaken } from "../domain/events.ts"
 import type { Revision } from "../domain/ids.ts"
 import { codexReviewArgv } from "../domain/profiles.ts"
 import { defaultRoleClients, Roles } from "../domain/roles.ts"
@@ -21,7 +22,8 @@ import type { OpenSession } from "../domain/session-state.ts"
 import { reviewBrief, snapshotCoverage } from "../format/brief.ts"
 import { decodeFindingsBlock, renderFindingsDraft } from "../format/findings.ts"
 import { decodeNameStatus } from "../format/name-status.ts"
-import { type LaunchPlan, type PrepareInput, runAttempt } from "./attempt.ts"
+import { usable } from "../features/step-outcome.ts"
+import { type FinishedInput, type LaunchPlan, type PrepareInput, runAttempt } from "./attempt.ts"
 import type { AttemptFiles } from "./attempt-run.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
 import { codexDecoded, utf8Bytes } from "./client-output.ts"
@@ -79,7 +81,27 @@ const reviewPlan = (context: SessionContext, options: ReviewOptions): LaunchPlan
   handoff: (files) => lastMessage(context, files),
   decode: (lines, handoff) => ({ client: codexDecoded(lines), findings: findingsOfMessage(handoff) }),
   afterHandoff: (session, handoff) => publishDraft(context, session, handoff),
+  finishedExtras: findingsRecorded,
 })
+
+/**
+ * Batch F's `FindingsRecorded` for a review (v0.2.0 design, "Commands and
+ * events"): the decoded findings, in the reviewer's order, when the
+ * outcome is usable (`Success`, with an empty list, or
+ * `ChangesRequested`) and the findings block decoded; nothing otherwise,
+ * so a crashed or unclassified review records none even when its final
+ * message holds a valid block.
+ */
+const findingsRecorded = (input: FinishedInput): ReadonlyArray<ProjectEvent> =>
+  usable(Roles.Reviewer, input.outcome)
+    ? Option.toArray(
+        Option.map(
+          Option.flatMap(input.decoded.findings, Result.getSuccess),
+          (findings) =>
+            new FindingsRecorded({ sessionId: input.session.opened.sessionId, reviewOpId: input.opId, findings }),
+        ),
+      )
+    : []
 
 /** The brief, round and batch I's consent events, from recorded inputs and the snapshot. */
 const prepared = (context: SessionContext, input: PrepareInput) =>

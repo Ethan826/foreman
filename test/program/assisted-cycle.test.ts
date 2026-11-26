@@ -49,7 +49,7 @@ const expectedBatches = [
   ["Waived"],
   ["SnapshotTaken", "HandoffApproved", "Intended", "BriefRecorded"],
   ["Launched"],
-  ["Finished", "ReportRecorded"],
+  ["Finished", "ReportRecorded", "FindingsRecorded"],
   ["ReviewChecked", "HandoffApproved", "Intended", "BriefRecorded"],
   ["Launched"],
   ["Finished", "ReportRecorded"],
@@ -57,7 +57,7 @@ const expectedBatches = [
   ["Waived"],
   ["SnapshotTaken", "HandoffApproved", "Intended", "BriefRecorded"],
   ["Launched"],
-  ["Finished", "ReportRecorded"],
+  ["Finished", "ReportRecorded", "FindingsRecorded"],
   ["ReviewChecked", "SessionClosed"],
 ]
 

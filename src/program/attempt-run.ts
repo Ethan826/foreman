@@ -4,7 +4,9 @@
 // batch L, show and keep its output, publish the raw file and the handoff
 // file once the leader exits, publish what the plan derives from the
 // handoff (a review's findings draft), classify the outcome in Features, and
-// append batch F, `Finished` with its `ReportRecorded`, in one batch. The
+// append batch F, `Finished` with its `ReportRecorded` and then the
+// plan's `finishedExtras` (a usable review's `FindingsRecorded`), in one
+// batch. The
 // raw output streams into `<raw>.streaming`; the published raw file is a
 // copy made atomically once the leader is done. The handoff's text is
 // strict UTF-8 (review finding R04): a handoff that is not UTF-8 is
@@ -85,7 +87,8 @@ export const runClient = <E>(context: SessionContext, plan: LaunchPlan<E>, state
       onNone: () => Effect.void,
       onSome: (text) => plan.afterHandoff(state.session, text),
     })
-    const outcome = classifyAttempt(plan.role, exit, plan.decode(lines, handoffText))
+    const decoded = plan.decode(lines, handoffText)
+    const outcome = classifyAttempt(plan.role, exit, decoded)
     const finished = new Finished({ opId, outcome, endedAt: yield* Clock.currentTimeMillis })
     const report = new ReportRecorded({
       sessionId: state.session.opened.sessionId,
@@ -96,7 +99,8 @@ export const runClient = <E>(context: SessionContext, plan: LaunchPlan<E>, state
       handoffPath: files.handoff,
       handoffSha256,
     })
-    yield* capabilities.log.append(position, [finished, report])
+    const extras = plan.finishedExtras({ session: state.session, opId, outcome, decoded })
+    yield* capabilities.log.append(position, [finished, report, ...extras])
     return outcome
   })
 

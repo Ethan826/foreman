@@ -3,7 +3,7 @@
 // string is `json` in the final message, decoded as a list of findings,
 // and the owner's draft findings.md rendered from it.
 import { describe, expect, it } from "@effect/vitest"
-import { Option, Result, Schema } from "effect"
+import { Array as Arr, Option, Result, Schema } from "effect"
 import {
   MalformedFindings,
   NoFindingsBlock,
@@ -85,6 +85,27 @@ describe("decodeFindingsBlock", () => {
     const body = JSON.stringify([{ id: "", severity: "minor", summary: "x" }])
     const result = decodeFindingsBlock(block("json", body))
     expect(failedMalformed(result)).toEqual(Option.some(true))
+  })
+
+  it("fails with MalformedFindings naming the id when two findings share it (dogfood-6)", () => {
+    const body = JSON.stringify([
+      { id: "F1", severity: "major", summary: "First." },
+      { id: "F2", severity: "minor", summary: "Second." },
+      { id: "F1", severity: "minor", summary: "Third." },
+    ])
+    expect(decodeFindingsBlock(block("json", body))).toEqual(
+      Result.fail(new MalformedFindings({ reason: "finding id F1 appears more than once" })),
+    )
+  })
+
+  it("decodes a block of 20,000 findings whose ids are distinct (dogfood-6 F2)", () => {
+    const count = 20_000
+    const body = JSON.stringify(
+      Arr.makeBy(count, (index) => ({ id: `F${String(index)}`, severity: "minor", summary: "x" })),
+    )
+    expect(Result.map(decodeFindingsBlock(block("json", body)), Arr.length)).toEqual(
+      Result.succeed(count),
+    )
   })
 
   it("uses the last json block when there are two", () => {

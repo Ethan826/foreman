@@ -17,7 +17,7 @@ import type { OpenSession } from "../domain/session-state.ts"
 import { implementBrief } from "../format/brief.ts"
 import type { CheckCommandRefused, ProfilePathUnsafe } from "../format/claude-settings.ts"
 import type { StateFileFailed } from "../runtime/state-files.ts"
-import { type LaunchPlan, noHandoffFacts, runAttempt } from "./attempt.ts"
+import { type LaunchPlan, noFinishedExtras, noHandoffFacts, runAttempt } from "./attempt.ts"
 import { claudeSettingsPath } from "./claude-profile.ts"
 import { claudeDecoded, claudeHandoff } from "./client-output.ts"
 import { recordedText } from "./recorded-files.ts"
@@ -56,6 +56,7 @@ const implementPlan = (
   handoff: (_files, lines) => claudeHandoff(lines),
   decode: (lines) => ({ client: claudeDecoded(lines), findings: Option.none() }),
   afterHandoff: () => Effect.void,
+  finishedExtras: noFinishedExtras,
 })
 
 /**

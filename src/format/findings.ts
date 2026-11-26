@@ -8,7 +8,7 @@
 // info string holds no backtick; the block closes at a fence of the same
 // character at least as long with nothing after it but spaces, or at the
 // end of the message. A fence inside another block is that block's text.
-import { Array, Option, Record, Result, Schema, String, pipe } from "effect"
+import { Array, HashSet, Option, Record, Result, Schema, String, pipe } from "effect"
 import {
   Findings,
   MalformedFindings,
@@ -64,7 +64,8 @@ const decodeFindings = Schema.decodeUnknownResult(
  * Decodes the findings block of a reviewer's final message `text`: the
  * last fenced block whose info string, trimmed, is exactly `json`. Fails
  * with {@link NoFindingsBlock} when there is none, and with
- * {@link MalformedFindings} when its text is not a JSON list of findings.
+ * {@link MalformedFindings} when its text is not a JSON list of findings
+ * or two findings share an id (the reason names the first repeated id).
  * An empty list decodes to no findings. Earlier blocks are not read, so
  * a malformed draft followed by a valid block decodes.
  */
@@ -183,13 +184,50 @@ const groupNamed = (name: string) => (match: RegExpMatchArray) =>
 /** The failure for a message with no json block. */
 const noBlock = () => new NoFindingsBlock()
 
-/** Decodes a block's text, mapping a decode failure to the domain error. */
+/**
+ * Decodes a block's text, mapping a decode failure to the domain error,
+ * and refuses a list in which a finding id repeats (v0.2.0 design,
+ * "Commands and events"): later commands name a finding by its id.
+ */
 const decodeBody = (body: string) =>
-  pipe(decodeFindings(body), Result.mapError(malformed))
+  pipe(decodeFindings(body), Result.mapError(malformed), Result.flatMap(distinctIds))
 
 /** The domain error for a block that does not decode. */
 const malformed = (error: Schema.SchemaError) =>
   new MalformedFindings({ reason: error.message })
+
+/** The findings when every id is distinct; otherwise the first repeated id as {@link MalformedFindings}. */
+const distinctIds = (findings: Findings): Result.Result<Findings, MalformedFindings> =>
+  Option.match(repeatedId(findings), {
+    onNone: () => Result.succeed(findings),
+    onSome: (id) => Result.fail(new MalformedFindings({ reason: `finding id ${id} appears more than once` })),
+  })
+
+/** A pass over the ids: those seen so far and the first repeated one. */
+interface IdScan {
+  readonly seen: HashSet.HashSet<string>
+  readonly repeated: Option.Option<string>
+}
+
+/** The pass before the first finding: no id seen, none repeated. */
+const emptyIdScan: IdScan = { seen: HashSet.empty(), repeated: Option.none() }
+
+/**
+ * The id of the first finding whose id an earlier finding already has,
+ * found in one pass over the list with a set of the ids seen.
+ */
+const repeatedId = (findings: Findings): Option.Option<string> =>
+  Array.reduce(findings, emptyIdScan, scanId).repeated
+
+/** Adds `finding`'s id to the pass; once an id repeats, the pass is done. */
+const scanId = (scan: IdScan, finding: Finding): IdScan =>
+  Option.isSome(scan.repeated) ? scan : seeId(scan, finding.id)
+
+/** Records `id` as seen, or as the repeated id when it was seen before. */
+const seeId = (scan: IdScan, id: string): IdScan =>
+  HashSet.has(scan.seen, id)
+    ? { ...scan, repeated: Option.some(id) }
+    : { ...scan, seen: HashSet.add(scan.seen, id) }
 
 /** The draft's paragraphs after the heading. */
 const draftBody = (findings: Findings): ReadonlyArray<string> =>

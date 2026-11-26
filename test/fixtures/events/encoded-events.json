@@ -215,5 +215,23 @@
     "opId": "op-1",
     "briefPath": "/state/s-1.op-1.brief.md",
     "briefSha256": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+  },
+  {
+    "_tag": "FindingsRecorded",
+    "sessionId": "s-1",
+    "reviewOpId": "op-2",
+    "findings": [
+      {
+        "id": "F1",
+        "severity": "major",
+        "file": "src/example.ts",
+        "summary": "The greeting is not exported."
+      },
+      {
+        "id": "F2",
+        "severity": "minor",
+        "summary": "The changelog has no entry."
+      }
+    ]
   }
 ]

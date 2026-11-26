@@ -9,8 +9,9 @@
 // The file's format version is SQLite's `user_version` header field
 // (dogfood-5): `open` reads it before it opens the file for writing, and
 // again inside the `BEGIN IMMEDIATE` transaction that creates the tables
-// and stamps a ledger at 0 with 1; a ledger stamped newer, or below 0, is
-// refused and left untouched (`openWriter` in `sqlite.ts`).
+// and stamps a ledger at 0 with 1; a ledger stamped newer than
+// `knownLedgerVersion` (1), or below 0, is refused and left untouched
+// (`openWriter` in `sqlite.ts`). The ledger is never raised.
 import type { Database } from "bun:sqlite"
 import { Array as Arr, Effect, Option, pipe, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
@@ -37,7 +38,7 @@ import {
   SpendDown,
   SpendDownCanceled,
 } from "../domain/ledger.ts"
-import type { StoreVersionNewer } from "../domain/store-version.ts"
+import { knownLedgerVersion, type StoreVersionNewer } from "../domain/store-version.ts"
 import { isSqliteBusy, openWriter, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
 
 /** The table names (design "Where the ledger lives"). */
@@ -245,6 +246,7 @@ const storeOf = (db: Database, lock: Semaphore.Semaphore): LedgerStore => ({
 const open = (path: string, busyTimeoutMillis: number) =>
   openWriter<LedgerBusy | LedgerError>({
     path,
+    knownVersion: knownLedgerVersion,
     busyTimeoutMillis,
     schemaSql,
     failure: toFailure,

@@ -20,7 +20,7 @@ import { defaultRoleClients, Roles } from "../domain/roles.ts"
 import { Attestations, Correct } from "../domain/session.ts"
 import type { OpenSession } from "../domain/session-state.ts"
 import { correctBrief } from "../format/brief.ts"
-import { type LaunchPlan, type PrepareInput, runAttempt } from "./attempt.ts"
+import { type LaunchPlan, noFinishedExtras, type PrepareInput, runAttempt } from "./attempt.ts"
 import { claudeDecoded, claudeHandoff, strictText } from "./client-output.ts"
 import { withBriefsIntact } from "./brief-files.ts"
 import { awaitedHandoff, handoffFacts, presumedOnReviewedTree, handoffTextOf, lastEdit, takeSnapshot } from "./handoff-facts.ts"
@@ -73,6 +73,7 @@ const correctPlan = (context: SessionContext, options: CorrectOptions): LaunchPl
   handoff: (_files, lines) => claudeHandoff(lines),
   decode: (lines) => ({ client: claudeDecoded(lines), findings: Option.none() }),
   afterHandoff: () => Effect.void,
+  finishedExtras: noFinishedExtras,
 })
 
 /** The brief, round and batch I's consent events, from recorded inputs, the findings file and the snapshot. */

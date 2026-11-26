@@ -4,17 +4,20 @@
 // mode whose WAL files stay on close, and the store format version
 // (dogfood-5, owner rulings P1 to P3). The version lives in SQLite's
 // `PRAGMA user_version` header field; this module reads it, decodes it
-// with a Schema and hands it to Domain's `decideStoreVersion`. A writer's
-// open (`openWriter`) checks it on a read-only connection first, then
-// again inside the `BEGIN IMMEDIATE` transaction that creates the tables
-// and stamps an unstamped store.
+// with a Schema and hands it, with the store's own known version, to
+// Domain's `decideStoreVersion`. A writer's open (`openWriter`) checks it
+// on a read-only connection first, then again inside the
+// `BEGIN IMMEDIATE` transaction that creates the tables and stamps an
+// unstamped store 1 (`firstStoreVersion`), whatever the store's known
+// version; only the project log's raise (`project-log.ts`) writes a later
+// one.
 import { constants, Database } from "bun:sqlite"
 import { Array as Arr, Effect, Exit, Match, Option, Result, Schema } from "effect"
 import { existsSync } from "node:fs"
 import {
   decideStoreVersion,
+  firstStoreVersion,
   invalidVersionReason,
-  knownStoreVersion,
   type StoreVersionDecision,
   StoreVersionNewer,
   type StoreVersionRefusal,
@@ -148,13 +151,16 @@ export interface StoreVersionRead {
 
 /**
  * Reads `PRAGMA user_version` on `db`, decodes it with a Schema into an
- * integer and asks Domain's `decideStoreVersion` what it allows. A thrown
- * SQLite error or a row that does not decode becomes the store's own
- * error through `failure`. Reads only. Inside a transaction the read is
- * the transaction's, since the field is in the header on page 1.
+ * integer and asks Domain's `decideStoreVersion` what it allows for a
+ * store whose known version is `known` (`knownLedgerVersion` or
+ * `knownLogVersion`). A thrown SQLite error or a row that does not decode
+ * becomes the store's own error through `failure`. Reads only. Inside a
+ * transaction the read is the transaction's, since the field is in the
+ * header on page 1.
  */
 export const readStoreVersion = <E>(
   db: Database,
+  known: number,
   failure: (error: unknown) => E,
 ): Effect.Effect<StoreVersionRead, E> =>
   Effect.flatMap(
@@ -164,61 +170,73 @@ export const readStoreVersion = <E>(
         Effect.mapError(decodeUserVersion(row), failure),
         (decoded): StoreVersionRead => ({
           version: decoded.user_version,
-          decision: decideStoreVersion(decoded.user_version),
+          decision: decideStoreVersion(decoded.user_version, known),
         }),
       ),
   )
 
 /**
- * Whether a store with `decision` may be read and written: an unstamped
- * or current store may, and a newer or negative one is refused with its
- * decision.
+ * Whether a store with `decision` may be read and written: an unstamped,
+ * older readable or current store may, and a newer or negative one is
+ * refused with its decision.
  */
 export const usableVersion = (decision: StoreVersionDecision): Result.Result<void, StoreVersionRefusal> =>
   Match.value(decision).pipe(
     Match.withReturnType<Result.Result<void, StoreVersionRefusal>>(),
-    Match.tag("StoreUnstamped", "StoreCurrent", () => Result.void),
+    Match.tag("StoreUnstamped", "StoreOlderReadable", "StoreCurrent", () => Result.void),
     Match.tag("StoreNewer", (newer) => Result.fail(newer)),
     Match.tag("StoreVersionInvalid", (invalid) => Result.fail(invalid)),
     Match.exhaustive,
   )
 
 /**
- * The failure of the store at `path` for a refused version: a newer one
- * is `StoreVersionNewer`, and a negative one is the store's own error,
- * built by `refused` from ruling P2's reason.
+ * The failure of the store at `path`, whose known version is `known`, for
+ * a refused version: a newer one is `StoreVersionNewer` carrying `known`,
+ * and a negative one is the store's own error, built by `refused` from
+ * ruling P2's reason.
  */
 export const refusalFailure =
-  <E>(path: string, refused: (reason: string) => E) =>
+  <E>(path: string, known: number, refused: (reason: string) => E) =>
   (refusal: StoreVersionRefusal): E | StoreVersionNewer =>
-    Result.match(refusalOutcome(path, refusal), {
+    Result.match(refusalOutcome(path, known, refusal), {
       onSuccess: (newer): E | StoreVersionNewer => newer,
       onFailure: refused,
     })
 
 /**
- * A refusal of the store at `path`, before the store's own error is
- * built: `StoreVersionNewer` for a newer store, or ruling P2's reason for
- * one below 0.
+ * A refusal of the store at `path`, whose known version is `known`, before
+ * the store's own error is built: `StoreVersionNewer` for a newer store,
+ * or ruling P2's reason for one below 0.
  */
-const refusalOutcome = (path: string, refusal: StoreVersionRefusal): Result.Result<StoreVersionNewer, string> =>
+const refusalOutcome = (
+  path: string,
+  known: number,
+  refusal: StoreVersionRefusal,
+): Result.Result<StoreVersionNewer, string> =>
   Match.value(refusal).pipe(
     Match.withReturnType<Result.Result<StoreVersionNewer, string>>(),
-    Match.tag("StoreNewer", (newer) =>
-      Result.succeed(new StoreVersionNewer({ path, found: newer.found, known: knownStoreVersion })),
-    ),
+    Match.tag("StoreNewer", (newer) => Result.succeed(new StoreVersionNewer({ path, found: newer.found, known }))),
     Match.tag("StoreVersionInvalid", (invalid) => Result.fail(invalidVersionReason(invalid.found))),
     Match.exhaustive,
   )
 
-/** Succeeds when `decision` lets the store at `path` be used; otherwise fails as {@link refusalFailure} says. */
-const requireUsable = <E>(path: string, refused: (reason: string) => E, decision: StoreVersionDecision) =>
-  Effect.mapError(Effect.fromResult(usableVersion(decision)), refusalFailure(path, refused))
+/** Succeeds when `decision` lets `store` be used; otherwise fails as {@link refusalFailure} says. */
+const requireUsable = <E>(store: StoreWriter<E>, decision: StoreVersionDecision) =>
+  Effect.mapError(
+    Effect.fromResult(usableVersion(decision)),
+    refusalFailure(store.path, store.knownVersion, store.refused),
+  )
 
 /** What {@link openWriter} needs to know about one store, its own error mapping included. */
 export interface StoreWriter<E> {
   /** The store's database file. */
   readonly path: string
+  /**
+   * The store's own known format version (`knownLedgerVersion` or
+   * `knownLogVersion`), which its version reads are decided against. The
+   * open never stamps it: an unstamped store is stamped 1.
+   */
+  readonly knownVersion: number
   /** How long a statement waits for another connection's lock, in milliseconds. */
   readonly busyTimeoutMillis: number
   /** The `CREATE ... IF NOT EXISTS` statements (and any seed row) that make the store's tables. */
@@ -250,7 +268,7 @@ const timed = <E>(store: StoreWriter<E>, db: Database) =>
 const timedVersion =
   <E>(store: StoreWriter<E>) =>
   (db: Database) =>
-    Effect.andThen(timed(store, db), readStoreVersion(db, store.failure))
+    Effect.andThen(timed(store, db), readStoreVersion(db, store.knownVersion, store.failure))
 
 /**
  * Ruling P1, step 1: when the store's file exists, reads its version on a
@@ -268,7 +286,7 @@ const checkedBeforeWrite = <E>(store: StoreWriter<E>) =>
             timedVersion(store),
             closed,
           ),
-          (read) => requireUsable(store.path, store.refused, read.decision),
+          (read) => requireUsable(store, read.decision),
         )
       : Effect.void,
   )
@@ -304,9 +322,11 @@ const tablesCreated = <E>(store: StoreWriter<E>, db: Database) =>
   })
 
 /**
- * Stamps the store with Domain's `knownStoreVersion` only when `decision`
- * says it read 0. A current store is not written, so opening it commits
- * nothing, and a version a newer release set is never lowered (ruling P1).
+ * Stamps the store with Domain's `firstStoreVersion` (1), its format, only
+ * when `decision` says it read 0; never with the store's known version
+ * (v0.2.0 design, "Constraints"). A store at 1 or above is not written, so
+ * opening it commits nothing, and a version a newer release set is never
+ * lowered (ruling P1).
  */
 const stampedIfUnstamped = <E>(
   store: StoreWriter<E>,
@@ -316,7 +336,7 @@ const stampedIfUnstamped = <E>(
   Match.value(decision).pipe(
     Match.tag("StoreUnstamped", () =>
       attempt(store, () => {
-        db.exec(`PRAGMA user_version = ${String(knownStoreVersion)}`)
+        db.exec(`PRAGMA user_version = ${String(firstStoreVersion)}`)
       }),
     ),
     Match.orElse(() => Effect.void),
@@ -333,8 +353,8 @@ const stampedIfUnstamped = <E>(
  */
 const preparedInTransaction = <E>(store: StoreWriter<E>, db: Database) =>
   Effect.gen(function* () {
-    const read = yield* readStoreVersion(db, store.failure)
-    yield* requireUsable(store.path, store.refused, read.decision)
+    const read = yield* readStoreVersion(db, store.knownVersion, store.failure)
+    yield* requireUsable(store, read.decision)
     yield* tablesCreated(store, db)
     yield* stampedIfUnstamped(store, db, read.decision)
   })
