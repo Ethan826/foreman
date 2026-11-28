@@ -2350,3 +2350,13 @@ coordinator's closed-vocabulary edits, was committed as 76b0a53 on
 `tarlatan/dogfood` and cherry-picked onto `assisted`. About $9.20 of
 Claude usage across dogfood-7 and 7b, the task review (133,895 tokens)
 and five Codex reviews. Slice 2 of the v0.2.0 plan is complete.
+
+## Dogfood-8 (2026-11-28)
+
+Owner authorization (2026-11-28): the full loop for dogfood-8 is
+approved in advance: the fresh task review of the drafted task, folding
+its findings in, committing, `session open`, the waived implement, the
+owner's check, and review and correct rounds to a review with no
+findings, with the standing second-session rule. A finding that needs a
+product decision still goes to the owner, and so do `session close
+--finished` and landing.
