@@ -2290,3 +2290,29 @@ suites, five full runs at load averages 41 to 121) all green, nothing
 left running. Review 3 left F1 (above) and F2 to F5; corrections
 exhausted; rejected, closed abandoned with the worktree kept, and
 [dogfood-6f](2026-11-28-dogfood-6f-task.md) opened.
+
+Finding (2026-11-28, the coordinator's load gate on dogfood-6f): runs 1
+to 4 passed (load average up to about 160); run 5, at a load average of
+238 (the gate's load plus other sessions), failed 18 tests, every one of
+which runs `ps -A` (status through `main`, `processes.test.ts`,
+`spawn.test.ts`, `inherited-pipe.test.ts`), each at its bound (60,000,
+15,000, 30,000 and 15,000 ms); every test that runs only git passed. The
+process listing, which tarlatan's own `status` and launches also run,
+is what stalls at that load: a product limit as well as a test one.
+
+Dogfood-6f session `mx0cjhak-8r97li` on the kept worktree. Implement
+($2.34): the store-wait contract in Domain, F2 to F5. Review 1: the
+busy-timeout test helpers were not the production openers; correction 1
+($0.98) made the openers take an injected connect function. Review 2:
+the seam exceeded the task's "one small export"; the coordinator
+recorded ruling R1 with `ruling add` (the first live use of v0.2.0's
+rulings), authorizing it, and correction 2 ($0.47) finished F5's
+handoff. Review 3 applied R1 and had no findings. Idle durations on the
+final tree, for the constants whose TSDoc still awaits them: process
+listing 281 ms, version read 399 ms, direct git 296 ms, child lock
+141 ms (worktree FIFO not measured). The owner chose to land now and
+file the `ps` limit (finding above) as its own follow-up: list only the
+process groups tarlatan started instead of every process. The session
+closed finished; committed on `tarlatan/dogfood` and cherry-picked onto
+`assisted`. About $22 of Claude usage across 6e and 6f, the task review
+(88,000 tokens) and six Codex reviews.
