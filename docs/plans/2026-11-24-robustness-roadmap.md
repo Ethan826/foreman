@@ -176,6 +176,36 @@ outside the Bash limit ("Agent-run tests"); (5) a model-free probe (the
 probe cost $1.16 against a $0.20 estimate) and `tl init` and
 `tl config check` for onboarding (A2).
 
+### Feedback from the targets (2026-11-26 to 28)
+
+Waxwing's log (`~/Desktop/tarlatan-feedback/waxwing.md`, waxwing-2 and
+waxwing-3 on v0.1.1) and durable-effect's items 11 to 19 with its
+coordinator's report standing in for an owner
+(`~/Desktop/tarlatan-feedback/durable-effect.md`) ask for overlapping
+things. Each want, with where it stands:
+
+| Want | Asked by | Status |
+|---|---|---|
+| Owner override at close; minor findings after the last correction close `finished`, not abandoned | durable-effect 9, 15, 19 and report; Waxwing-3 item 2 | Built on `main` (`overrule`, dogfood-6b); ships in v0.2.0 |
+| Rulings the reviewer sees | durable-effect 8, 14; Waxwing-3 item 2 | Built on `main` (`ruling add`); first live use in dogfood-6f |
+| More rounds when a session converges slowly | durable-effect 15, 19 | v0.2.0 slice 2 (`rounds grant`, `close --unconverged`) |
+| Retry and back up a step | Waxwing-1 | v0.2.0 slice 3 |
+| The coordinator's check results attached to the session and carried into the next brief (command, tree, exit, summary, log path) | Waxwing-2 item 1 (twice, one correction spent); durable-effect 13 and report point 2; dogfood-5 review 3 | New candidate, v0.3.0. Until then `ruling add` can carry a summary of results into every brief, as dogfood-6f did for a coordinator ruling |
+| A logged owner change (paths and reason), shown to the reviewer apart from the agent's diff | Waxwing-2 item 3, Waxwing-3 item 6 | New candidate, v0.3.0 |
+| One shared session record that implementer, reviewer and corrector read | durable-effect report point 2 | Partly met by rulings in every brief; the two items above complete it |
+| The pre-session task review as a `tl` step, its findings and usage recorded | Waxwing-2 item 4 (215k tokens, paid for itself); durable-effect 11, 17 | Already on this roadmap ("Task review and structured rulings", part 1); confirmed as the most valuable step by both targets |
+| A lint at session open: check commands against the allowlist, rulings against each other and against the base | durable-effect 12, 14, 18; Waxwing-3 item 2 ("anywhere" rulings) | New candidate, small; durable-effect's 30-second script is the prototype |
+| Loop-level approval as a feature (approve the plan once, run the loop) | durable-effect report point 1 and 19 | Today a standing owner authorization recorded in each project's plan; a candidate to make a `tl` feature with the run loop |
+| Long checks run by tarlatan between implement and review, results attached | durable-effect 5, 13 and report point 4; Waxwing's 57 to 78 minute verify | Already on this roadmap (A2, the check step); joins the evidence item above |
+| Per-step cost in `status`, and clarity on Claude's repeated result events | Waxwing-2 item 2; durable-effect 19 | New candidate, small |
+| Agent-run tests (named test files) | Waxwing-2 item 2 ($7.62 implement reasoning by hand) | Already on this roadmap ("Agent-run tests") |
+| Check scripts that run every phase and report signal deaths as killed | Waxwing-3 items 4, 5 | The owner's check scripts in `~/.config/tarlatan/`, not tarlatan; noted for the owner |
+| A task review that asks whether the checks a task relies on back the claims made about them | durable-effect owner feedback (de-1) | For the task-review step's brief |
+
+The ledger-honesty point in durable-effect's report (accepted work
+recorded as abandoned four times) is answered by `overrule` and
+`close --unconverged`.
+
 ## Staging and releases (owner, 2026-11-24)
 
 Three streams share the owner's attention and the usage windows:
