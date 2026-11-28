@@ -2360,3 +2360,19 @@ owner's check, and review and correct rounds to a review with no
 findings, with the standing second-session rule. A finding that needs a
 product decision still goes to the owner, and so do `session close
 --finished` and landing.
+
+Owner rulings (2026-11-28) on [the task](2026-11-28-dogfood-8-task.md)
+and [its review](2026-11-28-dogfood-8-task-review.md): B3, `session
+open` and a launch's start fail before their batch when the snapshot,
+its attribute check or the ref write fails; a launch's end always
+appends `Finished` and `ReportRecorded` and adds `SnapshotKept(KeptAtEnd)`
+only on success, status naming the attempt with no kept end tree. I2, a
+review takes a fresh end snapshot and records the tree found, with no
+refusal when it differs from the start. I5, status lists every ref under
+`refs/tarlatan/`, grouped by session, orphans marked, and reports the
+listing skipped when git cannot run. I10, the restore refuses when the
+repository's config sets `core.excludesFile`. Coordinator rulings in
+the task: a fixed `commit-tree` identity (B1), an injected keeping
+capability for the made-up harness (B2), `precheckRestore` and
+`applyRestore` (B4), `KeptRefsRemain` for a failed deletion at `close
+--finished` (I8).
