@@ -131,8 +131,9 @@ export const classifyAttempt = (
  * Whether `outcome` lets the session go on after an attempt of `role`
  * (plan "Outcomes and usable attempts"): `Success` for an implementer or
  * corrector; `Success` or `ChangesRequested` for a reviewer. Every other
- * outcome allows only `ruling add` and `close --abandoned` (decision P11;
- * `ruling add` since v0.2.0, dogfood-6b).
+ * outcome allows only `ruling add`, `rounds grant` and `close --abandoned`
+ * (decision P11; `ruling add` since v0.2.0, dogfood-6b; `rounds grant`
+ * since dogfood-7).
  */
 export const usable = (role: Role, outcome: StepOutcome): boolean =>
   Schema.is(Success)(outcome) ||

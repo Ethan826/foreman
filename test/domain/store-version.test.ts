@@ -6,7 +6,15 @@
 // encoding fixture.
 import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Option, Record, Result, Schema } from "effect"
-import { FindingOverruled, FindingsRecorded, ProjectEvent, RulingAdded } from "../../src/domain/events.ts"
+import {
+  FindingOverruled,
+  FindingsRecorded,
+  ProjectEvent,
+  RoundsGranted,
+  RulingAdded,
+  SessionClosed,
+} from "../../src/domain/events.ts"
+import { CloseKinds, SessionId } from "../../src/domain/session.ts"
 import {
   decideStoreVersion,
   firstStoreVersion,
@@ -115,9 +123,18 @@ describe("raisesLogFormat", () => {
     expect(Arr.length(fixtureEvents)).toBe(Arr.length(ProjectEvent.members))
   })
 
-  it("is true for exactly FindingsRecorded, RulingAdded and FindingOverruled, over every fixture row", () => {
-    const isNewFormat = Schema.is(Schema.Union([FindingsRecorded, RulingAdded, FindingOverruled]))
+  it("is true for exactly FindingsRecorded, RulingAdded, FindingOverruled and RoundsGranted, over every fixture row", () => {
+    const isNewFormat = Schema.is(Schema.Union([FindingsRecorded, RulingAdded, FindingOverruled, RoundsGranted]))
     expect(Arr.map(fixtureEvents, raisesLogFormat)).toEqual(Arr.map(fixtureEvents, (event) => isNewFormat(event)))
-    expect(Arr.length(Arr.filter(fixtureEvents, raisesLogFormat))).toBe(3)
+    expect(Arr.length(Arr.filter(fixtureEvents, raisesLogFormat))).toBe(4)
+  })
+
+  it("is true for a SessionClosed exactly when its close kind is unconverged, which v0.1.1 does not decode", () => {
+    const raisingKinds = Arr.filter(Record.values(CloseKinds), (how) =>
+      raisesLogFormat(
+        new SessionClosed({ sessionId: SessionId.make("s-1"), how, note: "closed", attests: Option.none() }),
+      ),
+    )
+    expect(raisingKinds).toEqual([CloseKinds.Unconverged])
   })
 })

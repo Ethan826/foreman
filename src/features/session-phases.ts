@@ -64,6 +64,17 @@ export const awaitsClose = (state: SessionState): boolean =>
     (Schema.is(ChangesRequested)(state.outcome) && everyFindingOverruled(state.session, state.opId)))
 
 /**
+ * A review that asked for changes awaits its handoff and not every one
+ * of its recorded findings is overruled, so `close --finished` is closed
+ * to it (`close --unconverged`; v0.2.0 design, "The correction limit"). A
+ * review with no `FindingsRecorded`, or with none recorded, qualifies.
+ * With {@link awaitsClose} it splits every review that asked for changes:
+ * exactly one of the two holds.
+ */
+export const awaitsUnconverged = (state: SessionState): boolean =>
+  awaitsCorrection(state) && !awaitsClose(state)
+
+/**
  * A review that asked for changes awaits its handoff and at least one of
  * its recorded findings is overruled, so `review` may run again on the
  * reviewed tree (design, "Closing after overrules").

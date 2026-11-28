@@ -41,12 +41,17 @@ export type Sha256 = typeof Sha256.Type
  * How a session closes (plan "Close rules"): `finished` after a usable
  * review with no changes requested, attested, on the reviewed tree;
  * `abandoned` with no incomplete attempt; `interrupted` once the owner
- * attested the end of every incomplete attempt.
+ * attested the end of every incomplete attempt; `unconverged` (v0.2.0
+ * design, "The correction limit", the design's `notConverged`) when a
+ * review that asked for changes awaits its handoff, not every one of its
+ * recorded findings is overruled, and the session's corrections reached
+ * its limit.
  */
 export const CloseKinds = {
   Finished: "finished",
   Abandoned: "abandoned",
   Interrupted: "interrupted",
+  Unconverged: "unconverged",
 } as const
 /** Schema for a close kind, one of {@link CloseKinds}. */
 export const CloseKind = Schema.Literals(Record.values(CloseKinds))
@@ -98,7 +103,7 @@ export class Implement extends Schema.TaggedClass<Implement>()(
 export class Review extends Schema.TaggedClass<Review>()("Review", {}) {}
 /** `correct`: launches the corrector with the owner's findings file. */
 export class Correct extends Schema.TaggedClass<Correct>()("Correct", {}) {}
-/** `reject`: refuses the awaiting handoff; only `ruling add` and `close --abandoned` remain. */
+/** `reject`: refuses the awaiting handoff; only `ruling add`, `rounds grant` and `close --abandoned` remain. */
 export class Reject extends Schema.TaggedClass<Reject>()("Reject", {}) {}
 /**
  * `step-ended`: the owner attests that attempt `opId`, reserved by grant
@@ -133,6 +138,28 @@ export class Overrule extends Schema.TaggedClass<Overrule>()("Overrule", {
   findingId: Schema.String.check(Schema.isNonEmpty()),
 }) {}
 
+/**
+ * A number of correction rounds the owner grants: a safe integer
+ * (`Schema.Int` refuses any other) of at least 1 (v0.2.0 design, "The
+ * correction limit").
+ */
+export const RoundCount = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))
+
+/**
+ * The owner's reason for a grant of rounds: text with at least one
+ * character that is not whitespace, so never empty or blank.
+ */
+export const GrantNote = Schema.String.check(Schema.isPattern(/\S/))
+
+/**
+ * `rounds grant <n> --note <reason>`: raises the open session's
+ * correction limit by `count` (v0.2.0 design, "The correction limit"). The
+ * note is not part of the command; the rules read only the state.
+ */
+export class GrantRounds extends Schema.TaggedClass<GrantRounds>()("GrantRounds", {
+  count: RoundCount,
+}) {}
+
 /** Schema for any owner command of the assisted session. */
 export const SessionCommand = Schema.Union([
   Status,
@@ -145,6 +172,7 @@ export const SessionCommand = Schema.Union([
   SessionClose,
   AddRuling,
   Overrule,
+  GrantRounds,
 ])
 /** Any owner command; see {@link SessionCommand}. */
 export type SessionCommand = typeof SessionCommand.Type

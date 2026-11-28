@@ -66,10 +66,38 @@ export class TreeChanged extends Schema.TaggedClass<TreeChanged>()(
   { reviewed: Schema.Option(Revision), current: Revision },
 ) {}
 
-/** The session already launched `corrections` corrections, its bound (decision P9). */
+/**
+ * The session already launched `corrections` corrections and reached its
+ * correction limit, `limit`: `maxCorrections` (decision P9) plus every
+ * round the owner granted. `rounds grant` lifts the limit (v0.2.0 design,
+ * "The correction limit").
+ */
 export class CorrectionsExhausted extends Schema.TaggedClass<CorrectionsExhausted>()(
   "CorrectionsExhausted",
-  { corrections: Schema.Int },
+  { corrections: Schema.Int, limit: Schema.Int },
+) {}
+
+/**
+ * `session close --unconverged` while the session's `corrections` are
+ * still below its correction `limit`: a correction may still run, so the
+ * session has not failed to converge (v0.2.0 design, "The correction
+ * limit").
+ */
+export class CorrectionsRemain extends Schema.TaggedClass<CorrectionsRemain>()(
+  "CorrectionsRemain",
+  { corrections: Schema.Int, limit: Schema.Int },
+) {}
+
+/**
+ * `rounds grant` of `count` rounds while the session's grants already
+ * add `granted` rounds: `maxCorrections` plus `granted` plus `count`
+ * would pass `Number.MAX_SAFE_INTEGER`, so the correction limit would no
+ * longer be exact (coordinator's ruling on dogfood-7, finding F2). The
+ * bound is technical only; it sets no product cap on rounds.
+ */
+export class RoundsLimitUnsafe extends Schema.TaggedClass<RoundsLimitUnsafe>()(
+  "RoundsLimitUnsafe",
+  { granted: Schema.Int, count: Schema.Int },
 ) {}
 
 /** Attempt `opId` is not an incomplete attempt of the open session. */
@@ -141,6 +169,8 @@ export const Refusal = Schema.Union([
   SnapshotRefused,
   TreeChanged,
   CorrectionsExhausted,
+  CorrectionsRemain,
+  RoundsLimitUnsafe,
   NotIncomplete,
   WrongGrant,
   AlreadyAttested,

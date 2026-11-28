@@ -1,5 +1,5 @@
 // The production wiring of the owner's exits, `step-ended` and `session
-// close --abandoned | --interrupted` (re-review R02; plan "Commands and
+// close --abandoned | --interrupted | --unconverged` (re-review R02; plan "Commands and
 // their prerequisites", AC1; focused review finding 2). They run no git
 // command, so they are built from only what they use. Their target is
 // settled by `exitTarget` (production-target.ts): the recorded target when
@@ -32,7 +32,7 @@ import { exitTarget, ledgerDirOfTarget } from "./production-target.ts"
 import { preparedStoreDirectories, preparedStoreDirectory } from "./store-directory.ts"
 import type { ExitContext, StepEndedContext } from "./session.ts"
 
-/** What `session close --abandoned | --interrupted` runs with in production: the target in force and the close's context. */
+/** What `session close --abandoned | --interrupted | --unconverged` runs with in production: the target in force and the close's context. */
 export interface ExitProduction {
   /** The recorded target when there is one, else the configured one; nothing is recorded. */
   readonly target: TargetBinding
@@ -74,7 +74,7 @@ export const stepEndedProduction = (
 
 /**
  * The production capabilities of `session close --abandoned |
- * --interrupted`, for the configuration at `configPath`; `environment`
+ * --interrupted | --unconverged`, for the configuration at `configPath`; `environment`
  * supplies `HOME` for the default ledger directory. They stay reachable
  * under a mismatched configuration or a refused configured layout and run
  * on the recorded target (batch review B04, AC1). Opens the project log,

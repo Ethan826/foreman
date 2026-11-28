@@ -11,23 +11,27 @@
 //   reject [--note <text>]
 //   status
 //   step-ended <opId> --grant <grantId>
-//   session close --abandoned|--interrupted [--note <text>]
+//   session close --abandoned|--interrupted|--unconverged [--note <text>]
 //   session close --finished --attest [--note <text>]
 //   ruling add --text <text> [--supersedes <rulingId>]
 //   overrule <findingId> --note <reason>
+//   rounds grant <n> --note <reason>
 //
-// The texts of `ruling add` and `overrule` are required and kept as
-// given, line breaks included; one that is empty or only whitespace is a
-// usage error (v0.2.0, dogfood-6b).
+// The texts of `ruling add`, `overrule` and `rounds grant` are required
+// and kept as given, line breaks included; one that is empty or only
+// whitespace is a usage error (v0.2.0, dogfood-6b, dogfood-7). The count
+// of `rounds grant` is decimal digits with no sign and no leading zero,
+// a safe integer of at least 1; `--attest` goes only with `--finished`.
 import { Array as Arr, Option, Record, Result, Schema, String } from "effect"
 import { GrantId, OpId, RulingId, TrancheId } from "../domain/ids.ts"
-import { CloseKinds } from "../domain/session.ts"
+import { type CloseKind, CloseKinds, RoundCount } from "../domain/session.ts"
 import {
   type CliCommand,
   CloseSession,
   CreateWorktree,
   EndStep,
   FinishSession,
+  GrantRoundsCommand,
   OpenSession,
   OverruleFinding,
   RecordRuling,
@@ -44,6 +48,7 @@ export {
   CreateWorktree,
   EndStep,
   FinishSession,
+  GrantRoundsCommand,
   OpenSession,
   OverruleFinding,
   RecordRuling,
@@ -64,7 +69,7 @@ export interface Invocation {
 }
 
 /** The switches `session close` reads: one kind, and `--attest` for `--finished`. */
-const closeSwitches = ["--abandoned", "--interrupted", "--finished", "--attest"]
+const closeSwitches = ["--abandoned", "--interrupted", "--unconverged", "--finished", "--attest"]
 
 /** The flags one command takes: those with a value and those without. */
 interface FlagSpec {
@@ -95,8 +100,10 @@ export const usage =
   "usage: tarlatan --config <path> (worktree create | session open --tranche <id> --task <path> | " +
   "implement [--waive] | review [--waive] --attest | correct --findings <file> [--waive] --attest | " +
   "reject [--note <text>] | status | step-ended <opId> --grant <grantId> | " +
-  "session close --abandoned|--interrupted [--note <text>] | session close --finished --attest [--note <text>] | " +
-  "ruling add --text <text> [--supersedes <rulingId>] | overrule <findingId> --note <reason>)\n" +
+  "session close --abandoned|--interrupted|--unconverged [--note <text>] | " +
+  "session close --finished --attest [--note <text>] | " +
+  "ruling add --text <text> [--supersedes <rulingId>] | overrule <findingId> --note <reason> | " +
+  "rounds grant <n> --note <reason>)\n" +
   "A launch waits until its client's output closes, and tarlatan never signals a client. If a launch does " +
   "not return after its client exited, a process the client started still holds its output: interrupt " +
   "tarlatan, then run status, step-ended <opId> --grant <grantId>, then session close --interrupted."
@@ -128,6 +135,7 @@ const commands: ReadonlyArray<CommandParser> = [
   [["step-ended"], (rest) => stepEndedOf(rest)],
   [["ruling", "add"], (rest) => Result.flatMap(flagsOf(rest, { valued: ["--text", "--supersedes"], switches: [] }), rulingOf)],
   [["overrule"], (rest) => overruleOf(rest)],
+  [["rounds", "grant"], (rest) => roundsGrantOf(rest)],
 ]
 
 /** The command the words name, parsed with its own flags. */
@@ -184,18 +192,31 @@ const openOf = (flags: Flags) =>
 /** `session close`: exactly one kind; `--attest` only with `--finished`. */
 const closeOf = (flags: Flags) =>
   Arr.match(Arr.filter(flags.switches, (word) => word !== "--attest"), {
-    onEmpty: () => failed("session close needs --abandoned, --interrupted or --finished"),
+    onEmpty: () => failed("session close needs --abandoned, --interrupted, --unconverged or --finished"),
     onNonEmpty: (kinds) =>
       Arr.length(kinds) > 1
-        ? failed("session close takes one of --abandoned, --interrupted and --finished")
+        ? failed("session close takes one of --abandoned, --interrupted, --unconverged and --finished")
         : closeKindOf(Arr.headNonEmpty(kinds), noteOf(flags), Arr.contains(flags.switches, "--attest")),
   })
+
+/**
+ * The owner's exits by their kind flags: the closes that run over
+ * `exitProduction` (see cli.ts). `--finished` is not one of them.
+ */
+const exitKinds: Readonly<Record<string, CloseKind>> = {
+  "--abandoned": CloseKinds.Abandoned,
+  "--interrupted": CloseKinds.Interrupted,
+  "--unconverged": CloseKinds.Unconverged,
+}
 
 /** The close command for one kind flag, with the note and whether `--attest` was given. */
 const closeKindOf = (kind: string, note: string, attest: boolean): Result.Result<CliCommand, UsageError> => {
   if (kind === "--finished") return Result.succeed(new FinishSession({ note, attest }))
   if (attest) return failed("--attest goes only with session close --finished")
-  return Result.succeed(new CloseSession({ how: kind === "--abandoned" ? CloseKinds.Abandoned : CloseKinds.Interrupted, note }))
+  return Option.match(Record.get(exitKinds, kind), {
+    onNone: () => failed(`unknown argument: ${kind}`),
+    onSome: (how) => Result.succeed(new CloseSession({ how, note })),
+  })
 }
 
 /** The `--note` given, or an empty note. */
@@ -265,6 +286,38 @@ const overruleOf = (rest: ReadonlyArray<string>): Result.Result<CliCommand, Usag
         Result.map(requiredText(flags, "--note"), (note) => new OverruleFinding({ findingId, note })),
       ),
   })
+
+/**
+ * A count of rounds as the owner writes it: decimal digits with no sign,
+ * no leading zero and no fraction, read as a safe integer of at least 1.
+ * `02`, `+2`, `2.0` and a number past the safe range are refused.
+ */
+const RoundCountWord = Schema.String.check(Schema.isPattern(/^[1-9][0-9]*$/)).pipe(
+  Schema.decodeTo(Schema.NumberFromString),
+  Schema.decodeTo(RoundCount),
+)
+
+/**
+ * `rounds grant <n> --note <reason>`: the first word is the count (see
+ * {@link RoundCountWord}), then the required, non-blank note.
+ */
+const roundsGrantOf = (rest: ReadonlyArray<string>): Result.Result<CliCommand, UsageError> =>
+  Option.match(Arr.head(rest), {
+    onNone: () => failed("rounds grant needs a count"),
+    onSome: (word) =>
+      Result.flatMap(roundCountOf(word), (count) =>
+        Result.flatMap(flagsOf(Arr.drop(rest, 1), { valued: ["--note"], switches: [] }), (flags) =>
+          Result.map(requiredText(flags, "--note"), (note) => new GrantRoundsCommand({ count, note })),
+        ),
+      ),
+  })
+
+/** The count `word` gives, or a usage error naming the word. */
+const roundCountOf = (word: string): Result.Result<number, UsageError> =>
+  Result.mapError(
+    Schema.decodeUnknownResult(RoundCountWord)(word),
+    () => new UsageError({ message: `rounds grant needs a whole number of at least 1, not ${word}` }),
+  )
 
 /**
  * The value of a required text flag, kept as given; one that is empty or

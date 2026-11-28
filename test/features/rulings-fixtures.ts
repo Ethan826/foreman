@@ -3,10 +3,21 @@
 // overrules. Attempt n has opId op-n, as in session-fixtures.ts; ruling
 // n has id Rn.
 import { Array as Arr, Option } from "effect"
-import { FindingOverruled, FindingsRecorded, type ProjectEvent, RulingAdded } from "../../src/domain/events.ts"
+import {
+  FindingOverruled,
+  FindingsRecorded,
+  type ProjectEvent,
+  RoundsGranted,
+  RulingAdded,
+} from "../../src/domain/events.ts"
 import type { Finding } from "../../src/domain/findings.ts"
 import { RulingId } from "../../src/domain/ids.ts"
+import type { SessionId } from "../../src/domain/session.ts"
 import { opId, sessionId } from "./session-fixtures.ts"
+
+/** The owner's grant of `count` more correction rounds to session `id` (dogfood-7). */
+export const granted = (count: number, id: SessionId = sessionId) =>
+  new RoundsGranted({ sessionId: id, count, note: `${String(count)} more.` })
 
 /** Ruling id `Rn`. */
 export const rulingId = (n: number) => RulingId.make(`R${String(n)}`)

@@ -12,6 +12,7 @@ import { Cause, Console, Effect, Formatter, Match, Option, Result, Schema } from
 import {
   FindingOverruled,
   HandoffRejected,
+  RoundsGranted,
   RulingAdded,
   SessionClosed,
   SessionOpened,
@@ -23,6 +24,7 @@ import { correct } from "../program/correct.ts"
 import { closeFinished, reject } from "../program/handoff.ts"
 import { implement } from "../program/implement.ts"
 import { review } from "../program/review.ts"
+import { grantRounds } from "../program/rounds.ts"
 import { addRuling, overrule } from "../program/rulings.ts"
 import { production, type Production } from "../program/production.ts"
 import {
@@ -77,7 +79,8 @@ export const main = (
  * recorded target whatever the configured layout says and never prepare
  * git's HOME (batch review B04, re-review R02, focused review finding 2):
  * `step-ended` over `stepEndedProduction`, which opens only the log and
- * the lock, and `session close --abandoned | --interrupted` over
+ * the lock, and `session close --abandoned | --interrupted |
+ * --unconverged` over
  * `exitProduction`, which also opens the ledger.
  * Every other command runs over `production`, which refuses a
  * configuration naming another target.
@@ -98,7 +101,7 @@ const executed = (invocation: Invocation, environment: Readonly<Record<string, s
 const runStepEnded = (ended: EndStep) => (env: StepEndedProduction) =>
   printed(StepEndedByOwner, stepEnded(env.context, ended))
 
-/** `session close --abandoned | --interrupted` over its context, its result printed as JSON. */
+/** `session close --abandoned | --interrupted | --unconverged` over its context, its result printed as JSON. */
 const runClose = (close: CloseSession) => (env: ExitProduction) =>
   printed(SessionClosed, closeSession(env.context, close))
 
@@ -119,6 +122,7 @@ const run = (command: Exclude<CliCommand, ShowStatus | EndStep | CloseSession>) 
     Match.tag("FinishSession", (finish) => printed(SessionClosed, closeFinished(env.context, finish))),
     Match.tag("RecordRuling", (ruling) => printed(RulingAdded, addRuling(env.context, ruling))),
     Match.tag("OverruleFinding", (finding) => printed(FindingOverruled, overrule(env.context, finding))),
+    Match.tag("GrantRoundsCommand", (grant) => printed(RoundsGranted, grantRounds(env.context, grant))),
     Match.exhaustive,
   )
 

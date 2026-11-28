@@ -2,7 +2,7 @@
 // session's opening and close, each attempt's recorded brief and report, the
 // snapshots and handoffs between attempts, the review check, the
 // owner's attestation that a step ended, a usable review's findings, and
-// the owner's rulings and overrules (v0.2.0).
+// the owner's rulings, overrules and granted rounds (v0.2.0).
 // Re-exported by events.ts, which holds the union.
 import { Schema } from "effect"
 import { Findings } from "./findings.ts"
@@ -11,7 +11,9 @@ import { Role } from "./roles.ts"
 import {
   Attestation,
   CloseKind,
+  GrantNote,
   RecordedGitIdentity,
+  RoundCount,
   SessionId,
   Sha256,
 } from "./session.ts"
@@ -101,6 +103,21 @@ export class FindingOverruled extends Schema.TaggedClass<FindingOverruled>()("Fi
   findingId: nonEmptyText,
   rulingId: RulingId,
   note: nonEmptyText,
+}) {}
+
+/**
+ * The owner granted `count` more correction rounds to session
+ * `sessionId`, with `note`, never empty or blank, saying why (v0.2.0
+ * design, "The correction limit"; owner ruling of 2026-11-25). `count` is
+ * a safe integer of at least 1. The session's correction limit is
+ * `maxCorrections` plus the counts of its grants; a grant counts only in
+ * its own session. Appended by `rounds grant`. v0.1.1 does not decode
+ * it, so it raises a log at format 1 to 2.
+ */
+export class RoundsGranted extends Schema.TaggedClass<RoundsGranted>()("RoundsGranted", {
+  sessionId: SessionId,
+  count: RoundCount,
+  note: GrantNote,
 }) {}
 
 /**

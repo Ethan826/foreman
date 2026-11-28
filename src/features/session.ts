@@ -13,6 +13,7 @@ import type {
   Intended,
   ProjectEvent,
   ReportRecorded,
+  RoundsGranted,
   RulingAdded,
   SessionClosed,
   SessionOpened,
@@ -65,8 +66,9 @@ interface OpenRunning {
  * its role, outcome and usability. An incomplete attempt outranks a
  * rejection, and a rejection outranks the last finished attempt. The
  * open session also carries its rulings in order with their supersede
- * marks, each usable review's recorded findings and the overruled
- * findings (v0.2.0); none of these changes the state's tag.
+ * marks, each usable review's recorded findings, the overruled findings
+ * and its grants of correction rounds (v0.2.0); none of these changes
+ * the state's tag.
  */
 export const foldSession = (log: ReadonlyArray<ProjectEvent>): SessionFold => ({
   state: stateOf(Arr.reduce(log, initial, step)),
@@ -99,6 +101,7 @@ const openedBy = (opened: SessionOpened): Running => ({
       rulings: [],
       findings: [],
       overrules: [],
+      roundsGranted: [],
     },
     rejected: Option.none(),
   }),
@@ -143,6 +146,7 @@ const openStep = (open: OpenRunning, event: ProjectEvent): OpenRunning =>
     Match.tag("FindingsRecorded", (recorded) => inSession(open, recorded.sessionId, withFindings(recorded))),
     Match.tag("RulingAdded", (added) => inSession(open, added.sessionId, withRuling(added))),
     Match.tag("FindingOverruled", (overruled) => inSession(open, overruled.sessionId, withOverrule(overruled))),
+    Match.tag("RoundsGranted", (granted) => inSession(open, granted.sessionId, withRounds(granted))),
     Match.orElse(() => open),
   )
 
@@ -231,6 +235,15 @@ const withOverrule = (overruled: FindingOverruled) => (open: OpenRunning): OpenR
       findingId: overruled.findingId,
       rulingId: overruled.rulingId,
     }),
+  },
+})
+
+/** Keeps a grant of correction rounds, its count and its note. */
+const withRounds = (granted: RoundsGranted) => (open: OpenRunning): OpenRunning => ({
+  ...open,
+  session: {
+    ...open.session,
+    roundsGranted: Arr.append(open.session.roundsGranted, { count: granted.count, note: granted.note }),
   },
 })
 

@@ -186,7 +186,7 @@ const closedNames = [
   "regular-file", "directory-kind", "symbolic-link", "other-kind",
   "revision-gitattributes", "info-attributes", "core-attributes-file", "conditional-include",
   "has-content", "not-regular", "is-configured", "read-failed",
-  "finished", "abandoned", "interrupted", "quiescence-and-inspection",
+  "finished", "abandoned", "interrupted", "unconverged", "quiescence-and-inspection",
 ]
 const canonicalModules = [
   "src/domain/clients.ts", "src/domain/roles.ts", "src/domain/worktree.ts", "src/domain/attributes.ts",

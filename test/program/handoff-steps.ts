@@ -57,12 +57,23 @@ export const ownerFindings = (harness: Harness) =>
     return findingsFileOf(harness)
   })
 
-/** Runs `correct --findings <owner file> --attest` with `script` playing the corrector. */
-export const corrected = (harness: Harness, script: ClientScript = editing("Hello, Ada.\n", "Named Ada.")) =>
+/** The corrector's edit and handoff in these tests. */
+export const correctorEdit = editing("Hello, Ada.\n", "Named Ada.")
+
+/**
+ * Runs `correct --findings <owner file> --attest` with `script` playing
+ * the corrector, adding `--waive` when the `waive` option is set (off by
+ * default).
+ */
+export const corrected = (
+  harness: Harness,
+  script: ClientScript = correctorEdit,
+  { waive = false }: { readonly waive?: boolean } = {},
+) =>
   Effect.gen(function* () {
     const findingsFile = yield* ownerFindings(harness)
     harness.client.queue.push(script)
-    return yield* correct(harness.context, { findingsFile, waive: false, attest: true })
+    return yield* correct(harness.context, { findingsFile, waive, attest: true })
   })
 
 /** Runs `session close --finished --attest`. */

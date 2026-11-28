@@ -158,4 +158,9 @@ describe("usage", () => {
     expect(usage).toContain("ruling add --text <text> [--supersedes <rulingId>]")
     expect(usage).toContain("overrule <findingId> --note <reason>")
   })
+
+  it("names rounds grant and the unconverged close", () => {
+    expect(usage).toContain("rounds grant <n> --note <reason>")
+    expect(usage).toContain("session close --abandoned|--interrupted|--unconverged [--note <text>]")
+  })
 })

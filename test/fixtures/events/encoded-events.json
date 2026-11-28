@@ -248,5 +248,11 @@
     "findingId": "F2",
     "rulingId": "R3",
     "note": "The changelog is written at release."
+  },
+  {
+    "_tag": "RoundsGranted",
+    "sessionId": "s-1",
+    "count": 2,
+    "note": "The review converges slowly; two more rounds."
   }
 ]

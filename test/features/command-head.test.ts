@@ -2,7 +2,8 @@
 // dogfood-3a): while a session is open, a supervisor HEAD that differs
 // from the session's base refuses `implement`, `review`, `correct` and
 // `session close --finished`, and never `reject`, `step-ended`, `session
-// close --abandoned`, `session close --interrupted` or `status`. A
+// close --abandoned`, `session close --interrupted`, `session close
+// --unconverged` or `status`. A
 // command that read no HEAD passes the rule.
 import { describe, expect, it } from "@effect/vitest"
 import { Array as Arr, Option, String as Str } from "effect"
@@ -34,6 +35,7 @@ import {
   ok,
   refusals,
   reviewClean,
+  twiceCorrected,
   wasClosed,
 } from "./command-fixtures.ts"
 
@@ -66,6 +68,7 @@ const exitCases: ReadonlyArray<Case> = [
   { name: "step-ended", command: new StepEnded({ opId: opId(1), grantId: grantId(1) }), log: implementing, checks: good },
   { name: "close --abandoned", command: new SessionClose({ how: CloseKinds.Abandoned }), log: implemented, checks: good },
   { name: "close --interrupted", command: new SessionClose({ how: CloseKinds.Interrupted }), log: interrupted, checks: good },
+  { name: "close --unconverged", command: new SessionClose({ how: CloseKinds.Unconverged }), log: twiceCorrected, checks: good },
   { name: "status", command: new Status(), log: implemented, checks: good },
 ]
 

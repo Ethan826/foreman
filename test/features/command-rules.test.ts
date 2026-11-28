@@ -167,7 +167,7 @@ describe("correct", () => {
   })
 
   it("refuses a third correction", () => {
-    expect(refusals(new Correct(), twiceCorrected)).toEqual([new CorrectionsExhausted({ corrections: 2 })])
+    expect(refusals(new Correct(), twiceCorrected)).toEqual([new CorrectionsExhausted({ corrections: 2, limit: 2 })])
   })
 })
 

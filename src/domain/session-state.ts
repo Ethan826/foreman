@@ -7,7 +7,7 @@ import { Client } from "./clients.ts"
 import { OpId, Revision, WaiverId } from "./ids.ts"
 import { StepOutcome } from "./outcomes.ts"
 import { Role } from "./roles.ts"
-import { OverruledFinding, Ruling } from "./rulings.ts"
+import { GrantedRounds, OverruledFinding, Ruling } from "./rulings.ts"
 import { CloseKind, SessionId } from "./session.ts"
 import {
   BriefRecorded,
@@ -36,11 +36,14 @@ export type SessionAttempt = typeof SessionAttempt.Type
 /**
  * The facts of an open session: how it was opened, its attempts in log
  * order, its recorded reports, the number of corrections launched (each
- * corrector `Intended`; plan decision P9 bounds it at two), the tree
+ * corrector `Intended`; plan decision P9 sets the default limit at two,
+ * which the owner's `rounds grant` raises), the tree
  * the latest review was given, if a review was handed one, and (v0.2.0)
  * the owner's rulings in session order with their supersede marks, each
- * usable review's recorded findings, and the overruled findings, each
- * named by its review and its finding id together. All are plain arrays
+ * usable review's recorded findings, the overruled findings, each
+ * named by its review and its finding id together, and the session's
+ * grants of correction rounds in log order (`RoundsGranted`; the limit
+ * they raise is computed from them, not stored). All are plain arrays
  * and structs, since `status` prints the state encoded.
  */
 export const OpenSession = Schema.Struct({
@@ -52,6 +55,7 @@ export const OpenSession = Schema.Struct({
   rulings: Schema.Array(Ruling),
   findings: Schema.Array(FindingsRecorded),
   overrules: Schema.Array(OverruledFinding),
+  roundsGranted: Schema.Array(GrantedRounds),
 })
 /** An open session's facts; see {@link OpenSession}. */
 export type OpenSession = typeof OpenSession.Type
@@ -97,9 +101,10 @@ export class Interrupted extends Schema.TaggedClass<Interrupted>()(
  * The last attempt, `opId` in role `role`, finished with `outcome` and
  * waits for the owner's handoff command. `usable` says whether the
  * outcome lets the session go on (plan "Outcomes and usable attempts");
- * an unusable one allows only `ruling add` and `close --abandoned`
- * (decision P11; `ruling add` is allowed in every `AwaitingHandoff`,
- * v0.2.0, dogfood-6b).
+ * an unusable one allows only `ruling add`, `rounds grant` and
+ * `close --abandoned` (decision P11; `ruling add` is allowed in every
+ * `AwaitingHandoff`, v0.2.0, dogfood-6b, and `rounds grant` likewise,
+ * dogfood-7).
  */
 export class AwaitingHandoff extends Schema.TaggedClass<AwaitingHandoff>()(
   "AwaitingHandoff",
@@ -112,7 +117,10 @@ export class AwaitingHandoff extends Schema.TaggedClass<AwaitingHandoff>()(
   },
 ) {}
 
-/** The owner rejected attempt `fromOpId`'s handoff; only `ruling add` and `close --abandoned` remain. */
+/**
+ * The owner rejected attempt `fromOpId`'s handoff; only `ruling add`,
+ * `rounds grant` and `close --abandoned` remain.
+ */
 export class Rejected extends Schema.TaggedClass<Rejected>()("Rejected", {
   session: OpenSession,
   fromOpId: OpId,

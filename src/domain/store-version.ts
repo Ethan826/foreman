@@ -12,6 +12,8 @@
 // itself.
 import { Match, Schema } from "effect"
 import type { ProjectEvent } from "./events.ts"
+import { CloseKinds } from "./session.ts"
+import type { SessionClosed } from "./session-events.ts"
 
 /**
  * The version a store is stamped with when it is unstamped (reads 0) or
@@ -117,11 +119,21 @@ const keepsFormat = () => false
 const needsNewFormat = () => true
 
 /**
+ * A `SessionClosed` raises the log only when its close kind is one v0.1.1
+ * does not decode: `unconverged` (dogfood-7). The other kinds keep the
+ * format.
+ */
+const closeNeedsNewFormat = (closed: SessionClosed): boolean => closed.how === CloseKinds.Unconverged
+
+/**
  * Whether appending `event` raises a project log at format 1 to
  * {@link knownLogVersion}: true exactly for the events v0.1.1 does not
- * decode, which today are `FindingsRecorded`, `RulingAdded` and
- * `FindingOverruled` (v0.2.0 design, "Constraints"). The match names every event tag, so a new event fails
- * to compile until it is classified here.
+ * decode, which today are `FindingsRecorded`, `RulingAdded`,
+ * `FindingOverruled`, `RoundsGranted` and a `SessionClosed` whose close
+ * kind is `unconverged` (v0.2.0 design, "Constraints"; dogfood-7). The
+ * match names every event tag, so a new event fails to compile until it
+ * is classified here; a new value of a closed vocabulary inside a
+ * v0.1.1 event needs its own case, as the close kind has.
  */
 export const raisesLogFormat = (event: ProjectEvent): boolean =>
   Match.valueTags(event, {
@@ -156,11 +168,12 @@ export const raisesLogFormat = (event: ProjectEvent): boolean =>
     HandoffRejected: keepsFormat,
     ReviewChecked: keepsFormat,
     StepEndedByOwner: keepsFormat,
-    SessionClosed: keepsFormat,
+    SessionClosed: closeNeedsNewFormat,
     BriefRecorded: keepsFormat,
     FindingsRecorded: needsNewFormat,
     RulingAdded: needsNewFormat,
     FindingOverruled: needsNewFormat,
+    RoundsGranted: needsNewFormat,
   })
 
 /**

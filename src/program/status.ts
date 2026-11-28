@@ -2,7 +2,8 @@
 // shows the session state, every incomplete attempt with its grant, the
 // holds in place, the armed waivers, the pin check of each client, the
 // worktree check, a HEAD that moved from the open session's base (owner
-// ruling of 2026-11-23), the integrity of each recorded report and brief, the
+// ruling of 2026-11-23), the open session's correction limit (v0.2.0),
+// the integrity of each recorded report and brief, the
 // snapshot coverage statement, and the advisory process evidence for
 // every attempt of the open session, finished ones included. It runs
 // over a `StatusContext`, which holds reads only: no lock, no ledger
@@ -18,6 +19,7 @@ import { ProcessEvidence } from "../domain/process.ts"
 import type { ReportRecorded } from "../domain/session-events.ts"
 import { ArmedWaivers, type SessionAttempt, SessionState } from "../domain/session-state.ts"
 import { HeadMoved, movedHead } from "../features/command-refusals.ts"
+import { correctionLimit } from "../features/command-rules.ts"
 import { processEvidence } from "../features/process-evidence.ts"
 import { openSessionOf } from "../features/session-phases.ts"
 import { foldSession } from "../features/session.ts"
@@ -107,6 +109,12 @@ export const StatusReport = Schema.Struct({
    * worktree check read no HEAD.
    */
   headMoved: Schema.Option(HeadMoved),
+  /**
+   * The open session's correction limit, `maxCorrections` plus its grants
+   * of rounds (v0.2.0 design, "The correction limit"); none with no
+   * session open. The grants themselves are in the state's `roundsGranted`.
+   */
+  correctionLimit: Schema.Option(Schema.Int),
   reports: Schema.Array(ReportIntegrity),
   briefs: Schema.Array(BriefIntegrity),
   evidenceCaveat: Schema.String,
@@ -144,6 +152,7 @@ export const status = (context: StatusContext) =>
         onFailure: (reason) => ({ passed: false, detail: reason }),
       }),
       headMoved: movedHead(fold.state, worktree.head),
+      correctionLimit: Option.map(openSessionOf(fold.state), correctionLimit),
       reports: yield* Effect.forEach(reportsOf(fold.state), (report) => integrityOf(context, report)),
       briefs: yield* Effect.forEach(attemptsOf(fold.state), (attempt) => briefIntegrityOf(context, attempt)),
       evidenceCaveat,

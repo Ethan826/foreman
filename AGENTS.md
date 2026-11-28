@@ -103,7 +103,7 @@ only one Format decoder knows lives in a constant at the top of that
 decoder. Two rules in `eslint.rules.js` enforce this: `Schema.Literals` and
 `Schema.Literal` in `src/` may not take inline literals, and no name in
 `closedNames` may appear as a string literal outside the modules in
-`canonicalModules`. The list has 29 names from nine constants in five
+`canonicalModules`. The list has 30 names from nine constants in five
 modules: `Clients` and `Roles` (`src/domain/clients.ts`, `roles.ts`),
 `WorktreeConditions` (`src/domain/worktree.ts`), `TreeEntryTypes`,
 `FileKinds`, `AttributeSources` and `AttributeRefusalReasons`

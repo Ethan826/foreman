@@ -55,6 +55,14 @@ describe("bun src/facade/main.ts", () => {
     expect(run.stderr).toContain("overrule <findingId> --note <reason>")
   }, entryMillis)
 
+  it("names rounds grant and the unconverged close in the usage it prints", () => {
+    const run = runEntry("--config", "/nonexistent/tarlatan.json", "rounds", "grant", "0", "--note", "x")
+    expect({ error: run.error, status: run.status, stdout: run.stdout }).toEqual({ error: undefined, status: 2, stdout: "" })
+    expect(run.stderr).toContain("rounds grant needs a whole number of at least 1, not 0")
+    expect(run.stderr).toContain("rounds grant <n> --note <reason>")
+    expect(run.stderr).toContain("session close --abandoned|--interrupted|--unconverged [--note <text>]")
+  }, entryMillis)
+
   it("passes the owner's words, after the runtime and script path, to main", () => {
     const run = runEntry("--config", "/nonexistent/tarlatan.json", "bogus")
     expect({ error: run.error, status: run.status, stdout: run.stdout }).toEqual({ error: undefined, status: 2, stdout: "" })

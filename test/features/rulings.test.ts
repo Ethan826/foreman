@@ -37,6 +37,7 @@ const emptySession: OpenSession = {
   rulings: [],
   findings: [],
   overrules: [],
+  roundsGranted: [],
 }
 
 /** The open session the log folds to; fails the test when none is open. */

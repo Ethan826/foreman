@@ -4,7 +4,7 @@
 // Program refuses a handoff without it.
 import { Schema } from "effect"
 import { GrantId, OpId, RulingId, TrancheId } from "../domain/ids.ts"
-import { CloseKind } from "../domain/session.ts"
+import { CloseKind, RoundCount } from "../domain/session.ts"
 
 /** `worktree create`: create and record the supervisor worktree. */
 export class CreateWorktree extends Schema.TaggedClass<CreateWorktree>()("CreateWorktree", {}) {}
@@ -32,7 +32,7 @@ export class RejectHandoff extends Schema.TaggedClass<RejectHandoff>()("RejectHa
 export class ShowStatus extends Schema.TaggedClass<ShowStatus>()("ShowStatus", {}) {}
 /** `step-ended <opId> --grant <grantId>`. */
 export class EndStep extends Schema.TaggedClass<EndStep>()("EndStep", { opId: OpId, grantId: GrantId }) {}
-/** `session close --abandoned|--interrupted [--note <text>]`. */
+/** `session close --abandoned|--interrupted|--unconverged [--note <text>]`. */
 export class CloseSession extends Schema.TaggedClass<CloseSession>()("CloseSession", {
   how: CloseKind,
   note: Schema.String,
@@ -54,10 +54,20 @@ export class OverruleFinding extends Schema.TaggedClass<OverruleFinding>()("Over
   note: Schema.String,
 }) {}
 
+/**
+ * `rounds grant <n> --note <reason>`: the count, a safe integer of at
+ * least 1, and the note as given, non-blank.
+ */
+export class GrantRoundsCommand extends Schema.TaggedClass<GrantRoundsCommand>()("GrantRoundsCommand", {
+  count: RoundCount,
+  note: Schema.String,
+}) {}
+
 /** Any command the CLI reads. */
 export type CliCommand =
   | RecordRuling
   | OverruleFinding
+  | GrantRoundsCommand
   | CreateWorktree
   | OpenSession
   | RunImplement

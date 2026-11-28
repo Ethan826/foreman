@@ -28,6 +28,7 @@ import {
   HandoffRejected,
   ReportRecorded,
   ReviewChecked,
+  RoundsGranted,
   RulingAdded,
   SessionClosed,
   SessionOpened,
@@ -102,6 +103,7 @@ export {
   FindingsRecorded,
   RulingAdded,
   FindingOverruled,
+  RoundsGranted,
 } from "./session-events.ts"
 
 /** Any project log event. */
@@ -142,6 +144,7 @@ export const ProjectEvent = Schema.Union([
   FindingsRecorded,
   RulingAdded,
   FindingOverruled,
+  RoundsGranted,
 ])
 /** Any project log event; see {@link ProjectEvent}. */
 export type ProjectEvent = typeof ProjectEvent.Type

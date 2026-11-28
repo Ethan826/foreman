@@ -1,7 +1,7 @@
 // The owner's session commands that launch nothing (plan "Commands and
 // their prerequisites", "Settlement for owner-ended steps", "Close
 // rules"): `session open`, `step-ended` and `session close --abandoned |
-// --interrupted`. Each takes the lock, reads the log, asks the command
+// --interrupted | --unconverged`. Each takes the lock, reads the log, asks the command
 // rules, and appends one batch. Open needs the worktree check and no
 // non-quota hold; step-ended and close need neither, so the owner's exits
 // stay open when the worktree or a client is broken. `status` is in
@@ -26,14 +26,14 @@ export interface OpenOptions {
 
 /** The owner's options for `session close`. */
 export interface CloseOptions {
-  /** `abandoned` or `interrupted`; `finished` is `closeFinished` in handoff.ts. */
+  /** `abandoned`, `interrupted` or `unconverged`; `finished` is `closeFinished` in handoff.ts. */
   readonly how: CloseKind
   readonly note: string
 }
 
 /**
  * What the owner's exits, `step-ended` and `session close --abandoned |
- * --interrupted`, run over: the log, the ledger, the lock and the
+ * --interrupted | --unconverged`, run over: the log, the ledger, the lock and the
  * project, and nothing that runs git (re-review R02; plan "Commands and
  * their prerequisites"). A `SessionContext` is one, so a test may pass
  * either.
@@ -116,7 +116,7 @@ export const stepEnded = (context: StepEndedContext, options: StepEndedOptions) 
   )
 
 /**
- * `session close --abandoned | --interrupted [--note]`: runs the settle
+ * `session close --abandoned | --interrupted | --unconverged [--note]`: runs the settle
  * step, then, if the close rules allow it, appends `SessionClosed` and a
  * `WaiverExpired` for every armed waiver in one batch. It releases no
  * hold, deletes no file and changes no grant except through settlement.

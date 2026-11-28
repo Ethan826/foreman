@@ -5,13 +5,14 @@
 // client or a file is broken. Program observes the facts in
 // `CommandChecks`; Features only decides, the moved-HEAD rule included
 // (owner ruling of 2026-11-23, dogfood-3a).
-import { Array as Arr, Match, Option, Schema } from "effect"
+import { Array as Arr, Match, Number as Num, Option, Schema } from "effect"
 import type { Client } from "../domain/clients.ts"
 import { type Hold, Quota } from "../domain/holds.ts"
 import type { OpId, Revision } from "../domain/ids.ts"
 import {
   type AddRuling,
   CloseKinds,
+  type GrantRounds,
   type Overrule,
   type SessionClose,
   type SessionCommand,
@@ -26,6 +27,7 @@ import {
 } from "../domain/session-state.ts"
 import {
   CorrectionsExhausted,
+  CorrectionsRemain,
   FindingNotRecorded,
   FindingOverruledAlready,
   HeldBy,
@@ -35,6 +37,7 @@ import {
   PinMismatch,
   Refusal,
   ReportsNotIntact,
+  RoundsLimitUnsafe,
   RulingSuperseded,
   RulingUnknown,
   SnapshotRefused,
@@ -50,6 +53,7 @@ import {
   awaitsCorrection,
   awaitsReReview,
   awaitsReview,
+  awaitsUnconverged,
   awaitsUsable,
   noneOpen,
   openSessionOf,
@@ -59,12 +63,45 @@ import {
 /** The refusal reasons; see command-refusals.ts. */
 export {
   LockNotHeld, WrongState, WorktreeCheckFailed, PinMismatch, HeldBy, ReportsNotIntact, NotAttested,
-  SnapshotRefused, TreeChanged, CorrectionsExhausted, NotIncomplete, WrongGrant, AlreadyAttested,
+  SnapshotRefused, TreeChanged, CorrectionsExhausted, CorrectionsRemain, RoundsLimitUnsafe, NotIncomplete, WrongGrant, AlreadyAttested,
   HeadMoved, RulingUnknown, RulingSuperseded, FindingNotRecorded, FindingOverruledAlready, Refusal,
 } from "./command-refusals.ts"
 
-/** Corrections allowed per session (plan decision P9). */
+/**
+ * Corrections allowed per session before any grant (plan decision P9);
+ * see {@link correctionLimit}.
+ */
 export const maxCorrections = 2
+
+/**
+ * The open session's correction limit (v0.2.0 design, "The correction
+ * limit"): {@link maxCorrections} plus the counts of the session's grants
+ * of rounds, each an owner's `rounds grant`. Only the open session's own
+ * grants count, so a grant never carries into the next session. The
+ * design flags the sum as an invented, trivial algorithm.
+ *
+ * The limit saturates at `Number.MAX_SAFE_INTEGER` (coordinator's ruling
+ * on dogfood-7, finding F4). A log tarlatan writes never exceeds it, though
+ * it may reach it, since the `GrantRounds` rule refuses a grant that
+ * would pass it; a log
+ * edited by hand, with grants whose sum passes it, folds to exactly
+ * `Number.MAX_SAFE_INTEGER`, so the limit is never inexact and the
+ * refusals that carry it still validate.
+ */
+export const correctionLimit = (session: OpenSession): number =>
+  saturated(maxCorrections + roundsGrantedIn(session))
+
+/**
+ * The rounds the open session's grants add, the sum of their counts,
+ * saturated as {@link correctionLimit} is. A sum past
+ * `Number.MAX_SAFE_INTEGER` may be inexact, but it is not below it, so
+ * the saturated result is exact.
+ */
+const roundsGrantedIn = (session: OpenSession): number =>
+  saturated(Arr.reduce(session.roundsGranted, 0, (sum, granted) => sum + granted.count))
+
+/** `n`, or `Number.MAX_SAFE_INTEGER` if `n` is larger. */
+const saturated = (n: number): number => Num.min(n, Number.MAX_SAFE_INTEGER)
 
 /** A snapshot taken for this command: its tree, and whether it passed the raw checks. */
 export interface SnapshotCheck {
@@ -116,18 +153,21 @@ type Rule = (state: SessionState, checks: CommandChecks) => ReadonlyArray<Refusa
  * an open session with no attempt; `review` after a usable implement or
  * correct, or again on the reviewed tree after a review asking for
  * changes once one of its findings is overruled; `correct` after a
- * review asking for changes, at most {@link maxCorrections} times;
+ * review asking for changes, up to the session's
+ * {@link correctionLimit};
  * `reject` while a usable attempt awaits its handoff; `step-ended` for
  * an incomplete attempt and its grant, once; `close` by the close rules;
  * `ruling add` in an open session with no incomplete attempt,
  * superseding only a recorded ruling not yet superseded; `overrule` of a
  * recorded finding, not yet overruled, of a review asking for changes
- * that awaits its handoff (v0.2.0). Every command but `status` needs the
+ * that awaits its handoff (v0.2.0); `rounds grant` in an open session
+ * with no incomplete attempt, while the raised limit stays a safe
+ * integer. Every command but `status` needs the
  * lock; the launches also need the worktree check, a HEAD on the
  * session's base, the pin and no non-quota hold, and each handoff its
  * reports, attestation and snapshot; `close --finished` also needs the
- * HEAD on the base. `ruling add` and `overrule` launch nothing and need
- * no HEAD.
+ * HEAD on the base. `ruling add`, `overrule`, `rounds grant` and
+ * `close --unconverged` launch nothing and need no HEAD.
  */
 export const allowed = (
   command: SessionCommand,
@@ -154,6 +194,7 @@ const rulesFor = (command: SessionCommand): ReadonlyArray<Rule> =>
     Match.tag("SessionClose", (close) => [lock, ...closeRules(close)]),
     Match.tag("AddRuling", (add) => [lock, stateIs(openWithoutIncomplete), supersedable(add)]),
     Match.tag("Overrule", (overrule) => [lock, stateIs(awaitsCorrection), overrulable(overrule)]),
+    Match.tag("GrantRounds", (grant) => [lock, stateIs(openWithoutIncomplete), exactLimit(grant)]),
     Match.exhaustive,
   )
 
@@ -210,18 +251,44 @@ const findingRefusals = (session: OpenSession, reviewOpId: OpId, findingId: stri
       ? [new FindingOverruledAlready({ findingId })]
       : []
 
+/**
+ * `rounds grant`: the raised correction limit, {@link maxCorrections}
+ * plus the session's granted rounds plus the grant's count, stays within
+ * `Number.MAX_SAFE_INTEGER`, so every limit the log can fold to is exact.
+ * It compares the count with the room left, a difference of safe
+ * integers, so the comparison is exact too. Nothing to judge with no
+ * session open, where the state rule refuses.
+ */
+const exactLimit =
+  (grant: GrantRounds): Rule =>
+  (state) =>
+    Option.match(openSessionOf(state), {
+      onNone: () => [],
+      onSome: (session) =>
+        grant.count > Number.MAX_SAFE_INTEGER - correctionLimit(session)
+          ? [new RoundsLimitUnsafe({ granted: roundsGrantedIn(session), count: grant.count })]
+          : [],
+    })
+
 /** `step-ended`'s own rule; see `stepEndedRefusals`. */
 const attestable =
   (ended: StepEnded): Rule =>
   (state) =>
     stepEndedRefusals(ended, state)
 
-/** The close rules for one kind of close. */
+/**
+ * The close rules for one kind of close. `--unconverged` (v0.2.0 design,
+ * "The correction limit") needs a review that asked for changes awaiting
+ * its handoff with not every recorded finding overruled, and the
+ * session's corrections at its limit; like `--abandoned` it needs no
+ * attestation and no HEAD.
+ */
 const closeRules = (close: SessionClose): ReadonlyArray<Rule> =>
   Match.value(close.how).pipe(
     Match.when(CloseKinds.Abandoned, () => [stateIs(openWithoutIncomplete)]),
     Match.when(CloseKinds.Interrupted, () => [stateIs(Schema.is(Interrupted))]),
     Match.when(CloseKinds.Finished, () => [stateIs(awaitsClose), attest, headOnBase, onReviewedTree]),
+    Match.when(CloseKinds.Unconverged, () => [stateIs(awaitsUnconverged), correctionsReached]),
     Match.exhaustive,
   )
 
@@ -282,16 +349,31 @@ const stateIs =
   (accepts: (state: SessionState) => boolean): Rule =>
   (state) => (accepts(state) ? [] : [new WrongState({ state })])
 
-/** Refuses once the session has used its corrections. */
+/** Refuses once the session has used its corrections, up to its {@link correctionLimit}. */
 const correctionsLeft: Rule = (state) =>
   Option.match(Option.filter(openSessionOf(state), usedEveryCorrection), {
     onNone: () => [],
-    onSome: (session) => [new CorrectionsExhausted({ corrections: session.corrections })],
+    onSome: (session) => [
+      new CorrectionsExhausted({ corrections: session.corrections, limit: correctionLimit(session) }),
+    ],
   })
 
-/** Whether the session launched its last allowed correction. */
+/**
+ * `close --unconverged`: refuses while the session's corrections are
+ * below its {@link correctionLimit}. Nothing to judge with no session
+ * open, where the state rule alone refuses.
+ */
+const correctionsReached: Rule = (state) =>
+  Option.match(Option.filter(openSessionOf(state), (session) => !usedEveryCorrection(session)), {
+    onNone: () => [],
+    onSome: (session) => [
+      new CorrectionsRemain({ corrections: session.corrections, limit: correctionLimit(session) }),
+    ],
+  })
+
+/** Whether the session launched its last allowed correction, counting its grants. */
 const usedEveryCorrection = (session: OpenSession): boolean =>
-  session.corrections >= maxCorrections
+  session.corrections >= correctionLimit(session)
 
 /** A snapshot was taken and passed the raw checks. */
 const snapshotPasses: Rule = (_state, checks) =>

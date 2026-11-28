@@ -45,6 +45,7 @@ import {
   FindingsRecorded,
   RulingAdded,
   FindingOverruled,
+  RoundsGranted,
 } from "../../src/domain/events.ts"
 import { Approval, Drift, Failure, Protected, Quota, Uncertain } from "../../src/domain/holds.ts"
 import { LedgerSeq, OpId, Revision, TrancheId, WaiverId } from "../../src/domain/ids.ts"
@@ -167,7 +168,7 @@ const neutralKinds = [
   WorktreeCreated, Rebased, BaseRequested, UnwindRequested, RestoreRequested,
   SessionOpened, ReportRecorded, SnapshotTaken, HandoffApproved, HandoffRejected,
   ReviewChecked, StepEndedByOwner, SessionClosed, BriefRecorded, FindingsRecorded,
-  RulingAdded, FindingOverruled,
+  RulingAdded, FindingOverruled, RoundsGranted,
 ] as const
 const releaseKinds = [Approved, Waived, Released, Adopted, Reconciled, RequestCompleted, ProtectedReleased] as const
 const NeutralEvent = Schema.Union(neutralKinds)

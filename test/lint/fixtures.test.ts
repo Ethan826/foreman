@@ -231,7 +231,7 @@ const dirtyIn = (linted: Linted): ReadonlyArray<string> =>
 layer(lintedFixtures, { timeout: 120_000 })("lint fixtures", (it) => {
   it("each closed vocabulary name has its own line in the bare-names fixture", () => {
     const lines = closedNames.map(nameLine)
-    expect({ unlisted: lines.filter((line) => line === 0), distinct: new Set(lines).size }).toEqual({ unlisted: [], distinct: 29 })
+    expect({ unlisted: lines.filter((line) => line === 0), distinct: new Set(lines).size }).toEqual({ unlisted: [], distinct: 30 })
   })
   it.effect("every fixture is a listed must-fail or a listed clean control", () =>
     Effect.gen(function* () {

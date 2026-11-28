@@ -1,7 +1,8 @@
 // `correct --findings <file> [--waive] --attest` (plan "Slice A2"):
 // Claude corrects the reviewed tree after a review that asked for
-// changes, at most twice per session (decision P9). The launch protocol
-// is attempt.ts; this file is the corrector's plan. Its rules are checked
+// changes, by default at most twice per session (decision P9), a limit
+// the owner's `rounds grant` raises (v0.2.0). The launch protocol is
+// attempt.ts; this file is the corrector's plan. Its rules are checked
 // with the snapshot presumed equal to the reviewed tree before anything
 // is staged; then the attribute check runs again, the snapshot is taken
 // and the rules check that it equals the reviewed tree, so a stale review
