@@ -2339,3 +2339,14 @@ F4, replay of a hand-written log could still overflow (ruled:
 Correction 2 ($0.76), check 1,908 of 1,908. Review 3: F6 to F8, minor;
 under the standing rule, rejected, closed abandoned with the worktree
 kept, and [dogfood-7b](2026-11-28-dogfood-7b-task.md) opened.
+
+Dogfood-7b session on the kept worktree. Implement ($0.46) did F6 to
+F8; review 1: F9, a positional boolean in a shared test helper;
+correction 1 ($0.32); review 2 had no findings; the owner's check passed,
+1,908 of 1,908. Owner ruling (2026-11-28): no product cap on grants;
+the technical safe-integer bound stays. The owner approved the close
+and landing; the session closed finished and the change, with the
+coordinator's closed-vocabulary edits, was committed as 76b0a53 on
+`tarlatan/dogfood` and cherry-picked onto `assisted`. About $9.20 of
+Claude usage across dogfood-7 and 7b, the task review (133,895 tokens)
+and five Codex reviews. Slice 2 of the v0.2.0 plan is complete.
