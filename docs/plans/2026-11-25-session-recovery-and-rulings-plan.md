@@ -227,7 +227,12 @@ corrections counted with `maxCorrections + Σ count`.
   the closed session records `unconverged`.
 - [ ] Implement, document, run the checks.
 
-## Slice 3 (dogfood-8, may split in two): snapshots, the line, restore, retry, back-up
+## Slice 3: snapshots, the line, restore, retry, back-up
+
+Run as two cycles (coordinator, 2026-11-28): dogfood-8 takes tasks 3.1
+and 3.3 (refs and the restore, the git half, no new command);
+dogfood-8b takes 3.2, 3.4 and 3.5 (the line, back-up, retry: the fold
+half, which needs the retry and back-up events to mean anything).
 
 ### Task 3.1: snapshots kept by ref
 
