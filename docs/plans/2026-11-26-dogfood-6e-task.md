@@ -26,7 +26,7 @@ launches, each with attribute and snapshot git work,
 `handoff-refusals.test.ts:157-166`). Do not look for the cause in `src/`
 for speed.
 
-### Owner rulings for this task (proposed; the owner confirms)
+### Owner rulings for this task (confirmed by the owner 2026-11-27; do not reopen)
 
 1. **Scope.** Every test that runs real git, `ps` or a child process and
    has no explicit timeout. List them first, in the handoff, with how

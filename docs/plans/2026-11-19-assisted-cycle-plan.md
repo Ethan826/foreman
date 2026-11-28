@@ -2260,3 +2260,12 @@ session closed finished and the change was committed as 3eb6ead on
 `tarlatan/dogfood` and cherry-picked onto `assisted`. About $10.60 of
 Claude usage across dogfood-6b and 6d, the task review (165,991 tokens)
 and four Codex reviews. Slice 1 of the v0.2.0 plan is complete.
+
+## Dogfood-6e (2026-11-27)
+
+Owner rulings (2026-11-27) on [the task](2026-11-26-dogfood-6e-task.md)
+and [its review](2026-11-26-dogfood-6e-task-review.md): the scope is
+every test that runs real git, `ps` or a child process with no explicit
+timeout; no explicit timeout above `endToEndMillis` (60,000 ms) without
+the owner; the 1,500 ms speed claim in `status-read-only.test.ts` is left
+out and filed as a follow-up.
