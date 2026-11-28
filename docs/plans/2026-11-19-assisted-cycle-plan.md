@@ -2324,3 +2324,18 @@ names `rounds grant` in its message" is met by the refusal carrying
 `limit` beside `corrections` and the facade README documenting that
 `rounds grant` lifts the limit; refusals keep printing structured
 fields only.
+
+Dogfood-7 session `mx0n3y2l-m65h1q` on base 379b9fe, with the
+coordinator's closed-vocabulary edits staged (`unconverged` in
+`closedNames`, the bare-names fixture, AGENTS.md's count). Implement
+($6.08); the owner's check failed one new test whose setup launched
+without a waiver. Review 1: F1, an unconverged `SessionClosed` did not
+raise the log's format, so v0.1.1 would have hit a decode error; F2, a
+huge grant made the limit inexact (the coordinator ruled the technical
+safe-integer bound, `RoundsLimitUnsafe`; a product cap is the owner's);
+F3, README lists. Correction 1 ($1.61), check 1,904 of 1,904. Review 2:
+F4, replay of a hand-written log could still overflow (ruled:
+`correctionLimit` saturates); F5, "two" described as a hard cap.
+Correction 2 ($0.76), check 1,908 of 1,908. Review 3: F6 to F8, minor;
+under the standing rule, rejected, closed abandoned with the worktree
+kept, and [dogfood-7b](2026-11-28-dogfood-7b-task.md) opened.
