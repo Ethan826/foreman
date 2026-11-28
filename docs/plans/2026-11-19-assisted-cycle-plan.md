@@ -2269,3 +2269,24 @@ every test that runs real git, `ps` or a child process with no explicit
 timeout; no explicit timeout above `endToEndMillis` (60,000 ms) without
 the owner; the 1,500 ms speed claim in `status-read-only.test.ts` is left
 out and filed as a follow-up.
+
+Owner rulings (2026-11-28, dogfood-6e review 3): F1, the SQLite
+busy-wait claim rests on SQLite's documented `busy_timeout` behaviour
+instead of a timing test, provided the dependency is inverted: the
+waiting behaviour is a contract of the store interfaces in Domain
+(`LedgerStore`, and `ProjectLog` where it applies), the SQLite adapters
+document how they meet it and prove their configuration through their
+own seam, and another database would supply its own evidence against
+the same contract. Also approved: `endToEndMillis` may go to 120,000 ms
+if needed; not needed now (the slowest end-to-end test took 25,565 ms
+under the final load gate).
+
+Dogfood-6e session `mwzwl15t-vjdpsx` on base dc568e7. Implement ($8.53),
+two corrections ($6.71, $1.65), three reviews. The coordinator's gate
+on the final tree: the owner's check 1,826 of 1,826; the inherited-pipe
+counterexample (a 3-second delay fails both old tests, passes both new
+ones); idle durations measured; the load gate (30 `yes`, two concurrent
+suites, five full runs at load averages 41 to 121) all green, nothing
+left running. Review 3 left F1 (above) and F2 to F5; corrections
+exhausted; rejected, closed abandoned with the worktree kept, and
+[dogfood-6f](2026-11-28-dogfood-6f-task.md) opened.
