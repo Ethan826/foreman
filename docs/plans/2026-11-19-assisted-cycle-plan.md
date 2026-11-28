@@ -2316,3 +2316,11 @@ process groups tarlatan started instead of every process. The session
 closed finished; committed on `tarlatan/dogfood` and cherry-picked onto
 `assisted`. About $22 of Claude usage across 6e and 6f, the task review
 (88,000 tokens) and six Codex reviews.
+
+## Dogfood-7 (2026-11-28)
+
+Owner ruling (2026-11-28, task review I7): the design's "`CorrectionsExhausted`
+names `rounds grant` in its message" is met by the refusal carrying
+`limit` beside `corrections` and the facade README documenting that
+`rounds grant` lifts the limit; refusals keep printing structured
+fields only.
