@@ -26,11 +26,12 @@ import { Success } from "../../src/domain/outcomes.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { CloseKinds } from "../../src/domain/session.ts"
 import { addRuling, overrule } from "../../src/program/rulings.ts"
+import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { codexReviewClean } from "../fixtures/clients/codex-review-clean.ts"
 import { codexReviewTwoFindings } from "../fixtures/clients/codex-review-two-findings.ts"
 import { attestedReview } from "./handoff-commands.ts"
 import { afterImplement, corrected, eventsWhere, finished, implemented, reviewed, sessionIdOf } from "./handoff-steps.ts"
-import { eventsOf, type Harness, logBatch, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, logBatch, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { opened, refusedFor } from "./session-steps.ts"
 
 const id = (n: number) => RulingId.make(`R${String(n)}`)
@@ -113,11 +114,12 @@ const everyBriefListsRulings = (harness: Harness) =>
 
 /** The `briefSha256` of the implement brief, in a fresh session, after `ruling add` when `withRuling`. */
 const implementSha = (withRuling: boolean) =>
-  withHarness({ repository: true }, (harness) =>
+  withHarness({}, (harness) =>
     Effect.gen(function* () {
       yield* opened(harness)
       if (withRuling) yield* ruling(harness, "Greet the world.")
-      yield* implemented(harness)
+      yield* implemented(harness, claudeSuccess)
+      expect(harness.gitCalls).toEqual([])
       return (yield* lastWhere(harness, Schema.is(BriefRecorded))).briefSha256
     }),
   )
@@ -223,28 +225,28 @@ const supersessionShownInReReview = (harness: Harness) =>
 
 describe("ruling add and overrule through the Program", () => {
   it.effect("number rulings R1, R2, R3 across ruling add, overrule, ruling add, and quote the finding exactly", () =>
-    withHarness({ repository: true }, idsCountEveryRuling),
+    withHarness({ repository: true }, idsCountEveryRuling), repositoryHarnessMillis,
   )
   it.effect("every brief kind lists every ruling, the superseded one marked in every later brief", () =>
-    withHarness({ repository: true }, everyBriefListsRulings),
+    withHarness({ repository: true }, everyBriefListsRulings), repositoryHarnessMillis,
   )
   it.effect("the recorded brief hash differs once a ruling is added", () => hashCoversRulings)
   it.effect("superseding an overrule's ruling leaves the finding overruled, and close --finished allowed", () =>
-    withHarness({ repository: true }, overruleStandsAfterSupersession),
+    withHarness({ repository: true }, overruleStandsAfterSupersession), repositoryHarnessMillis,
   )
 })
 
 describe("review again after an overrule, through the Program", () => {
   it.effect("runs on the reviewed tree with batch I [SnapshotTaken, ReviewChecked, HandoffApproved, Intended] and the last edit's handoff", () =>
-    withHarness({ repository: true }, reReviewRuns),
+    withHarness({ repository: true }, reReviewRuns), repositoryHarnessMillis,
   )
   it.effect("after a correction, keeps round 1 and takes the corrector's handoff", () =>
-    withHarness({ repository: true }, reReviewAfterCorrection),
+    withHarness({ repository: true }, reReviewAfterCorrection), repositoryHarnessMillis,
   )
   it.effect("is refused before an overrule, and with TreeChanged on a changed tree after one", () =>
-    withHarness({ repository: true }, reReviewRefusedOnChangedTree),
+    withHarness({ repository: true }, reReviewRefusedOnChangedTree), repositoryHarnessMillis,
   )
   it.effect("shows the superseded overrule ruling in the re-review's brief", () =>
-    withHarness({ repository: true }, supersessionShownInReReview),
+    withHarness({ repository: true }, supersessionShownInReReview), repositoryHarnessMillis,
   )
 })

@@ -15,7 +15,7 @@ import { writeFileSync } from "node:fs"
 import { Revision } from "../../src/domain/ids.ts"
 import { pinnedGitWith, startGit, type RecordedGitIdentity, type RunGit } from "../../src/runtime/git.ts"
 import { addWorktreeWith } from "../../src/runtime/worktree.ts"
-import { cleanRun, emptyHome, git, gitWith, makeRepo, withRepo } from "./git-repo.ts"
+import { cleanRun, emptyHome, git, gitWith, makeRepo, repositoryMillis, withRepo } from "./git-repo.ts"
 import { withParentEnvironment } from "./parent-environment.ts"
 
 /** The runner under test: the pinned runner over the real process call. */
@@ -108,21 +108,24 @@ describe("the pinned runner reads the recorded worktree after a redirection", ()
   it.effect(
     "control: with the .git file naming the decoy, the clean runner reads the decoy's HEAD and config",
     reads(dotGitFile, throughClean, { head: "refs/heads/main", where: "decoy", untracked: "only-in-supervisor" }),
+    repositoryMillis,
   )
   it.effect("with the .git file naming the decoy, the pinned runner reads the recorded worktree",
-    reads(dotGitFile, throughPinned, supervisorReadings))
+    reads(dotGitFile, throughPinned, supervisorReadings), repositoryMillis)
   it.effect(
     "control: with commondir naming the decoy, the clean runner reads the decoy's config",
     reads(commondirFile, throughClean, { ...supervisorReadings, where: "decoy" }),
+    repositoryMillis,
   )
   it.effect("with commondir naming the decoy, the pinned runner reads the recorded config",
-    reads(commondirFile, throughPinned, supervisorReadings))
+    reads(commondirFile, throughPinned, supervisorReadings), repositoryMillis)
   it.effect(
     "control: with core.worktree naming the decoy, the clean runner reads the decoy's files",
     reads(coreWorktree, throughClean, { ...supervisorReadings, untracked: "only-in-decoy" }),
+    repositoryMillis,
   )
   it.effect("with core.worktree naming the decoy, the pinned runner reads the recorded work tree",
-    reads(coreWorktree, throughPinned, supervisorReadings))
+    reads(coreWorktree, throughPinned, supervisorReadings), repositoryMillis)
 })
 
 /** Runs `use` with GIT_DIR, GIT_WORK_TREE and GIT_COMMON_DIR naming the decoy, and one parent-only variable. */
@@ -194,9 +197,10 @@ const pinnedChildRecorded = (dir: string, owner: string) =>
   })
 
 describe("an inherited GIT_DIR, GIT_WORK_TREE and GIT_COMMON_DIR", () => {
-  it.effect("control: the inherited runner reads the decoy", () => withRepo(inheritedReadsDecoy))
-  it.effect("the pinned runner still reads the recorded worktree", () => withRepo(pinnedReadsRecorded))
-  it.effect("control: the inherited runner's child sees the parent-only variable", () => withRepo(inheritedChildLeaks))
+  it.effect("control: the inherited runner reads the decoy", () => withRepo(inheritedReadsDecoy), repositoryMillis)
+  it.effect("the pinned runner still reads the recorded worktree", () => withRepo(pinnedReadsRecorded), repositoryMillis)
+  it.effect("control: the inherited runner's child sees the parent-only variable", () =>
+    withRepo(inheritedChildLeaks), repositoryMillis)
   it.effect("the pinned runner's child has the recorded values and no parent-only variable", () =>
-    withRepo(pinnedChildRecorded))
+    withRepo(pinnedChildRecorded), repositoryMillis)
 })

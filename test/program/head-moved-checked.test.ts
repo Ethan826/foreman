@@ -26,7 +26,7 @@ import { status } from "../../src/program/status.ts"
 import { worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit } from "../../src/runtime/git.ts"
 import { emptyCommit, emptyHome, git } from "../runtime/git-repo.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { append, opened, quotaHold } from "./session-steps.ts"
 
 /** The Claude waiver these tests arm. */
@@ -165,9 +165,9 @@ describe("a failed HEAD read beside refused attribute sources", () => {
 
 describe("a moved HEAD beside an attribute source that could not be read", () => {
   it.effect("status shows the unread source and the moved HEAD, and writes nothing", () =>
-    withHarness({ repository: true }, statusShowsUnreadAndMoved),
+    withHarness({ repository: true }, statusShowsUnreadAndMoved), repositoryHarnessMillis,
   )
   it.effect("a launch stops with AttributeSourcesUnread and keeps the waiver", () =>
-    withHarness({ repository: true }, launchStopsUnread),
+    withHarness({ repository: true }, launchStopsUnread), repositoryHarnessMillis,
   )
 })

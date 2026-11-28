@@ -22,7 +22,7 @@ import { worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type StartGit } from "../../src/runtime/git.ts"
 import { emptyHome, git } from "../runtime/git-repo.ts"
 import { afterImplement } from "./handoff-steps.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { append, opened, quotaHold } from "./session-steps.ts"
 
 const waiverOf: Readonly<Record<Client, WaiverId>> = {
@@ -186,18 +186,18 @@ const candidateRefusalExpires = (harness: Harness) =>
 
 describe("a failed attribute read that is the only reason to stop keeps the waiver", () => {
   it.effect("at startup, an unreadable info/attributes stops implement as unread", () =>
-    withHarness({ repository: true }, startupUnreadKeeps),
+    withHarness({ repository: true }, startupUnreadKeeps), repositoryHarnessMillis,
   )
   it.effect("in the candidate check, a cat-file that exits non-zero stops review as unread", () =>
-    withHarness({ repository: true }, candidateUnreadKeeps),
+    withHarness({ repository: true }, candidateUnreadKeeps), repositoryHarnessMillis,
   )
 })
 
 describe("a refused source that was read expires the waiver beside a failed read", () => {
   it.effect("at startup, a configured core.attributesFile beside an unreadable info/attributes", () =>
-    withHarness({ repository: true }, startupRefusalExpires),
+    withHarness({ repository: true }, startupRefusalExpires), repositoryHarnessMillis,
   )
   it.effect("in the candidate check, `* text` beside a blob that could not be read", () =>
-    withHarness({ repository: true }, candidateRefusalExpires),
+    withHarness({ repository: true }, candidateRefusalExpires), repositoryHarnessMillis,
   )
 })

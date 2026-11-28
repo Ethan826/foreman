@@ -21,6 +21,13 @@ import {
   type ClientLaunch,
   type RunningClient,
 } from "../../src/runtime/spawn.ts"
+import {
+  boundedReleaseLoop,
+  clientStartMillis,
+  noListing,
+  startClientWithoutListing,
+  startRealClient,
+} from "./client-start.ts"
 
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
@@ -33,12 +40,17 @@ const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>)
       }),
   )
 
-/** A test that runs `body` in a fresh temporary directory. */
+/** A test that runs `body` in a fresh temporary directory, within the client starter's time budget. */
 const inDirectory = (name: string, body: (dir: string) => Effect.Effect<void, unknown>) => {
-  it.effect(name, () => withTemporaryDirectory(body))
+  it.effect(name, () => withTemporaryDirectory(body), clientStartMillis)
 }
 
-const startClient = startClientWith(readProcesses, startTimeOf)
+/**
+ * The starter of every test here whose fact is neither the listing nor
+ * the start time: it starts no `ps` (correction 2, finding F3). The
+ * process-group and start-time test keeps the real listing.
+ */
+const startClient = startClientWithoutListing
 const plainEnvironment = { PATH: "/usr/bin:/bin" }
 
 /** A launch of `argv` in `dir` with the plain environment, raw output at `<dir>/raw`. */
@@ -57,8 +69,26 @@ const runToEnd = (launch: ClientLaunch) =>
     return { running, lines, exit }
   })
 
-/** A shell loop that runs until the file named by `$1` exists. */
-const waitForRelease = 'while [ ! -e "$1" ]; do sleep 0.05; done'
+/** A shell loop that runs until the file named by `$1` exists, or ends on its own after the test's time budget. */
+const waitForRelease = boundedReleaseLoop(clientStartMillis)
+
+/** The release file of a test in `dir`. */
+const releaseIn = (dir: string) => `${dir}/release`
+
+/**
+ * Runs `use` with the release file of `dir`, and creates that file
+ * however `use` ends. The cleanup is installed before the client starts,
+ * so a test interrupted between the spawn and the start's return, while
+ * the start's `ps -A` runs, still releases the loop it started; the
+ * loop's own bound ends it should the directory be gone first.
+ */
+const withRelease = <A, E>(dir: string, use: (release: string) => Effect.Effect<A, E>) =>
+  Effect.ensuring(
+    use(releaseIn(dir)),
+    Effect.sync(() => {
+      writeFileSync(releaseIn(dir), "")
+    }),
+  )
 
 /** Creates the release file, then waits for the client's exit, whatever `use` did. */
 const releasing = <A, E>(running: RunningClient, release: string, use: Effect.Effect<A, E>) =>
@@ -72,11 +102,12 @@ const releasing = <A, E>(running: RunningClient, release: string, use: Effect.Ef
     ),
   )
 
-const leadsNewGroup = (dir: string) =>
+const leadsNewGroup = (dir: string) => withRelease(dir, (release) => leadsNewGroupReleasing(dir, release))
+
+const leadsNewGroupReleasing = (dir: string, release: string) =>
   Effect.gen(function* () {
-    const release = `${dir}/release`
     const script = `echo $$; /bin/ps -o pgid= -p $$; ${waitForRelease}`
-    const running = yield* startClient(launchIn(dir, ["/bin/sh", "-c", script, "leader", release]))
+    const running = yield* startRealClient(launchIn(dir, ["/bin/sh", "-c", script, "leader", release]))
     const readListing = Effect.flatMap(readProcesses(), (text) => Effect.fromResult(decodePs(text)))
     const listed = yield* releasing(running, release, readListing)
     const lines = textsOf(yield* Stream.runCollect(running.lines))
@@ -144,9 +175,10 @@ const reportsSignal = (dir: string) =>
     expect(exit).toEqual({ code: Option.none(), signal: Option.some("SIGTERM") })
   })
 
-const signalsNothing = (dir: string) =>
+const signalsNothing = (dir: string) => withRelease(dir, (release) => signalsNothingReleasing(dir, release))
+
+const signalsNothingReleasing = (dir: string, release: string) =>
   Effect.gen(function* () {
-    const release = `${dir}/release`
     const trap = `trap 'echo signaled > "${dir}/signaled"; exit 9' HUP INT QUIT TERM USR1 USR2 PIPE`
     const script = `${trap}; echo ready; ${waitForRelease}`
     const running = yield* startClient(launchIn(dir, ["/bin/sh", "-c", script, "trapping", release]))
@@ -212,7 +244,7 @@ const failingClose = {
 
 const exitFailsWhenRawWriteFails = (dir: string) =>
   Effect.gen(function* () {
-    const start = startClientOver(failingAppend)(readProcesses, startTimeOf)
+    const start = startClientOver(failingAppend)(noListing, startTimeOf)
     const running = yield* start(launchIn(dir, ["/usr/bin/seq", "1", "3"]))
     expect(textsOf(yield* Stream.runCollect(running.lines))).toEqual(["1", "2", "3"])
     const failure = yield* Effect.flip(running.exit)
@@ -222,7 +254,7 @@ const exitFailsWhenRawWriteFails = (dir: string) =>
 
 const exitFailsWhenRawCloseFails = (dir: string) =>
   Effect.gen(function* () {
-    const running = yield* startClientOver(failingClose)(readProcesses, startTimeOf)(launchIn(dir, ["/bin/echo", "x"]))
+    const running = yield* startClientOver(failingClose)(noListing, startTimeOf)(launchIn(dir, ["/bin/echo", "x"]))
     expect(Schema.is(RawOutputFailed)(yield* Effect.flip(running.exit))).toBe(true)
     expect(readFileSync(`${dir}/raw`, "utf8")).toBe("x\n")
   })

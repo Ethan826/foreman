@@ -21,6 +21,19 @@ const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>)
       }),
   )
 
+/**
+ * The time budget, in milliseconds, of every test here (dogfood-6e, owner
+ * ruling of 2026-11-27). Each starts, or tries to start, one fake client
+ * script and claims nothing about speed; a process start took seconds
+ * while other sessions kept the load average between 75 and 200.
+ *
+ * What it bounds: the longest test, the first, starts one `sh` script,
+ * which runs `pwd` and `env`; no git and no `ps`. Idle duration: awaiting
+ * the coordinator's measurement on the dogfood-6f snapshot; this file is
+ * not among the measurements of 2026-11-28.
+ */
+const versionReadMillis = 15_000
+
 /** Writes `<dir>/bin/<name>` as a script with `body` and returns `<dir>/bin`. */
 const fakeClient = (dir: string, name: string, body: string) => {
   mkdirSync(`${dir}/bin`)
@@ -68,9 +81,12 @@ const failsWhenSignaled = (dir: string) =>
 
 describe("readClientVersionWith", () => {
   it.effect("runs `<client> --version` in the directory with exactly the given environment", () =>
-    withTemporaryDirectory(reportsOutputAndEnvironment),
+    withTemporaryDirectory(reportsOutputAndEnvironment), versionReadMillis,
   )
-  it.effect("returns a non-zero exit with its output", () => withTemporaryDirectory(keepsNonZeroExit))
-  it.effect("fails when the client is not on the given PATH", () => withTemporaryDirectory(failsWhenNotOnPath))
-  it.effect("fails when a signal ends the client", () => withTemporaryDirectory(failsWhenSignaled))
+  it.effect("returns a non-zero exit with its output", () =>
+    withTemporaryDirectory(keepsNonZeroExit), versionReadMillis)
+  it.effect("fails when the client is not on the given PATH", () =>
+    withTemporaryDirectory(failsWhenNotOnPath), versionReadMillis)
+  it.effect("fails when a signal ends the client", () =>
+    withTemporaryDirectory(failsWhenSignaled), versionReadMillis)
 })

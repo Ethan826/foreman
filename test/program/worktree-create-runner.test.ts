@@ -11,7 +11,7 @@ import { GitCommandFailed, PathUnreadable, WorktreeNotAsCreated, WorktreePathNot
 import { createWorktreeWith } from "../../src/program/worktree.ts"
 import type { GitOutput, RunGit } from "../../src/runtime/git.ts"
 import { revParseArgs } from "../../src/runtime/worktree.ts"
-import { cleanRun, git, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
+import { cleanRun, git, repositoryMillis, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
 
 const request = (owner: string, path: string) => ({
   ownerCheckout: owner,
@@ -151,17 +151,22 @@ const createdWithDashSegment = (dir: string, owner: string) =>
   })
 
 describe("createWorktree over an injected runner", () => {
-  it.effect("fails when the top level is not the requested path, and leaves the worktree", () => withRepo(refusesOtherToplevel))
+  it.effect("fails when the top level is not the requested path, and leaves the worktree", () =>
+    withRepo(refusesOtherToplevel), repositoryMillis)
 
-  it.effect("fails when HEAD is not refs/heads/tarlatan/<name>", () => withRepo(refusesOtherHead))
+  it.effect("fails when HEAD is not refs/heads/tarlatan/<name>", () => withRepo(refusesOtherHead), repositoryMillis)
 
-  it.effect("keeps git's args, exit code and stderr when a race defeats the branch precheck", () => withRepo(raceKeepsGitDetails))
+  it.effect("keeps git's args, exit code and stderr when a race defeats the branch precheck", () =>
+    withRepo(raceKeepsGitDetails), repositoryMillis)
 
-  it.effect("fails with PathUnreadable under an unsearchable parent and never runs the add", () => withRepo(unreadablePathRefused))
+  it.effect("fails with PathUnreadable under an unsearchable parent and never runs the add", () =>
+    withRepo(unreadablePathRefused), repositoryMillis)
 
-  it.effect("refuses a relative path before running git", () => withRepo(notAbsoluteRefused("worktree")))
+  it.effect("refuses a relative path before running git", () => withRepo(notAbsoluteRefused("worktree")), repositoryMillis)
 
-  it.effect("refuses a dash-prefixed path before running git", () => withRepo(notAbsoluteRefused("-worktree")))
+  it.effect("refuses a dash-prefixed path before running git", () =>
+    withRepo(notAbsoluteRefused("-worktree")), repositoryMillis)
 
-  it.effect("creates an absolute path whose last segment starts with a dash, after --", () => withRepo(createdWithDashSegment))
+  it.effect("creates an absolute path whose last segment starts with a dash, after --", () =>
+    withRepo(createdWithDashSegment), repositoryMillis)
 })

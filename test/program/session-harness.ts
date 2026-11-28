@@ -99,6 +99,33 @@ export const defaults: HarnessOptions = {
 
 export { type Injections, type TraceEntry, ledgerRows, logBatch, published, started } from "./session-tracing.ts"
 
+/**
+ * The time budget, in milliseconds, of every test over
+ * `withHarness({ repository: true })` (dogfood-6e, owner ruling of
+ * 2026-11-27). These tests claim nothing about speed; they run real git
+ * one command after another, and under a load average of 75 to 200 four
+ * such tests passed vitest's 5,000 ms default.
+ *
+ * What it bounds, counted from the code: the longest test of this kind is
+ * handoff-refusals' "a third correction is refused", which makes 79 git
+ * starts and no `ps` (the harness's process listing is faked). Its
+ * harness makes the repository and the worktree with 11 (`init`, two
+ * `config`, two commits, `add`, `rev-parse`, `worktree add` and three
+ * `rev-parse`); then three reviews and two corrections each run the
+ * attribute check of the base (3: `ls-tree`, two `config`; the tree holds
+ * no `.gitattributes`, so no `cat-file`), the snapshot (7: `rev-parse
+ * --show-object-format`, the preflight's `ls-tree` and `ls-files`,
+ * `read-tree`, `add`, `write-tree`, `ls-tree`; the worktree has no
+ * subdirectory, so no `check-ignore`) and the candidate's attribute check
+ * (3), and each review one `diff-tree` more: 3 × 14 + 2 × 13 = 68. The
+ * third correction is refused before any git. Besides those, six fake
+ * client launches, which start no process. Idle duration: 1,384 ms,
+ * measured by the coordinator on 2026-11-28 at a load average of about 3;
+ * at most 14,929 ms under load averages of 39 to 145. The same value as
+ * `endToEndMillis`, the ceiling (production-harness.ts).
+ */
+export const repositoryHarnessMillis = 60_000
+
 /** A fresh Claude reading at 10 percent with an hour left. */
 export const reading = (window: (typeof Windows)[keyof typeof Windows]) =>
   new ReadingRow({

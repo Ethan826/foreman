@@ -16,7 +16,7 @@ import {
   type SnapshotMismatch,
 } from "../../src/domain/snapshot.ts"
 import type { GitInvocation } from "../../src/runtime/git.ts"
-import { git, withRepo } from "../runtime/git-repo.ts"
+import { git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 import { commandOf, inSupervisor, recordingStart, snapshot, snapshotWith, type Setting } from "./snapshot-setting.ts"
 
 /** The snapshot's failure; the test fails if it succeeds. */
@@ -70,7 +70,7 @@ describe("the snapshot of an unchanged worktree", () => {
     Effect.gen(function* () {
       const tree = yield* snapshot(setting)
       expect(tree).toBe(yield* git(setting.identity.path, "rev-parse", `${setting.base}^{tree}`))
-    })))
+    })), repositoryMillis)
 })
 
 describe("the snapshot covers tracked and untracked files", () => {
@@ -85,7 +85,7 @@ describe("the snapshot covers tracked and untracked files", () => {
       const lines = (yield* listing(setting, tree)).split("\n")
       expect(lines).toContain(`100644 blob ${changed}\ta.txt`)
       expect(lines).toContain(`100644 blob ${added}\tnew.txt`)
-    })))
+    })), repositoryMillis)
 })
 
 describe("raw checks against real repositories", () => {
@@ -99,7 +99,7 @@ describe("raw checks against real repositories", () => {
       const raw = yield* git(top, "hash-object", "--no-filters", "crlf.txt")
       expect(mismatches.map(described)).toEqual([["content", "crlf.txt"]])
       expect(Schema.is(ContentMismatch)(mismatches[0]) && mismatches[0].blob).toBe(raw)
-    })))
+    })), repositoryMillis)
 
   it.effect("detects an executable-bit change: the staged tree records mode 100755", inSupervisor((setting) =>
     Effect.gen(function* () {
@@ -109,7 +109,7 @@ describe("raw checks against real repositories", () => {
       expect((yield* listing(setting, tree)).split("\n")).toContain(
         `100755 blob ${yield* git(setting.identity.path, "rev-parse", `${setting.base}:a.txt`)}\ta.txt`,
       )
-    })))
+    })), repositoryMillis)
 
   it.effect("refuses an executable-bit change that core.fileMode=false keeps out of the tree", inSupervisor((setting) =>
     Effect.gen(function* () {
@@ -121,7 +121,7 @@ describe("raw checks against real repositories", () => {
         ["executable", "a.txt"],
         ["executable", "run.sh"],
       ])
-    })))
+    })), repositoryMillis)
 
   it.effect("matches internal, dangling and outside links without reading a target", inSupervisor((setting, dir) =>
     Effect.gen(function* () {
@@ -140,7 +140,7 @@ describe("raw checks against real repositories", () => {
         const id = yield* git(top, "hash-object", "--no-filters", `${dir}/link-text`)
         expect(lines).toContain(`120000 blob ${id}\t${name}`)
       }
-    })))
+    })), repositoryMillis)
 
   it.effect("refuses a nested repository with a commit before staging, not as a staged gitlink", inSupervisor((setting) =>
     Effect.gen(function* () {
@@ -149,9 +149,9 @@ describe("raw checks against real repositories", () => {
       yield* git(`${top}/sub`, "-c", "user.name=T", "-c", "user.email=t@example.invalid", "commit", "--quiet", "--allow-empty", "-m", "sub")
       const refused = yield* refusal(setting)
       expect(refused).toEqual(new SnapshotPreflightRefused({ findings: [new NestedRepository({ path: "sub" })] }))
-    })))
+    })), repositoryMillis)
 
-  it.effect("refuses a repository whose object format is not SHA-1", () => withRepo(wideRefused))
+  it.effect("refuses a repository whose object format is not SHA-1", () => withRepo(wideRefused), repositoryMillis)
 })
 
 describe("the snapshot leaves the repository as it was", () => {
@@ -168,7 +168,7 @@ describe("the snapshot leaves the repository as it was", () => {
       expect(yield* git(setting.identity.commonDir, "for-each-ref")).toBe(refsBefore)
       expect(yield* git(top, "rev-parse", "HEAD")).toBe(headBefore)
       expect(yield* git(top, "status", "--porcelain")).toBe("M a.txt\n?? new.txt")
-    })))
+    })), repositoryMillis)
 
   it.effect("stages in a fresh index file inside the state directory and removes it afterwards", inSupervisor((setting) =>
     Effect.gen(function* () {
@@ -189,5 +189,5 @@ describe("the snapshot leaves the repository as it was", () => {
         ["write-tree"],
         ["ls-tree", "--full-tree"],
       ])
-    })))
+    })), repositoryMillis)
 })

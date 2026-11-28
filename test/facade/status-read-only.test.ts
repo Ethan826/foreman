@@ -19,6 +19,7 @@ import { main } from "../../src/facade/cli.ts"
 import { ProductionStatusReport, productionStatus, StateMissing } from "../../src/program/production-status.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
+import { endToEndMillis } from "../program/production-harness.ts"
 import { reading } from "../program/session-harness.ts"
 import { awaitExit, startChild } from "../runtime/child-process.ts"
 
@@ -157,12 +158,13 @@ const missingSharedLedgerEmpty = (dir: string) =>
   })
 
 describe("tarlatan status", () => {
-  it.live("creates no file for a missing state", () => withDirectory(missingStateCreatesNothing))
-  it.live("leaves an existing state's files as they were", () => withDirectory(existingStateUnchanged))
+  it.live("creates no file for a missing state", () => withDirectory(missingStateCreatesNothing), endToEndMillis)
+  it.live("leaves an existing state's files as they were", () => withDirectory(existingStateUnchanged), endToEndMillis)
   it.live("reads the shared ledger in the ledger directory, and leaves it as it was", () =>
-    withDirectory(sharedLedgerRead),
+    withDirectory(sharedLedgerRead), endToEndMillis,
   )
-  it.live("reads a missing shared ledger as empty and creates none", () => withDirectory(missingSharedLedgerEmpty))
+  it.live("reads a missing shared ledger as empty and creates none", () =>
+    withDirectory(missingSharedLedgerEmpty), endToEndMillis)
   it.live("answers while another process holds the ledger's write lock", () =>
     Effect.scoped(withDirectory(answersUnderWriteLock)),
   )

@@ -36,7 +36,7 @@ import {
   implemented,
   reviewed,
 } from "./handoff-steps.ts"
-import { eventsOf, type Harness, logBatch, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, logBatch, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { opened } from "./session-steps.ts"
 
 /** The log's events as tags, one array per batch the cycle wrote. */
@@ -184,19 +184,20 @@ const handoffRecords = (harness: Harness) =>
 // value of `endToEndMillis` (production-harness.ts). The focused review
 // saw the first test take 5,053 ms under Vitest's 5,000 ms default while
 // docs and check ran beside the suite. Investigate if a run comes close
-// to this limit.
-const cycleMillis = 60_000
+// to this limit. Since dogfood-6e (owner ruling of 2026-11-27) that
+// budget is the repository harness's `repositoryHarnessMillis`, the same
+// 60,000 ms, which every test over a real repository harness uses.
 
 describe("the assisted cycle with fake clients over a real repository", () => {
   it.effect("writes exactly the expected batches and launches once per launch command", () =>
-    withHarness({ repository: true }, exactLog), cycleMillis)
+    withHarness({ repository: true }, exactLog), repositoryHarnessMillis)
 
   it.effect("gives each client a brief built only from recorded inputs", () =>
-    withHarness({ repository: true }, recordedBriefs), cycleMillis)
+    withHarness({ repository: true }, recordedBriefs), repositoryHarnessMillis)
 
   it.effect("reviews the snapshot trees of the implementer's and the corrector's edits", () =>
-    withHarness({ repository: true }, snapshotTrees), cycleMillis)
+    withHarness({ repository: true }, snapshotTrees), repositoryHarnessMillis)
 
   it.effect("records each handoff's role, attestation and findings hash, and drafts the findings", () =>
-    withHarness({ repository: true }, handoffRecords), cycleMillis)
+    withHarness({ repository: true }, handoffRecords), repositoryHarnessMillis)
 })

@@ -22,6 +22,18 @@ const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>)
       }),
   )
 
+/**
+ * The time budget, in milliseconds, of the test that starts `mkfifo`
+ * (dogfood-6e, owner ruling of 2026-11-27). It claims nothing about
+ * speed; a process start took seconds while other sessions kept the load
+ * average between 75 and 200.
+ *
+ * What it bounds: one `mkfifo` start; no git and no `ps`. Idle duration:
+ * awaiting the coordinator's measurement on the dogfood-6f snapshot; this
+ * file is not among the measurements of 2026-11-28.
+ */
+const fifoMillis = 15_000
+
 /** Every kind in one directory: listed with its kind, sorted by name. */
 const listsEveryKind = (dir: string) =>
   Effect.gen(function* () {
@@ -61,7 +73,7 @@ const unlistedWhenUnsearchable = (dir: string) =>
 
 describe("listDirectory", () => {
   it.effect("names each entry with its kind, links and FIFOs not followed, sorted by name", () =>
-    withTemporaryDirectory(listsEveryKind))
+    withTemporaryDirectory(listsEveryKind), fifoMillis)
 
   it.effect("reports a directory it cannot list as unlisted with the reason", () =>
     withTemporaryDirectory(unlistedWhenUnsearchable))

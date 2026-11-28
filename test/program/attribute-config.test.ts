@@ -13,7 +13,7 @@ import { rmSync, writeFileSync } from "node:fs"
 import { AttributeRefusalReasons as Reasons, AttributeSources as Sources } from "../../src/domain/attributes.ts"
 import { Revision } from "../../src/domain/ids.ts"
 import { addWorktreeWith } from "../../src/runtime/worktree.ts"
-import { cleanRun, git, withRepo } from "../runtime/git-repo.ts"
+import { cleanRun, git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 import { createWorktree, identifyWorktree, request } from "./git-hazard-fixtures.ts"
 import { kinds, leftNothing, markerDeclaration, plantMarkerFilter, refusalsOf, written } from "./attribute-fixtures.ts"
 
@@ -75,10 +75,10 @@ const refusedUnwritten = (plant: Plant) => () =>
   )
 
 describe("creation refuses any conditional include before worktree add", () => {
-  it.effect("control: worktree add on a tarlatan/ branch runs the filter includeIf.onbranch selects", controlWrites(plantOnBranch))
-  it.effect("includeIf.onbranch:tarlatan/** is refused, and the marker is not written", refusedUnwritten(plantOnBranch))
-  it.effect("control: worktree add runs the filter a nested includeIf selects", controlWrites(plantNested))
-  it.effect("an includeIf inside an unconditional include.path is refused, and the marker is not written", refusedUnwritten(plantNested))
+  it.effect("control: worktree add on a tarlatan/ branch runs the filter includeIf.onbranch selects", controlWrites(plantOnBranch), repositoryMillis)
+  it.effect("includeIf.onbranch:tarlatan/** is refused, and the marker is not written", refusedUnwritten(plantOnBranch), repositoryMillis)
+  it.effect("control: worktree add runs the filter a nested includeIf selects", controlWrites(plantNested), repositoryMillis)
+  it.effect("an includeIf inside an unconditional include.path is refused, and the marker is not written", refusedUnwritten(plantNested), repositoryMillis)
 })
 
 /** An unconditional include of a harmless file, and the marker filter configured but not declared. */
@@ -100,7 +100,7 @@ const passesWithoutIncludeIf = (dir: string, owner: string) =>
 
 describe("a repository without includeIf", () => {
   it.effect("passes creation and the startup check, unconditional include.path and all", () =>
-    withRepo(passesWithoutIncludeIf))
+    withRepo(passesWithoutIncludeIf), repositoryMillis)
 })
 
 /**
@@ -145,8 +145,8 @@ const includeIfLaterRefused = (dir: string, owner: string) =>
 
 describe("the startup check reads config from inside the supervisor worktree", () => {
   it.effect("control: a checkout in the worktree runs the filter its config.worktree names", () =>
-    withRepo(worktreeConfigControl))
+    withRepo(worktreeConfigControl), repositoryMillis)
   it.effect("refuses a core.attributesFile set only in the worktree's config.worktree", () =>
-    withRepo(worktreeConfigRefused))
-  it.effect("refuses an includeIf added after creation", () => withRepo(includeIfLaterRefused))
+    withRepo(worktreeConfigRefused), repositoryMillis)
+  it.effect("refuses an includeIf added after creation", () => withRepo(includeIfLaterRefused), repositoryMillis)
 })

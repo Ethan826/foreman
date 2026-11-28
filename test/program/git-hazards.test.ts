@@ -12,7 +12,7 @@ import { Effect } from "effect"
 import { existsSync, writeFileSync } from "node:fs"
 import { AttributeRefusalReasons, AttributeSources } from "../../src/domain/attributes.ts"
 import type { RunGit } from "../../src/runtime/git.ts"
-import { cleanRun, emptyCommitWith, git, withRepo } from "../runtime/git-repo.ts"
+import { cleanRun, emptyCommitWith, git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 import { kinds, refusalsOf } from "./attribute-fixtures.ts"
 import {
   addWith,
@@ -74,22 +74,23 @@ const smudgeRefused = (dir: string, owner: string) =>
 const commitWith = (run: RunGit): Trigger => (_dir, owner) => emptyCommitWith(run)(owner, "signed?")
 
 describe("post-checkout hook, run by git worktree add", () => {
-  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantHook, createInherited)))
-  it.effect("the clean runner does not", prevented(afterTrigger(plantHook, createAndIdentifyClean)))
+  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantHook, createInherited)), repositoryMillis)
+  it.effect("the clean runner does not", prevented(afterTrigger(plantHook, createAndIdentifyClean)), repositoryMillis)
 })
 
 describe("smudge filter from .gitattributes, run by the checkout in git worktree add", () => {
-  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantSmudge, createInherited)))
-  it.effect("worktree add through the clean runner does not", prevented(afterTrigger(plantSmudge, addWith(cleanRun))))
-  it.effect("creation refuses it before worktree add", () => withRepo(smudgeRefused))
+  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantSmudge, createInherited)), repositoryMillis)
+  it.effect("worktree add through the clean runner does not",
+    prevented(afterTrigger(plantSmudge, addWith(cleanRun))), repositoryMillis)
+  it.effect("creation refuses it before worktree add", () => withRepo(smudgeRefused), repositoryMillis)
 })
 
 describe("core.fsmonitor, consulted by git worktree add", () => {
-  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantFsmonitor, createInherited)))
-  it.effect("the clean runner does not", prevented(afterTrigger(plantFsmonitor, createAndIdentifyClean)))
+  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantFsmonitor, createInherited)), repositoryMillis)
+  it.effect("the clean runner does not", prevented(afterTrigger(plantFsmonitor, createAndIdentifyClean)), repositoryMillis)
 })
 
 describe("gpg.program with commit.gpgsign=true, run by a test-only commit", () => {
-  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantGpg, commitWith(inheritedGit))))
-  it.effect("the clean runner does not", prevented(afterTrigger(plantGpg, commitWith(cleanRun))))
+  it.effect("control: the inherited runner runs it", detected(afterTrigger(plantGpg, commitWith(inheritedGit))), repositoryMillis)
+  it.effect("the clean runner does not", prevented(afterTrigger(plantGpg, commitWith(cleanRun))), repositoryMillis)
 })

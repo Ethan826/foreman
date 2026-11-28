@@ -15,7 +15,7 @@ import type { AttributeAllowance } from "../../src/domain/attributes.ts"
 import { AttributeRefusalReasons as Reasons, AttributeSources as Sources } from "../../src/domain/attributes.ts"
 import { worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit } from "../../src/runtime/git.ts"
-import { emptyHome, git, withRepo } from "../runtime/git-repo.ts"
+import { emptyHome, git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 import { commitAttributes, leftNothing, plantMarkerFilter, refusalsOf, written } from "./attribute-fixtures.ts"
 import { createInherited, createWorktree, identifyWorktree, request } from "./git-hazard-fixtures.ts"
 
@@ -90,10 +90,13 @@ const nestedRefused = (dir: string, owner: string) =>
   })
 
 describe("Waxwing's root .gitattributes", () => {
-  it.effect("passes creation and the startup check when its line is allowed", () => withRepo(passesWhenAllowed))
-  it.effect("is refused at creation by the production entry points", () => withRepo(refusedWithoutAllowance))
-  it.effect("is refused by the startup check without the allowance", () => withRepo(startupRefusedWithoutAllowance))
-  it.effect("an allowed line in a nested .gitattributes is refused", () => withRepo(nestedRefused))
+  it.effect("passes creation and the startup check when its line is allowed", () =>
+    withRepo(passesWhenAllowed), repositoryMillis)
+  it.effect("is refused at creation by the production entry points", () =>
+    withRepo(refusedWithoutAllowance), repositoryMillis)
+  it.effect("is refused by the startup check without the allowance", () =>
+    withRepo(startupRefusedWithoutAllowance), repositoryMillis)
+  it.effect("an allowed line in a nested .gitattributes is refused", () => withRepo(nestedRefused), repositoryMillis)
 })
 
 /** A near miss of Waxwing's line that declares the marker filter. */
@@ -125,6 +128,8 @@ const nearMissRefused = (dir: string, owner: string) =>
   })
 
 describe("a marker filter on a near miss of the allowed line", () => {
-  it.effect("control: worktree add under git's default environment runs the filter", () => withRepo(controlWritesMarker))
-  it.effect("is refused before worktree add, and the marker is not written", () => withRepo(nearMissRefused))
+  it.effect("control: worktree add under git's default environment runs the filter", () =>
+    withRepo(controlWritesMarker), repositoryMillis)
+  it.effect("is refused before worktree add, and the marker is not written", () =>
+    withRepo(nearMissRefused), repositoryMillis)
 })

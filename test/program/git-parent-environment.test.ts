@@ -9,7 +9,7 @@ import { Effect } from "effect"
 import { existsSync, mkdirSync, writeFileSync } from "node:fs"
 import type { RunGit } from "../../src/runtime/git.ts"
 import { revParseArgs } from "../../src/runtime/worktree.ts"
-import { cleanRun, git, gitWith, makeRepo, withRepo } from "../runtime/git-repo.ts"
+import { cleanRun, git, gitWith, makeRepo, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 import { withParentEnvironment } from "../runtime/parent-environment.ts"
 import {
   commitFile,
@@ -95,22 +95,27 @@ const cleanCreatesInOwner = (dir: string, owner: string) =>
   })
 
 describe("a hostile global config in the parent environment", () => {
-  it.effect("control: through HOME, the inherited runner reads it", detected(underHostileGlobal("HOME", createInherited)))
-  it.effect("through HOME, the clean runner does not read it", prevented(underHostileGlobal("HOME", createAndIdentifyClean)))
+  it.effect("control: through HOME, the inherited runner reads it",
+    detected(underHostileGlobal("HOME", createInherited)), repositoryMillis)
+  it.effect("through HOME, the clean runner does not read it",
+    prevented(underHostileGlobal("HOME", createAndIdentifyClean)), repositoryMillis)
   it.effect(
     "control: through GIT_CONFIG_GLOBAL, the inherited runner reads it",
     detected(underHostileGlobal("GIT_CONFIG_GLOBAL", createInherited)),
+    repositoryMillis,
   )
   it.effect(
     "through GIT_CONFIG_GLOBAL, the clean runner does not read it",
     prevented(underHostileGlobal("GIT_CONFIG_GLOBAL", createAndIdentifyClean)),
+    repositoryMillis,
   )
 })
 
 describe("an inherited GIT_DIR naming another repository", () => {
   it.effect("control: the inherited runner's git directory read selects the other repository", () =>
-    withRepo(inheritedSelectsOther))
-  it.effect("the clean runner's git directory read selects the owner's repository", () => withRepo(cleanSelectsOwner))
+    withRepo(inheritedSelectsOther), repositoryMillis)
+  it.effect("the clean runner's git directory read selects the owner's repository", () =>
+    withRepo(cleanSelectsOwner), repositoryMillis)
   it.effect("the clean runner creates and checks the worktree in the owner's repository", () =>
-    withRepo(cleanCreatesInOwner))
+    withRepo(cleanCreatesInOwner), repositoryMillis)
 })

@@ -4,13 +4,16 @@
 // and this process acquires it. The child runs the production tryLock, so
 // a second test also checks its release: once the child has ended
 // tryLock's scope, and while it is still running, this process acquires.
+// The child releases only after this process writes its go file, which it
+// does after its own attempt was refused, so the refusal is always seen
+// against a held lock (dogfood-6e, finding F3).
 import { describe, expect, it } from "@effect/vitest"
 import { Effect, Exit } from "effect"
-import { mkdtempSync, rmSync } from "node:fs"
+import { existsSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { LockHeld } from "../../src/domain/events.ts"
 import { tryLock } from "../../src/runtime/project-lock.ts"
-import { awaitExit, startChild, waitForFile } from "./child-process.ts"
+import { awaitExit, childMillis, letGo, startChild, waitBoundMillis, waitForFile } from "./child-process.ts"
 
 const withDir = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
   Effect.acquireUseRelease(
@@ -40,10 +43,13 @@ const refusedThenAcquiredAfterRelease = (dir: string) =>
   Effect.scoped(
     Effect.gen(function* () {
       const lockPath = `${dir}/project.lock`
-      const child = yield* startChild("hold-lock.ts", lockPath, `${dir}/ready`, ["300"])
+      const ready = `${dir}/ready`
+      const child = yield* startChild("hold-lock.ts", lockPath, ready, [String(waitBoundMillis)])
       const refused = yield* Effect.exit(Effect.scoped(tryLock(lockPath)))
       expect(refused).toEqual(Exit.fail(new LockHeld({ path: lockPath })))
-      yield* waitForFile(`${dir}/ready.released`)
+      expect(existsSync(`${ready}.released`)).toBe(false)
+      yield* letGo(ready)
+      yield* waitForFile(`${ready}.released`)
       expect(child.exitCode).toBeNull()
       yield* Effect.scoped(tryLock(lockPath))
     }),
@@ -51,10 +57,10 @@ const refusedThenAcquiredAfterRelease = (dir: string) =>
 
 describe("project lock across processes", () => {
   it.live("refuses while a child holds it and is acquired after the child is killed", () =>
-    withDir(refusedThenAcquiredAfterKill),
+    withDir(refusedThenAcquiredAfterKill), childMillis,
   )
 
   it.live("refuses while a child holds it and is acquired after the child releases it, the child still running", () =>
-    withDir(refusedThenAcquiredAfterRelease),
+    withDir(refusedThenAcquiredAfterRelease), childMillis,
   )
 })

@@ -12,6 +12,7 @@ import { ProcessReadFailed } from "../../src/domain/process.ts"
 import { decodePs } from "../../src/format/ps.ts"
 import { readProcesses, readProcessesAt } from "../../src/runtime/processes.ts"
 import { awaitExit } from "./child-process.ts"
+import { boundedReleaseLoop } from "./client-start.ts"
 
 /** Runs `use` with a fresh temporary directory, removed afterwards. */
 const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>) =>
@@ -24,8 +25,24 @@ const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>)
       }),
   )
 
-/** A shell loop that runs until the file named by its first argument exists. */
-const waitForRelease = 'while [ ! -e "$1" ]; do sleep 0.05; done'
+/**
+ * The time budget, in milliseconds, of every test here (dogfood-6e, owner
+ * ruling of 2026-11-27). Each starts real processes and claims nothing
+ * about speed; a full `ps -A` took seconds while other sessions kept the
+ * load average between 75 and 200.
+ *
+ * What it bounds, counted from the code: the longest test, "lists a
+ * running child with its command", starts no git and one `ps -A`, and one
+ * `sh`, which runs one `date` at its start and one `date` and one `sleep
+ * 0.05` per check until released or this budget has passed; the others
+ * start one `ps` or a script in its place. Idle duration: awaiting the
+ * coordinator's measurement on the dogfood-6f snapshot; this file is not
+ * among the measurements of 2026-11-28.
+ */
+const listingMillis = 15_000
+
+/** A shell loop that runs until the file named by its first argument exists, or ends on its own after this file's time budget. */
+const waitForRelease = boundedReleaseLoop(listingMillis)
 
 /** Writes an executable script at `path`. */
 const script = (path: string, body: string) => {
@@ -75,19 +92,21 @@ const failsWhenMissing = (dir: string) =>
 
 describe("readProcesses", () => {
   it.effect("lists a running child with its command, in a listing Format decodes", () =>
-    withTemporaryDirectory(listsRunningChild),
+    withTemporaryDirectory(listsRunningChild), listingMillis,
   )
   it.effect("decodes the listing of this machine", () =>
     Effect.map(readProcesses(), (listing) => {
       expect(Result.isSuccess(decodePs(listing))).toBe(true)
     }),
+    listingMillis,
   )
 })
 
 describe("readProcessesAt", () => {
   it.effect("runs the given ps with the listing's arguments and only LC_ALL=C", () =>
-    withTemporaryDirectory(passesArgumentsAndEnvironment),
+    withTemporaryDirectory(passesArgumentsAndEnvironment), listingMillis,
   )
-  it.effect("fails, with stderr, when ps exits non-zero", () => withTemporaryDirectory(failsOnNonZeroExit))
-  it.effect("fails when ps cannot be started", () => withTemporaryDirectory(failsWhenMissing))
+  it.effect("fails, with stderr, when ps exits non-zero", () =>
+    withTemporaryDirectory(failsOnNonZeroExit), listingMillis)
+  it.effect("fails when ps cannot be started", () => withTemporaryDirectory(failsWhenMissing), listingMillis)
 })

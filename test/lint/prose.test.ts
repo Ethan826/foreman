@@ -10,7 +10,17 @@ const run = (...files: ReadonlyArray<string>) =>
 // Owner ruling (2026-11-20, review finding R06): the whole-repository run
 // gets a named, provisional budget. Alone it takes about 1.5 s, but in the
 // full suite on a loaded machine it took 5.2 to 7.2 s, past Vitest's 5 s
-// default. Investigate if a run comes close to this limit.
+// default. Investigate if a run comes close to this limit. Since
+// dogfood-6e (owner ruling of 2026-11-27) every test here uses it: each
+// starts the gate's `sh` script and claims nothing about speed. What it
+// bounds, counted from tools/prose/check.sh: the longest test, "passes on
+// the repository's own Markdown", starts one `sh`, one git (`git
+// ls-files`, check.sh:13), one `sort`, and for each Markdown file listed
+// one `tr` and one `python3` running the tell linter (19 files on this
+// tree, counted with `find` under the gate's exclusions); no `ps`. Idle
+// duration: 2,795 ms, measured by the coordinator on 2026-11-28 at a
+// load average of about 3; at most 17,018 ms under load averages of 39
+// to 145.
 const wholeRepositoryMillis = 30_000
 
 describe("prose gate", () => {
@@ -18,12 +28,12 @@ describe("prose gate", () => {
     const result = run("lint-fixtures/prose/must-fail.md")
     expect(result.status).toBe(1)
     expect(result.stdout).toContain("BLOCK")
-  })
+  }, wholeRepositoryMillis)
 
   it("accepts a clean file", () => {
     const result = run("lint-fixtures/prose/clean.md")
     expect(result.status).toBe(0)
-  })
+  }, wholeRepositoryMillis)
 
   // On failure, the message carries everything needed to tell a blocking
   // finding from a failed spawn: status, signal, spawn error, stderr and

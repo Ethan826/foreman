@@ -16,6 +16,7 @@ import { correct } from "../../src/program/correct.ts"
 import { closeFinished } from "../../src/program/handoff.ts"
 import { closeSession } from "../../src/program/session.ts"
 import { claudeCrash } from "../fixtures/clients/claude-crash.ts"
+import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { claudeLingeringChild, lingeringFile } from "../fixtures/clients/claude-lingering-child.ts"
 import { codexReviewClean } from "../fixtures/clients/codex-review-clean.ts"
 import { codexReviewMalformed } from "../fixtures/clients/codex-review-malformed.ts"
@@ -38,7 +39,7 @@ import {
   sessionIdOf,
   stagesNothing,
 } from "./handoff-steps.ts"
-import { type Harness, head, withHarness } from "./session-harness.ts"
+import { type Harness, head, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { append, opened, refusedFor, tranche } from "./session-steps.ts"
 
 const noAttestReview = (harness: Harness) =>
@@ -121,16 +122,19 @@ const reportFromAnotherSession = (harness: Harness) =>
     ])
     yield* refusedFor(harness, attestedReview(harness), ["ReportsNotIntact"])
     expect(yield* sessionIdOf(harness)).not.toBe("another-session")
+    expect(harness.gitCalls).toEqual([])
   })
 
 const reportBytesChanged = (harness: Harness) =>
   Effect.gen(function* () {
-    yield* afterImplement(harness)
+    yield* opened(harness)
+    yield* implemented(harness, claudeSuccess)
     const handoff = harness.trace.flatMap((entry) => (entry.kind === "publish" ? entry.items : [])).find((path) =>
       String(path).endsWith(".handoff.md"),
     )
     writeFileSync(String(handoff), "Edited after the fact.")
     yield* refusedFor(harness, attestedReview(harness), ["ReportsNotIntact"])
+    expect(harness.gitCalls).toEqual([])
   })
 
 const reviewTwice = (harness: Harness) =>
@@ -167,7 +171,8 @@ const thirdCorrection = (harness: Harness) =>
 
 const afterReject = (harness: Harness) =>
   Effect.gen(function* () {
-    yield* afterImplement(harness)
+    yield* opened(harness)
+    yield* implemented(harness, claudeSuccess)
     yield* rejected(harness)
     yield* refusedFor(harness, attestedReview(harness), ["WrongState"])
     yield* refusedFor(harness, rejected(harness), ["WrongState"])
@@ -175,6 +180,7 @@ const afterReject = (harness: Harness) =>
     yield* refusedFor(harness, closeSession(harness.context, { how: CloseKinds.Interrupted, note: "" }), ["WrongState"])
     yield* closeSession(harness.context, { how: CloseKinds.Abandoned, note: "" })
     expect(harness.client.launches).toHaveLength(1)
+    expect(harness.gitCalls).toEqual([])
   })
 
 const unusableImplement = (harness: Harness) =>
@@ -184,6 +190,7 @@ const unusableImplement = (harness: Harness) =>
     yield* refusedFor(harness, attestedReview(harness), ["WrongState"])
     yield* refusedFor(harness, rejected(harness), ["WrongState"])
     yield* closeSession(harness.context, { how: CloseKinds.Abandoned, note: "" })
+    expect(harness.gitCalls).toEqual([])
   })
 
 const unusableReview = (harness: Harness) =>
@@ -216,26 +223,31 @@ const lingeringChild = (harness: Harness) =>
 
 describe("handoff refusals", () => {
   it.effect("review without --attest is refused before any git command or object", () =>
-    withHarness({ repository: true }, noAttestReview))
+    withHarness({ repository: true }, noAttestReview), repositoryHarnessMillis)
   it.effect("correct without --attest is refused before any git command or object", () =>
-    withHarness({ repository: true }, noAttestCorrect))
+    withHarness({ repository: true }, noAttestCorrect), repositoryHarnessMillis)
   it.effect("close --finished without --attest is refused before any git command or object", () =>
-    withHarness({ repository: true }, noAttestClose))
-  it.effect("a candidate that fails the raw checks is refused", () => withHarness({ repository: true }, rawChecksFail))
-  it.effect("a write during review makes correct refuse", () => withHarness({ repository: true }, writeDuringReview))
+    withHarness({ repository: true }, noAttestClose), repositoryHarnessMillis)
+  it.effect("a candidate that fails the raw checks is refused", () =>
+    withHarness({ repository: true }, rawChecksFail), repositoryHarnessMillis)
+  it.effect("a write during review makes correct refuse", () =>
+    withHarness({ repository: true }, writeDuringReview), repositoryHarnessMillis)
   it.effect("a write after a clean review makes close --finished refuse", () =>
-    withHarness({ repository: true }, writeBeforeClose))
+    withHarness({ repository: true }, writeBeforeClose), repositoryHarnessMillis)
   it.effect("a report recorded for another session is not this session's report", () =>
-    withHarness({ repository: true }, reportFromAnotherSession))
-  it.effect("a report whose bytes changed refuses the review", () => withHarness({ repository: true }, reportBytesChanged))
-  it.effect("review twice is refused", () => withHarness({ repository: true }, reviewTwice))
-  it.effect("review after a clean review is refused", () => withHarness({ repository: true }, reviewAfterClean))
+    withHarness({}, reportFromAnotherSession))
+  it.effect("a report whose bytes changed refuses the review", () => withHarness({}, reportBytesChanged))
+  it.effect("review twice is refused", () => withHarness({ repository: true }, reviewTwice), repositoryHarnessMillis)
+  it.effect("review after a clean review is refused", () =>
+    withHarness({ repository: true }, reviewAfterClean), repositoryHarnessMillis)
   it.effect("correct before a review is refused before any git command", () =>
-    withHarness({ repository: true }, correctBeforeReview))
-  it.effect("a third correction is refused", () => withHarness({ repository: true }, thirdCorrection))
-  it.effect("after reject only close --abandoned remains", () => withHarness({ repository: true }, afterReject))
-  it.effect("an unusable implementation allows only close", () => withHarness({ repository: true }, unusableImplement))
-  it.effect("an unusable review allows only close", () => withHarness({ repository: true }, unusableReview))
+    withHarness({ repository: true }, correctBeforeReview), repositoryHarnessMillis)
+  it.effect("a third correction is refused", () =>
+    withHarness({ repository: true }, thirdCorrection), repositoryHarnessMillis)
+  it.effect("after reject only close --abandoned remains", () => withHarness({}, afterReject))
+  it.effect("an unusable implementation allows only close", () => withHarness({}, unusableImplement))
+  it.effect("an unusable review allows only close", () =>
+    withHarness({ repository: true }, unusableReview), repositoryHarnessMillis)
   it.effect("a leader that exits while its child writes does not enable review without --attest", () =>
-    withHarness({ repository: true }, lingeringChild))
+    withHarness({ repository: true }, lingeringChild), repositoryHarnessMillis)
 })

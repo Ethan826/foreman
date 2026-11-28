@@ -12,7 +12,7 @@ import type { WorktreeCreated } from "../../src/domain/events.ts"
 import { PathUnreadable, WorktreeCheckFailed, WorktreeConditions } from "../../src/domain/worktree.ts"
 import type { WorktreeCondition } from "../../src/domain/worktree.ts"
 import { worktreeProgram } from "../../src/program/worktree.ts"
-import { cleanRun, emptyHome, git, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
+import { cleanRun, emptyHome, git, repositoryMillis, withRepo, withUnsearchable } from "../runtime/git-repo.ts"
 
 /** The production entry points over this file's empty home. */
 const { createWorktree, identifyWorktree } = worktreeProgram(emptyHome)
@@ -149,25 +149,29 @@ const reportsUnreadableDirectory = (dir: string, owner: string) =>
   })
 
 describe("identifyWorktree (startup check)", () => {
-  it.effect("passes for the created worktree", () => withRepo(passesForCreated))
+  it.effect("passes for the created worktree", () => withRepo(passesForCreated), repositoryMillis)
 
-  it.effect("reports an unlocked worktree", () => withRepo(reportsUnlocked))
+  it.effect("reports an unlocked worktree", () => withRepo(reportsUnlocked), repositoryMillis)
 
-  it.effect("reports a worktree switched to a different branch", () => withRepo(reportsOtherBranch))
+  it.effect("reports a worktree switched to a different branch", () => withRepo(reportsOtherBranch), repositoryMillis)
 
-  it.effect("reports a detached worktree as not on the branch", () => withRepo(reportsDetached))
+  it.effect("reports a detached worktree as not on the branch", () => withRepo(reportsDetached), repositoryMillis)
 
-  it.effect("reports a missing path after the owner retires the worktree", () => withRepo(reportsRetired))
+  it.effect("reports a missing path after the owner retires the worktree", () => withRepo(reportsRetired), repositoryMillis)
 
-  it.effect("passes for a worktree whose path contains a newline", () => withRepo(passesWithNewlineInPath))
+  it.effect("passes for a worktree whose path contains a newline", () => withRepo(passesWithNewlineInPath), repositoryMillis)
 
-  it.effect("reports a deleted directory; the locked registration stays listed", () => withRepo(reportsDeletedDirectory))
+  it.effect("reports a deleted directory; the locked registration stays listed", () =>
+    withRepo(reportsDeletedDirectory), repositoryMillis)
 
-  it.effect("reports an unrelated directory at the path as the wrong identity", () => withRepo(reportsUnrelatedDirectory))
+  it.effect("reports an unrelated directory at the path as the wrong identity", () =>
+    withRepo(reportsUnrelatedDirectory), repositoryMillis)
 
-  it.effect("reports another repository at the path as the wrong identity", () => withRepo(reportsOtherRepository))
+  it.effect("reports another repository at the path as the wrong identity", () =>
+    withRepo(reportsOtherRepository), repositoryMillis)
 
-  it.effect("reports a file at the path as no directory present", () => withRepo(reportsFileAtPath))
+  it.effect("reports a file at the path as no directory present", () => withRepo(reportsFileAtPath), repositoryMillis)
 
-  it.effect("fails with PathUnreadable, not directory-present, under an unsearchable parent", () => withRepo(reportsUnreadableDirectory))
+  it.effect("fails with PathUnreadable, not directory-present, under an unsearchable parent", () =>
+    withRepo(reportsUnreadableDirectory), repositoryMillis)
 })

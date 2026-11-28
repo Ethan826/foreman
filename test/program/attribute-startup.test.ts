@@ -21,7 +21,7 @@ import { WorktreeCreated } from "../../src/domain/events.ts"
 import { Revision } from "../../src/domain/ids.ts"
 import { worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type StartGit } from "../../src/runtime/git.ts"
-import { emptyHome, git, withRepo } from "../runtime/git-repo.ts"
+import { emptyHome, git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 import { createWorktree, identifyWorktree, request } from "./git-hazard-fixtures.ts"
 import { commitAttributes, kinds, leftNothing, readFailuresOf, refusalsOf } from "./attribute-fixtures.ts"
 
@@ -87,12 +87,14 @@ const refusedWhenExiting =
     )
 
 describe("a read failure stops creation as unread, and a source of another kind is refused", () => {
-  it.effect("an unreadable info/attributes", () => withRepo(refusesUnreadableInfo))
-  it.effect("an info/attributes that is a directory", () => withRepo(refusesInfoDirectory))
-  it.effect("an info/attributes that is a symbolic link to an empty file", () => withRepo(refusesInfoSymlink))
+  it.effect("an unreadable info/attributes", () => withRepo(refusesUnreadableInfo), repositoryMillis)
+  it.effect("an info/attributes that is a directory", () => withRepo(refusesInfoDirectory), repositoryMillis)
+  it.effect("an info/attributes that is a symbolic link to an empty file", () =>
+    withRepo(refusesInfoSymlink), repositoryMillis)
   it.effect(
     "a cat-file that exits non-zero",
     refusedWhenExiting("cat-file", 128, [[Sources.Tree, Reasons.ReadFailed, "exit 128: cat-file made to fail\n"]]),
+    repositoryMillis,
   )
   it.effect(
     "a git config that exits 2",
@@ -100,10 +102,12 @@ describe("a read failure stops creation as unread, and a source of another kind 
       [Sources.AttributesFile, Reasons.ReadFailed, "exit 2: config made to fail\n"],
       [Sources.ConditionalInclude, Reasons.ReadFailed, "exit 2: config made to fail\n"],
     ]),
+    repositoryMillis,
   )
   it.effect(
     "an ls-tree that exits non-zero",
     refusedWhenExiting("ls-tree", 128, [[Sources.Tree, Reasons.ReadFailed, "exit 128: ls-tree made to fail\n"]]),
+    repositoryMillis,
   )
 })
 
@@ -153,8 +157,9 @@ const ignoresWorkingTrees = (dir: string, owner: string) =>
 
 describe("the startup check's attribute condition", () => {
   it.effect("refuses a recorded revision that gained a .gitattributes with content", () =>
-    withRepo(refusesGainedAttributes))
-  it.effect("refuses an info/attributes written after creation", () => withRepo(refusesLaterInfo))
-  it.effect("refuses a core.attributesFile set after creation", () => withRepo(refusesLaterSetting))
-  it.effect("does not read a working tree's uncommitted .gitattributes", () => withRepo(ignoresWorkingTrees))
+    withRepo(refusesGainedAttributes), repositoryMillis)
+  it.effect("refuses an info/attributes written after creation", () => withRepo(refusesLaterInfo), repositoryMillis)
+  it.effect("refuses a core.attributesFile set after creation", () => withRepo(refusesLaterSetting), repositoryMillis)
+  it.effect("does not read a working tree's uncommitted .gitattributes", () =>
+    withRepo(ignoresWorkingTrees), repositoryMillis)
 })

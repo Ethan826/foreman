@@ -11,7 +11,7 @@ import { mkdirSync, symlinkSync, writeFileSync } from "node:fs"
 import { AttributeRefusalReasons as Reasons, AttributeSources as Sources } from "../../src/domain/attributes.ts"
 import { Revision } from "../../src/domain/ids.ts"
 import { addWorktreeWith } from "../../src/runtime/worktree.ts"
-import { cleanRun, git, withRepo } from "../runtime/git-repo.ts"
+import { cleanRun, git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 import { createWorktree, identifyWorktree, request } from "./git-hazard-fixtures.ts"
 import {
   commitAttributes,
@@ -56,9 +56,9 @@ const refusesLines =
 const autocrlf: Plant = (_dir, owner) => Effect.as(git(owner, "config", "core.autocrlf", "true"), "")
 
 describe("the review's counterexamples are refused at creation", () => {
-  it.effect("C3: a declaration that matches no tracked path", refusesLines("future/*.bin filter=mark\n", [[1, "future/*.bin filter=mark"]]))
-  it.effect("C4: a declaration that cancels itself", refusesLines("a.txt text\na.txt !text\n", [[1, "a.txt text"], [2, "a.txt !text"]]))
-  it.effect("C2: an explicit unset, * -text, under core.autocrlf=true", refusesLines("* -text\n", [[1, "* -text"]], autocrlf))
+  it.effect("C3: a declaration that matches no tracked path", refusesLines("future/*.bin filter=mark\n", [[1, "future/*.bin filter=mark"]]), repositoryMillis)
+  it.effect("C4: a declaration that cancels itself", refusesLines("a.txt text\na.txt !text\n", [[1, "a.txt text"], [2, "a.txt !text"]]), repositoryMillis)
+  it.effect("C2: an explicit unset, * -text, under core.autocrlf=true", refusesLines("* -text\n", [[1, "* -text"]], autocrlf), repositoryMillis)
 })
 
 const plantInfo: Plant = (dir, owner) =>
@@ -96,15 +96,17 @@ const refusedUnwritten = (plant: Plant, expected: ReadonlyArray<readonly [string
   )
 
 describe("a filter in info/attributes or a repository core.attributesFile", () => {
-  it.effect("control: worktree add without the check runs the info/attributes filter", controlWrites(plantInfo))
+  it.effect("control: worktree add without the check runs the info/attributes filter", controlWrites(plantInfo), repositoryMillis)
   it.effect(
     "info/attributes is refused before worktree add, and the marker is not written",
     refusedUnwritten(plantInfo, [[Sources.InfoAttributes, Reasons.Content]]),
+    repositoryMillis,
   )
-  it.effect("control: worktree add without the check runs the core.attributesFile filter", controlWrites(plantSetting))
+  it.effect("control: worktree add without the check runs the core.attributesFile filter", controlWrites(plantSetting), repositoryMillis)
   it.effect(
     "core.attributesFile is refused before worktree add, and the marker is not written",
     refusedUnwritten(plantSetting, [[Sources.AttributesFile, Reasons.Configured]]),
+    repositoryMillis,
   )
 })
 
@@ -130,8 +132,8 @@ const refusesSymlink = (dir: string, owner: string) =>
   })
 
 describe("other refused trees", () => {
-  it.effect("a nested .gitattributes with content", () => withRepo(refusesNested))
-  it.effect("a .gitattributes that is a symbolic link", () => withRepo(refusesSymlink))
+  it.effect("a nested .gitattributes with content", () => withRepo(refusesNested), repositoryMillis)
+  it.effect("a .gitattributes that is a symbolic link", () => withRepo(refusesSymlink), repositoryMillis)
 })
 
 /** After `plant`, creation succeeds and the startup check passes. */
@@ -155,7 +157,7 @@ const emptyInfo: Plant = (_dir, owner) =>
   })
 
 describe("passing cases create the worktree and pass the startup check", () => {
-  it.effect("no attribute source", createsAndIdentifies(() => Effect.succeed("")))
-  it.effect("a .gitattributes of comments and blank lines, with CRLF endings", createsAndIdentifies(commentsWithCrlf))
-  it.effect("an empty info/attributes", createsAndIdentifies(emptyInfo))
+  it.effect("no attribute source", createsAndIdentifies(() => Effect.succeed("")), repositoryMillis)
+  it.effect("a .gitattributes of comments and blank lines, with CRLF endings", createsAndIdentifies(commentsWithCrlf), repositoryMillis)
+  it.effect("an empty info/attributes", createsAndIdentifies(emptyInfo), repositoryMillis)
 })

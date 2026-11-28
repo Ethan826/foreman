@@ -11,7 +11,7 @@ import { Revision } from "../../src/domain/ids.ts"
 import { GitCommandFailed } from "../../src/domain/worktree.ts"
 import { checkAttributeSourcesWith } from "../../src/program/attribute-sources.ts"
 import { cleanGitOverrides, cleanGitWith, startGit, undecodableOutput } from "../../src/runtime/git.ts"
-import { cleanRun, emptyHome, git, withRepo } from "./git-repo.ts"
+import { cleanRun, emptyHome, git, repositoryMillis, withRepo } from "./git-repo.ts"
 
 /** git's id of the empty blob. */
 const emptyBlob = "e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"
@@ -130,20 +130,20 @@ const attributeCheckStops = (_dir: string, repo: string) =>
 
 describe("path names from git are not decoded lossily", () => {
   it.effect("refuses a listing where an invalid name sits beside a genuine U+FFFD name", () =>
-    withRepo(mixedListingRefused))
+    withRepo(mixedListingRefused), repositoryMillis)
 
   it.effect("refuses a listing whose only name is invalid, so it cannot pass as U+FFFD", () =>
-    withRepo(invalidListingRefused))
+    withRepo(invalidListingRefused), repositoryMillis)
 
-  it.effect("keeps a genuine U+FFFD name exactly", () => withRepo(replacementListingKept))
+  it.effect("keeps a genuine U+FFFD name exactly", () => withRepo(replacementListingKept), repositoryMillis)
 })
 
 describe("blob content from git is not decoded lossily", () => {
-  it.effect("refuses attribute content holding an invalid byte", () => withRepo(invalidContentRefused))
+  it.effect("refuses attribute content holding an invalid byte", () => withRepo(invalidContentRefused), repositoryMillis)
 
   it.effect("keeps attribute content with a genuine U+FFFD and a leading byte order mark exactly", () =>
-    withRepo(replacementContentKept))
+    withRepo(replacementContentKept), repositoryMillis)
 
   it.effect("stops the attribute check at a .gitattributes holding an invalid byte", () =>
-    withRepo(attributeCheckStops))
+    withRepo(attributeCheckStops), repositoryMillis)
 })

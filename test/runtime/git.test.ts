@@ -32,6 +32,20 @@ const withTemporaryDirectory = <A, E>(use: (dir: string) => Effect.Effect<A, E>)
  */
 const envScript = "#!/bin/sh\nexec /usr/bin/env -u PWD -u SHLVL\n"
 
+/**
+ * The time budget, in milliseconds, of the tests that start a process
+ * through `startGit` (dogfood-6e, owner ruling of 2026-11-27). They claim
+ * nothing about speed; a process start took seconds while other sessions
+ * kept the load average between 75 and 200.
+ *
+ * What it bounds: the longer test starts one `sh` script named `git`,
+ * which runs `env`; the other tries one start that finds nothing on its
+ * PATH. Idle duration: awaiting the coordinator's measurement on the
+ * dogfood-6f snapshot; this file is not among the measurements of
+ * 2026-11-28.
+ */
+const gitStartMillis = 15_000
+
 /** Writes `<dir>/bin/git` as {@link envScript} and returns `<dir>/bin`. */
 const envNamedGit = (dir: string) => {
   mkdirSync(`${dir}/bin`)
@@ -81,10 +95,10 @@ const overrides = ["-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false
 
 describe("startGit", () => {
   it.effect("resolves git on the given PATH and passes exactly the given environment", () =>
-    withTemporaryDirectory(passesExactEnvironment))
+    withTemporaryDirectory(passesExactEnvironment), gitStartMillis)
 
   it.effect("fails as not run when git is not on the given PATH, ignoring the parent's", () =>
-    withTemporaryDirectory(notFoundOnGivenPath))
+    withTemporaryDirectory(notFoundOnGivenPath), gitStartMillis)
 })
 
 describe("cleanGitWith", () => {

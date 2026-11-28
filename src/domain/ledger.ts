@@ -194,9 +194,9 @@ export class LedgerError extends Schema.TaggedError<LedgerError>()(
 ) {}
 
 /**
- * Another writer held the ledger's write lock past `busy_timeout`. The
- * transaction wrote nothing; the launch attempt ends and the next one
- * tries again.
+ * Another writer held the ledger's write lock past the store's configured
+ * busy timeout (the {@link LedgerStore} contract). The transaction wrote
+ * nothing; the launch attempt ends and the next one tries again.
  */
 export class LedgerBusy extends Schema.TaggedError<LedgerBusy>()(
   "LedgerBusy",
@@ -230,13 +230,25 @@ export interface LedgerTx {
  * The ledger as a capability: every read and write goes through
  * {@link LedgerStore.transact}, so each one sees and assigns seqs in
  * commit order.
+ *
+ * The busy-wait contract, which every implementation must meet: each
+ * store is opened with a busy timeout, in milliseconds. A write that
+ * meets another writer's lock (another store on the same ledger, in this
+ * process or another) waits for it up to that timeout; if the lock is
+ * released in time the write goes ahead, and if not it fails with
+ * {@link LedgerBusy} and writes nothing. An implementation states how it
+ * meets this and what its evidence is (dogfood-6f, owner ruling of
+ * 2026-11-28).
  */
 export interface LedgerStore {
   /**
-   * Runs `body` inside one write transaction (`BEGIN IMMEDIATE`). It commits
+   * Runs `body` inside one write transaction, which takes the ledger's
+   * write lock when it begins. It commits
    * if `body` succeeds. If `body` fails, it rolls back and returns `body`'s
-   * own error, and nothing is written. Fails with {@link LedgerBusy} when
-   * another writer held the write lock past `busy_timeout`, and with
+   * own error, and nothing is written. When another writer holds the lock,
+   * it waits up to the store's configured busy timeout (the store's
+   * busy-wait contract) and then fails with {@link LedgerBusy}, having
+   * written nothing; it fails with
    * {@link LedgerError} on I/O, schema or decode failures. A failed COMMIT
    * is rolled back if the transaction is still open, and its error is
    * returned. The exception is a failed ROLLBACK: its error replaces

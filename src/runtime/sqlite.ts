@@ -227,10 +227,28 @@ const requireUsable = <E>(store: StoreWriter<E>, decision: StoreVersionDecision)
     refusalFailure(store.path, store.knownVersion, store.refused),
   )
 
+/**
+ * Opens a read-write SQLite connection to the database file at `path`,
+ * creating the file when it is missing, and nothing more: it sets no
+ * pragma. A store's writer open ({@link openWriter}) makes its read-write
+ * connection through one of these and then sets `busy_timeout` itself, so
+ * the value a connection carries is the open's doing, not this function's.
+ * Production passes {@link connectSqlite}; a test passes one that calls it
+ * and records the connection, so it can read the connection's busy timeout
+ * ({@link busyTimeoutOf}) after a production open (dogfood-6f, owner
+ * ruling of 2026-11-28).
+ */
+export type ConnectSqlite = (path: string) => Database
+
+/** The production {@link ConnectSqlite}: `bun:sqlite`'s `Database`, creating the file when missing. */
+export const connectSqlite: ConnectSqlite = (path) => new Database(path, { create: true })
+
 /** What {@link openWriter} needs to know about one store, its own error mapping included. */
 export interface StoreWriter<E> {
   /** The store's database file. */
   readonly path: string
+  /** Opens the read-write connection to `path`; production passes {@link connectSqlite}. */
+  readonly connect: ConnectSqlite
   /**
    * The store's own known format version (`knownLedgerVersion` or
    * `knownLogVersion`), which its version reads are decided against. The
@@ -257,6 +275,27 @@ const closed = (db: Database) =>
   Effect.sync(() => {
     db.close()
   })
+
+/** The row `PRAGMA busy_timeout` returns: the connection's busy timeout, in milliseconds. */
+const decodeBusyTimeout = Schema.decodeUnknownEffect(Schema.Struct({ timeout: Schema.Int }))
+
+/**
+ * The busy timeout, in milliseconds, configured on the open connection
+ * `db`, read back with `PRAGMA busy_timeout`, with a thrown error or a row
+ * that does not decode mapped by `failure`. It reads and changes nothing
+ * else. A test reads it on the connection a store's open made through a
+ * recording {@link ConnectSqlite} (`openLedgerWith`, `openProjectLogWith`)
+ * to check the value the stores' busy-wait contract rests on (dogfood-6f,
+ * owner ruling of 2026-11-28).
+ */
+export const busyTimeoutOf = <E>(db: Database, failure: (error: unknown) => E): Effect.Effect<number, E> =>
+  Effect.map(
+    Effect.flatMap(
+      Effect.try({ try: () => db.query("PRAGMA busy_timeout").get(), catch: failure }),
+      (row) => Effect.mapError(decodeBusyTimeout(row), failure),
+    ),
+    ({ timeout }) => timeout,
+  )
 
 /** Sets `busy_timeout` on `db` for `store`. */
 const timed = <E>(store: StoreWriter<E>, db: Database) =>
@@ -387,5 +426,5 @@ const preparedOrClosed =
 export const openWriter = <E>(store: StoreWriter<E>): Effect.Effect<Database, E | StoreVersionNewer> =>
   Effect.andThen(
     checkedBeforeWrite(store),
-    Effect.flatMap(attempt(store, () => new Database(store.path, { create: true })), preparedOrClosed(store)),
+    Effect.flatMap(attempt(store, () => store.connect(store.path)), preparedOrClosed(store)),
   )

@@ -19,8 +19,9 @@ import {
 import { OpId, Revision } from "../../src/domain/ids.ts"
 import { SessionId } from "../../src/domain/session.ts"
 import { knownLogVersion, StoreVersionNewer } from "../../src/domain/store-version.ts"
-import { openProjectLog } from "../../src/runtime/project-log.ts"
+import { openProjectLog, openProjectLogWith } from "../../src/runtime/project-log.ts"
 import { tryLock } from "../../src/runtime/project-lock.ts"
+import { expectConfiguredBusyTimeout } from "./recording-connect.ts"
 import {
   dataVersionWatch,
   hasWalFiles,
@@ -326,6 +327,22 @@ describe("project log format version", () => {
   it.effect("commits nothing when it opens a current log", () => withDir(currentLogCommitsNothing))
   it.effect("commits nothing when it opens a log at 1, which it reads without raising", () =>
     withDir(olderReadableLogCommitsNothing),
+  )
+})
+
+/**
+ * The busy-wait contract (Domain's `ProjectLog`; dogfood-6f, owner ruling
+ * of 2026-11-28): the adapter meets it by setting SQLite's `busy_timeout`
+ * to the configured value, and SQLite's documented behaviour is the
+ * evidence for the wait. This checks the adapter's half: the connection
+ * the production open (`openProjectLogWith`, which `openProjectLog` is
+ * with the real connect function) makes carries each configured value.
+ */
+const busyTimeoutConfigured = (dir: string) => expectConfiguredBusyTimeout(openProjectLogWith, `${dir}/log.sqlite`)
+
+describe("project log busy-wait contract", () => {
+  it.effect("opens its connection with busy_timeout set to the configured value", () =>
+    withDir(busyTimeoutConfigured),
   )
 })
 

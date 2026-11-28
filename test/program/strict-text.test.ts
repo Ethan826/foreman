@@ -16,7 +16,7 @@ import { cleanReviewMessage } from "../fixtures/clients/codex-review-clean.ts"
 import { codexCompletedLines } from "../fixtures/clients/codex-events.ts"
 import { exitedWith, type ClientScript } from "../fixtures/clients/fake-client.ts"
 import { afterFindings, afterImplement, reviewed } from "./handoff-steps.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { failsWith, opened } from "./session-steps.ts"
 
 /** The flag after which Codex's argv names its final-message file. */
@@ -71,10 +71,10 @@ const taskRefused = (harness: Harness) =>
 
 describe("text from file bytes in a launch command", () => {
   it.effect("a final message that is not UTF-8 makes the review Unclassified and keeps its bytes", () =>
-    withHarness({ repository: true }, reviewUnclassified),
+    withHarness({ repository: true }, reviewUnclassified), repositoryHarnessMillis,
   )
   it.effect("a findings file that is not UTF-8 refuses the correction", () =>
-    withHarness({ repository: true }, findingsRefused),
+    withHarness({ repository: true }, findingsRefused), repositoryHarnessMillis,
   )
   it.effect("a task that is not UTF-8 refuses the implementation", () => withHarness({}, taskRefused))
 })

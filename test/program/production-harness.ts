@@ -20,9 +20,33 @@ import { cleanReviewMessage } from "../fixtures/clients/codex-review-clean.ts"
 import { makeRepo } from "../runtime/git-repo.ts"
 
 /**
- * The time budget of one end-to-end test, in milliseconds. Each runs
- * several CLI commands, each with git, SQLite and process starts, which
- * take more than vitest's default 5 seconds on a loaded machine.
+ * The time budget of one end-to-end test, in milliseconds: every test that
+ * runs the CLI's `main` or `productionStatus`, here and in the facade's
+ * status tests (dogfood-6e, owner ruling of 2026-11-27). Each runs CLI
+ * commands, each with git, SQLite and process starts, which take more
+ * than vitest's default 5 seconds on a loaded machine; a lone `status`,
+ * with one `ps -A` and SQLite reads, passed 5 seconds under a load
+ * average of 75 to 200. It is the ceiling for every test budget; a
+ * larger one goes to the owner.
+ *
+ * What it bounds, counted from the code: the longest test of this kind
+ * when the machine is idle, production-status-findings' "a refused
+ * configured layout is a finding beside the session, its attempt and its
+ * evidence", makes 45 git starts and 3 `ps -A`: the layout's repository
+ * (4: `init`, two `config`, a commit), `worktree create` (11: two
+ * `rev-parse`, the attribute check's `ls-tree` and two `config`, the
+ * branch probe, `worktree add` and four identity `rev-parse`), the
+ * startup check of `session open`, `implement` and the first `status`
+ * (10 each: the worktree listing, two identity `rev-parse`, the attribute
+ * check's three, `rev-parse HEAD` and the attribute check of the base
+ * again), and the second `status`, whose check the refused layout skips
+ * (none); one `ps -A` in the client's start and one in each `status`.
+ * Besides those, five client `--version` reads and one fake client
+ * launch. Idle duration: 4,565 ms, measured by the coordinator on
+ * 2026-11-28 at a load average of about 3. Under load averages of 39 to
+ * 145 the slowest test of this kind, production-profile's "configured
+ * check commands reach the profile and the brief alike", took
+ * 55,242 ms (idle 2,201 ms); that headroom is with the owner.
  */
 export const endToEndMillis = 60_000
 

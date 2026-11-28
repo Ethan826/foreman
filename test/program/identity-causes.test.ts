@@ -19,7 +19,7 @@ import type { SessionContext } from "../../src/program/session-context.ts"
 import { worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type StartGit } from "../../src/runtime/git.ts"
 import { emptyHome } from "../runtime/git-repo.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { append, opened, quotaHold } from "./session-steps.ts"
 
 /** The armed waiver. */
@@ -97,15 +97,15 @@ const noRepositoryAfterWarningsExpires = (harness: Harness) =>
 
 describe("an identity read git could not complete keeps its cause and the waiver", () => {
   it.effect("an I/O error from --absolute-git-dir surfaces as GitCommandFailed", () =>
-    withHarness({ repository: true }, keepsWaiverOn("--absolute-git-dir")),
+    withHarness({ repository: true }, keepsWaiverOn("--absolute-git-dir")), repositoryHarnessMillis,
   )
   it.effect("an I/O error from --git-common-dir surfaces as GitCommandFailed", () =>
-    withHarness({ repository: true }, keepsWaiverOn("--git-common-dir")),
+    withHarness({ repository: true }, keepsWaiverOn("--git-common-dir")), repositoryHarnessMillis,
   )
   it.effect("git's report of no repository is still a judgment that expires the waiver", () =>
-    withHarness({ repository: true }, noRepositoryExpires),
+    withHarness({ repository: true }, noRepositoryExpires), repositoryHarnessMillis,
   )
   it.effect("git's report of no repository after Apple Git's xcrun lines still expires the waiver", () =>
-    withHarness({ repository: true }, noRepositoryAfterWarningsExpires),
+    withHarness({ repository: true }, noRepositoryAfterWarningsExpires), repositoryHarnessMillis,
   )
 })

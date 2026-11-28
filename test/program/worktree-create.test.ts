@@ -11,7 +11,7 @@ import { WorktreeCreated } from "../../src/domain/events.ts"
 import { Revision } from "../../src/domain/ids.ts"
 import { WorktreeBranchExists, WorktreePathExists } from "../../src/domain/worktree.ts"
 import { worktreeProgram } from "../../src/program/worktree.ts"
-import { emptyCommit, emptyHome, git, withRepo } from "../runtime/git-repo.ts"
+import { emptyCommit, emptyHome, git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 
 /** The production entry points over this file's empty home. */
 const { createWorktree, identifyWorktree } = worktreeProgram(emptyHome)
@@ -113,17 +113,21 @@ const createdThroughSymlink = (dir: string, owner: string) =>
   })
 
 describe("createWorktree", () => {
-  it.effect("returns the created fields; the worktree is on its branch, locked", () => withRepo(createdOnBranchLocked))
+  it.effect("returns the created fields; the worktree is on its branch, locked", () =>
+    withRepo(createdOnBranchLocked), repositoryMillis)
 
-  it.effect("starts from a given start revision instead of the owner's HEAD", () => withRepo(startsFromGivenRevision))
+  it.effect("starts from a given start revision instead of the owner's HEAD", () =>
+    withRepo(startsFromGivenRevision), repositoryMillis)
 
-  it.effect("refuses an existing branch and creates no path", () => withRepo(existingBranchRefused))
+  it.effect("refuses an existing branch and creates no path", () => withRepo(existingBranchRefused), repositoryMillis)
 
-  it.effect("refuses an existing path, even an empty directory, and creates no branch", () => withRepo(existingPathRefused))
+  it.effect("refuses an existing path, even an empty directory, and creates no branch", () =>
+    withRepo(existingPathRefused), repositoryMillis)
 
-  it.effect("leaves the owner's checkout unchanged", () => withRepo(ownerUnchanged))
+  it.effect("leaves the owner's checkout unchanged", () => withRepo(ownerUnchanged), repositoryMillis)
 
-  it.effect("creates a worktree whose path contains a newline", () => withRepo(createdWithNewline))
+  it.effect("creates a worktree whose path contains a newline", () => withRepo(createdWithNewline), repositoryMillis)
 
-  it.effect("records the path with symlinks resolved, and it passes the startup check", () => withRepo(createdThroughSymlink))
+  it.effect("records the path with symlinks resolved, and it passes the startup check", () =>
+    withRepo(createdThroughSymlink), repositoryMillis)
 })

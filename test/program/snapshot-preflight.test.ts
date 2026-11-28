@@ -18,7 +18,7 @@ import {
   type PreflightFinding,
 } from "../../src/domain/snapshot.ts"
 import type { GitInvocation } from "../../src/runtime/git.ts"
-import { git } from "../runtime/git-repo.ts"
+import { git, repositoryMillis } from "../runtime/git-repo.ts"
 import { commandOf, inSupervisor, recordingStart, snapshotWith, type Setting } from "./snapshot-setting.ts"
 
 /** The commands that stage, none of which may run when the preflight refuses. */
@@ -83,13 +83,13 @@ const withBaseGitlink = (setting: Setting) =>
 describe("the preflight refuses before staging", () => {
   it.effect("a gitlink in the base tree", inSupervisor((setting) =>
     Effect.flatMap(withBaseGitlink(setting), (based) =>
-      refusedBeforeStaging(based, [new GitlinkInBase({ path: "sub" })]))))
+      refusedBeforeStaging(based, [new GitlinkInBase({ path: "sub" })]))), repositoryMillis)
 
   it.effect("a nested repository", inSupervisor((setting) =>
     Effect.gen(function* () {
       yield* git(setting.identity.path, "init", "--quiet", "-b", "main", "sub")
       yield* refusedBeforeStaging(setting, [new NestedRepository({ path: "sub" })])
-    })))
+    })), repositoryMillis)
 
   it.effect("a directory holding a .git that is not a valid repository", inSupervisor((setting) =>
     Effect.gen(function* () {
@@ -97,23 +97,24 @@ describe("the preflight refuses before staging", () => {
       mkdirSync(`${setting.identity.path}/odd/.git`)
       writeFileSync(`${setting.identity.path}/odd/file.txt`, "inside\n")
       yield* refusedBeforeStaging(setting, [new NestedRepository({ path: "odd" })])
-    })))
+    })), repositoryMillis)
 
   it.effect("a FIFO", inSupervisor((setting) =>
     Effect.gen(function* () {
       makeFifo(`${setting.identity.path}/pipe`)
       yield* refusedBeforeStaging(setting, [new SpecialFile({ path: "pipe" })])
-    })))
+    })), repositoryMillis)
 
   it.effect("a FIFO alone in a directory git lists nothing from", inSupervisor((setting) =>
     Effect.gen(function* () {
       mkdirSync(`${setting.identity.path}/run`)
       makeFifo(`${setting.identity.path}/run/pipe`)
       yield* refusedBeforeStaging(setting, [new SpecialFile({ path: "run/pipe" })])
-    })))
+    })), repositoryMillis)
 
   it.effect("a socket", inSupervisor((setting) =>
-    withSocket(`${setting.identity.path}/sock`, refusedBeforeStaging(setting, [new SpecialFile({ path: "sock" })]))))
+    withSocket(`${setting.identity.path}/sock`, refusedBeforeStaging(setting, [new SpecialFile({ path: "sock" })]))),
+  repositoryMillis)
 
   it.effect("a FIFO at a path the base tracks, though an ignore pattern matches it", inSupervisor((setting) =>
     Effect.gen(function* () {
@@ -121,7 +122,7 @@ describe("the preflight refuses before staging", () => {
       rmSync(`${setting.identity.path}/a.txt`, { recursive: false, force: false })
       makeFifo(`${setting.identity.path}/a.txt`)
       yield* refusedBeforeStaging(setting, [new SpecialFile({ path: "a.txt" })])
-    })))
+    })), repositoryMillis)
 })
 
 describe("the preflight leaves ignored paths alone", () => {
@@ -130,7 +131,7 @@ describe("the preflight leaves ignored paths alone", () => {
       writeFileSync(`${setting.identity.path}/.gitignore`, "*.pipe\n")
       makeFifo(`${setting.identity.path}/app.pipe`)
       yield* stagedAndTaken(setting)
-    })))
+    })), repositoryMillis)
 
   it.effect("a nested repository and a FIFO inside an ignored directory", inSupervisor((setting) =>
     Effect.gen(function* () {
@@ -140,5 +141,5 @@ describe("the preflight leaves ignored paths alone", () => {
       yield* git(`${top}/vendor`, "init", "--quiet", "-b", "main", "lib")
       makeFifo(`${top}/vendor/pipe`)
       yield* stagedAndTaken(setting)
-    })))
+    })), repositoryMillis)
 })

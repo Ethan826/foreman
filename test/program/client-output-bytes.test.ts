@@ -13,14 +13,12 @@ import { tmpdir } from "node:os"
 import { Success, Unclassified } from "../../src/domain/outcomes.ts"
 import { Roles } from "../../src/domain/roles.ts"
 import { classifyAttempt } from "../../src/features/step-outcome.ts"
-import { startTimeOf } from "../../src/format/ps.ts"
 import { claudeDecoded, claudeHandoff } from "../../src/program/client-output.ts"
-import { readProcesses } from "../../src/runtime/processes.ts"
-import { startClientWith } from "../../src/runtime/spawn.ts"
 import { stdoutLines } from "../../src/runtime/stdout-lines.ts"
 import { strictUtf8 } from "../../src/runtime/strict-utf8.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { exitedWith } from "../fixtures/clients/fake-client.ts"
+import { clientStartMillis, startClientWithoutListing } from "../runtime/client-start.ts"
 
 /** The bytes of `text`, which is ASCII only. */
 const bytesOf = (text: string) => Uint8Array.from(text, (character) => character.charCodeAt(0))
@@ -58,10 +56,15 @@ const linesOf = (chunks: ReadonlyArray<Uint8Array>) =>
 /** The handoff text of these lines; none when it is not UTF-8. */
 const handoffOf = (lines: Parameters<typeof claudeHandoff>[0]) => Effect.map(claudeHandoff(lines), strictUtf8)
 
-const startClient = startClientWith(readProcesses, startTimeOf)
+/**
+ * Production's client starter without the `ps` listing: these tests'
+ * facts are the bytes, not the start time (dogfood-6e, correction 2,
+ * finding F3).
+ */
+const startClient = startClientWithoutListing
 
 /**
- * Prints `bytes` through a real shell (`cat` of a file) with the real
+ * Prints `bytes` through a real shell (`cat` of a file) with production's
  * client starter, and returns the lines it streamed and the raw file.
  */
 const printedByShell = (bytes: Uint8Array) =>
@@ -98,6 +101,7 @@ describe("Claude's stdout through a real shell and the stream path", () => {
       const { lines } = yield* printedByShell(runWith(invalidByte))
       expect(outcomeOf(lines)).toEqual(new Unclassified())
     }),
+    clientStartMillis,
   )
   it.effect("keeps the exact bytes, FF included, in the raw file", () =>
     Effect.gen(function* () {
@@ -105,6 +109,7 @@ describe("Claude's stdout through a real shell and the stream path", () => {
       const { raw } = yield* printedByShell(printed)
       expect(Array.from(raw)).toEqual(Array.from(printed))
     }),
+    clientStartMillis,
   )
   it.effect("stays Success with a genuine U+FFFD in its result text", () =>
     Effect.gen(function* () {
@@ -112,6 +117,7 @@ describe("Claude's stdout through a real shell and the stream path", () => {
       expect(outcomeOf(lines)).toEqual(new Success())
       expect(yield* handoffOf(lines)).toEqual(Option.some("Caf\uFFFD."))
     }),
+    clientStartMillis,
   )
 })
 

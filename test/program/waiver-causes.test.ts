@@ -16,7 +16,7 @@ import { implement } from "../../src/program/implement.ts"
 import { type SessionContext, WorktreeUnready } from "../../src/program/session-context.ts"
 import { StateFileFailed } from "../../src/runtime/state-files.ts"
 import { afterFindings } from "./handoff-steps.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { append, opened, quotaHold } from "./session-steps.ts"
 
 const waiverOf: Readonly<Record<Client, WaiverId>> = {
@@ -142,12 +142,13 @@ describe("a check or read that could not run keeps the waiver and its own cause"
   it.effect("a startup git failure surfaces as GitCommandFailed", () => withHarness({}, startupGitFails))
   it.effect("an I/O error reading the task copy surfaces as StateFileFailed", () => withHarness({}, taskReadFails))
   it.effect("an I/O error reading the findings file surfaces as StateFileFailed", () =>
-    withHarness({ repository: true }, findingsReadFails),
+    withHarness({ repository: true }, findingsReadFails), repositoryHarnessMillis,
   )
 })
 
 describe("a judgment that the worktree or a file is wrong still expires the waiver", () => {
   it.effect("a refused worktree check", () => withHarness({}, worktreeJudged))
   it.effect("a missing task copy", () => withHarness({}, taskCopyMissing))
-  it.effect("a missing findings file", () => withHarness({ repository: true }, findingsMissing))
+  it.effect("a missing findings file", () =>
+    withHarness({ repository: true }, findingsMissing), repositoryHarnessMillis)
 })

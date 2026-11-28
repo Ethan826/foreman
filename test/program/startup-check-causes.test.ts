@@ -16,7 +16,7 @@ import { type SessionContext, WorktreeUnready } from "../../src/program/session-
 import { status } from "../../src/program/status.ts"
 import { worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type StartGit } from "../../src/runtime/git.ts"
-import { emptyHome } from "../runtime/git-repo.ts"
+import { emptyHome, repositoryMillis } from "../runtime/git-repo.ts"
 import type { Harness } from "./session-harness.ts"
 import { withHarness } from "./session-harness.ts"
 import { madeUpWorktree, realWorktree } from "./session-worktree.ts"
@@ -94,7 +94,7 @@ const statusReportsFailure = (harness: Harness) =>
 
 describe("the startup worktree check keeps a failure apart from a judgment", () => {
   it.effect("git that cannot start surfaces as GitCommandFailed", gitUnstartable)
-  it.effect("a recorded path git does not list is judged WorktreeUnready", worktreeNotListed)
+  it.effect("a recorded path git does not list is judged WorktreeUnready", worktreeNotListed, repositoryMillis)
   it.effect("session open stops with the check's own failure", () => withHarness({}, openStopsWithFailure))
   it.effect("status reports the check's failure and still answers", () => withHarness({}, statusReportsFailure))
 })

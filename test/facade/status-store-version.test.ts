@@ -19,7 +19,7 @@ import { Windows } from "../../src/domain/window.ts"
 import { main } from "../../src/facade/cli.ts"
 import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
-import { capturing } from "../program/production-harness.ts"
+import { capturing, endToEndMillis } from "../program/production-harness.ts"
 import { reading } from "../program/session-harness.ts"
 import { treeOf } from "../program/state-tree.ts"
 import { rawExec, setVersion, versionOf } from "../runtime/store-version-fixtures.ts"
@@ -118,6 +118,6 @@ const withDirectory = <A, E, R>(use: (dir: string) => Effect.Effect<A, E, R>) =>
 
 describe("tarlatan status over a ledger stamped by a newer release", () => {
   it.live("reports it as a finding, reads none of its rows, exits 0 and leaves it as it was", () =>
-    withDirectory(newerLedgerReported),
+    withDirectory(newerLedgerReported), endToEndMillis,
   )
 })

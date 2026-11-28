@@ -23,8 +23,8 @@ import {
 } from "../../src/domain/ledger.ts"
 import { StoreVersionNewer } from "../../src/domain/store-version.ts"
 import { Windows } from "../../src/domain/window.ts"
-import { openLedger } from "../../src/runtime/ledger-sqlite.ts"
-import { startChild } from "./child-process.ts"
+import { openLedger, openLedgerWith } from "../../src/runtime/ledger-sqlite.ts"
+import { expectConfiguredBusyTimeout } from "./recording-connect.ts"
 import { dataVersionWatch, hasWalFiles, rollbackStoreAt, setVersion, versionOf } from "./store-version-fixtures.ts"
 
 const busyMillis = 50
@@ -178,35 +178,26 @@ const overlappingTransactionsSerialize = (store: LedgerStore) =>
     expect(yield* rowsOf(store)).toHaveLength(2)
   })
 
-// A child process holds the write lock for this long, well inside the
-// busy timeout this test opens its store with.
-const childHoldMillis = 300
-const waitingBusyMillis = 10_000
-
-// The write starts while a child process holds the lock (its ready file
-// is written after BEGIN IMMEDIATE) and succeeds once the child releases
-// it. A second process is needed: SQLite's busy wait is synchronous and
-// would block this process's event loop, so the lock holder could not
-// release from here.
-const waitsThenSucceeds = (dir: string) =>
-  Effect.scoped(
-    Effect.gen(function* () {
-      const path = `${dir}/ledger.sqlite`
-      const store = yield* openLedger(path, waitingBusyMillis)
-      yield* startChild("hold-ledger-write.ts", path, `${dir}/ready`, [String(childHoldMillis)])
-      expect(yield* appendIn(store, [grant("g-1")])).toEqual([1])
-      expect(yield* rowsOf(store)).toEqual([grant("g-1")])
-    }),
-  )
+/**
+ * The busy-wait contract (Domain's `LedgerStore`; dogfood-6f, owner
+ * ruling of 2026-11-28): the adapter meets it by setting SQLite's
+ * `busy_timeout` to the configured value, and SQLite's documented
+ * behaviour is the evidence for the wait. This checks the adapter's half:
+ * the connection the production open (`openLedgerWith`, which `openLedger`
+ * is with the real connect function) makes carries each configured value.
+ * It replaces the timing test "waits within busy_timeout for another
+ * process's write lock, then writes".
+ */
+const busyTimeoutConfigured = (dir: string) => expectConfiguredBusyTimeout(openLedgerWith, `${dir}/ledger.sqlite`)
 
 const withDir = <A, E>(use: (dir: string) => Effect.Effect<A, E>) => {
   const dir = mkdtempSync(`${tmpdir()}/tarlatan-ledger-`)
   return Effect.ensuring(use(dir), removeDir(dir))
 }
 
-describe("SQLite ledger store across processes", () => {
-  it.live("waits within busy_timeout for another process's write lock, then writes", () =>
-    withDir(waitsThenSucceeds),
+describe("SQLite ledger store busy-wait contract", () => {
+  it.effect("opens its connection with busy_timeout set to the configured value", () =>
+    withDir(busyTimeoutConfigured),
   )
 })
 

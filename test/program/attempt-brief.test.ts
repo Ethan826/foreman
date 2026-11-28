@@ -15,7 +15,8 @@ import { review } from "../../src/program/review.ts"
 import { status } from "../../src/program/status.ts"
 import { openProjectLog } from "../../src/runtime/project-log.ts"
 import { sha256Of, StateFileFailed } from "../../src/runtime/state-files.ts"
-import { afterImplement } from "./handoff-steps.ts"
+import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
+import { implemented } from "./handoff-steps.ts"
 import { eventsOf, type Harness, logBatch, published, withHarness } from "./session-harness.ts"
 import { failsWith, opened, refusedFor } from "./session-steps.ts"
 
@@ -71,11 +72,13 @@ const publicationFailure = (harness: Harness) =>
 
 const changedBriefRefuses = (change: (path: string) => void) => (harness: Harness) =>
   Effect.gen(function* () {
-    yield* afterImplement(harness)
+    yield* opened(harness)
+    yield* implemented(harness, claudeSuccess)
     const [brief] = yield* briefsOf(harness)
     change(brief?.briefPath ?? "")
     yield* refusedFor(harness, review(harness.context, { waive: true, attest: true }), ["ReportsNotIntact"])
     expect((yield* status(harness.status)).briefs).toEqual([{ opId: brief?.opId, briefIntact: false }])
+    expect(harness.gitCalls).toEqual([])
   })
 
 describe("the attempt's brief", () => {
@@ -87,12 +90,12 @@ describe("the attempt's brief", () => {
     withHarness({}, publicationFailure),
   )
   it.effect("missing later makes a handoff refuse as a missing report does", () =>
-    withHarness({ repository: true }, changedBriefRefuses((path) => {
+    withHarness({}, changedBriefRefuses((path) => {
       rmSync(path, { recursive: false, force: false })
     })),
   )
   it.effect("changed later makes a handoff refuse as a changed report does", () =>
-    withHarness({ repository: true }, changedBriefRefuses((path) => {
+    withHarness({}, changedBriefRefuses((path) => {
       writeFileSync(path, "another brief\n")
     })),
   )

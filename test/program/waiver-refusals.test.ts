@@ -22,7 +22,7 @@ import { review } from "../../src/program/review.ts"
 import { FileNotUtf8, FindingsFileUnreadable, TaskFileChanged } from "../../src/program/session-errors.ts"
 import { StateFileFailed } from "../../src/runtime/state-files.ts"
 import { afterFindings, afterImplement } from "./handoff-steps.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { append, failsWith, intendedOf, opened, quotaHold } from "./session-steps.ts"
 
 const waiverOf: Readonly<Record<Client, WaiverId>> = {
@@ -188,13 +188,13 @@ describe("a deliberate refusal before Intended expires every armed waiver", () =
   it.effect("a changed task file, with Claude's waiver armed", () => withHarness({}, changedTask))
   it.effect("a task that is not UTF-8, with Claude's waiver armed", () => withHarness({}, taskNotUtf8))
   it.effect("`* text` added before review, with Codex's waiver armed", () =>
-    withHarness({ repository: true }, textAttributes),
+    withHarness({ repository: true }, textAttributes), repositoryHarnessMillis,
   )
   it.effect("a snapshot preflight refusal, with Codex's waiver armed", () =>
-    withHarness({ repository: true }, preflightRefused),
+    withHarness({ repository: true }, preflightRefused), repositoryHarnessMillis,
   )
   it.effect("an unreadable findings file, with Claude's waiver armed", () =>
-    withHarness({ repository: true }, findingsMissing),
+    withHarness({ repository: true }, findingsMissing), repositoryHarnessMillis,
   )
   it.effect("an unsafe profile path, with Claude's waiver armed", () => withHarness({}, profileRefused))
   it.effect("a refused check command, with Claude's waiver armed", () => withHarness({}, checkCommandRefused))

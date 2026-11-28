@@ -12,6 +12,27 @@
 // and stamps a ledger at 0 with 1; a ledger stamped newer than
 // `knownLedgerVersion` (1), or below 0, is refused and left untouched
 // (`openWriter` in `sqlite.ts`). The ledger is never raised.
+//
+// Domain's busy-wait contract (`LedgerStore`: a write that meets another
+// writer's lock waits up to the configured busy timeout, then fails with
+// `LedgerBusy` and writes nothing) is met by setting
+// `PRAGMA busy_timeout` to the configured value on every connection the
+// open makes, the read-only version check and the writer alike. SQLite
+// documents that behaviour: a statement that finds a table locked sleeps
+// and retries until at least that many milliseconds have passed, then
+// returns SQLITE_BUSY (sqlite.org/pragma.html#pragma_busy_timeout,
+// sqlite.org/c3ref/busy_timeout.html). Every write's `BEGIN IMMEDIATE`
+// takes the write lock first, so that is where SQLITE_BUSY meets a write;
+// this module maps it to `LedgerBusy`, and the transaction has written
+// nothing (a busy error after the lock is taken is `LedgerError`, "lock
+// lost inside a transaction", and rolls back). That documented
+// behaviour is the evidence; no test observes the wait, since `bun:sqlite`
+// offers no way to see that a write met the lock. The tests check that
+// the connection the production open makes carries the configured value
+// (read with `busyTimeoutOf` through `openLedgerWith`) and
+// that a write under a held lock fails with `LedgerBusy` and writes
+// nothing. Another database would supply its own evidence against the
+// Domain contract (dogfood-6f, owner ruling of 2026-11-28).
 import type { Database } from "bun:sqlite"
 import { Array as Arr, Effect, Option, pipe, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
@@ -39,7 +60,15 @@ import {
   SpendDownCanceled,
 } from "../domain/ledger.ts"
 import { knownLedgerVersion, type StoreVersionNewer } from "../domain/store-version.ts"
-import { isSqliteBusy, openWriter, sqliteReason, transaction, type TxConnection } from "./sqlite.ts"
+import {
+  type ConnectSqlite,
+  connectSqlite,
+  isSqliteBusy,
+  openWriter,
+  sqliteReason,
+  transaction,
+  type TxConnection,
+} from "./sqlite.ts"
 
 /** The table names (design "Where the ledger lives"). */
 const Tables = {
@@ -243,9 +272,10 @@ const storeOf = (db: Database, lock: Semaphore.Semaphore): LedgerStore => ({
  * format version is {@link LedgerError}, and a newer version is
  * `StoreVersionNewer`.
  */
-const open = (path: string, busyTimeoutMillis: number) =>
+const open = (connect: ConnectSqlite, path: string, busyTimeoutMillis: number) =>
   openWriter<LedgerBusy | LedgerError>({
     path,
+    connect,
     knownVersion: knownLedgerVersion,
     busyTimeoutMillis,
     schemaSql,
@@ -255,25 +285,47 @@ const open = (path: string, busyTimeoutMillis: number) =>
   })
 
 /**
+ * {@link openLedger} with its read-write connection made by `connect`
+ * (`ConnectSqlite` in `sqlite.ts`) instead of the production
+ * `connectSqlite`; everything else, `busy_timeout` included, is set by the
+ * open as in {@link openLedger}. Production uses {@link openLedger}; a test
+ * passes a `connect` that records the connection, to read its busy timeout
+ * after the open (dogfood-6f, owner ruling of 2026-11-28).
+ */
+export const openLedgerWith =
+  (connect: ConnectSqlite) =>
+  (
+    path: string,
+    busyTimeoutMillis: number,
+  ): Effect.Effect<LedgerStore, LedgerError | LedgerBusy | StoreVersionNewer, Scope.Scope> =>
+    Effect.map(
+      Effect.acquireRelease(open(connect, path, busyTimeoutMillis), (db) =>
+        Effect.sync(() => {
+          db.close()
+        }),
+      ),
+      (db) => storeOf(db, Semaphore.makeUnsafe(1)),
+    )
+
+/**
  * Opens (creating if needed) the ledger at `path` for the scope, in WAL mode
- * with `busy_timeout` set to `busyTimeoutMillis`, and closes it when the
- * scope ends. A write that waits for the lock longer than that fails with
- * {@link LedgerBusy} and writes nothing. The open itself takes the write
- * lock briefly, so it can fail with {@link LedgerBusy} too. A ledger at
+ * with `busy_timeout` set to `busyTimeoutMillis` on every connection it
+ * makes, and closes it when the scope ends. That is how it meets Domain's
+ * busy-wait contract ({@link LedgerStore}): a write that meets another
+ * writer's lock waits up to `busyTimeoutMillis`, as SQLite documents for
+ * `busy_timeout` (sqlite.org/pragma.html#pragma_busy_timeout,
+ * sqlite.org/c3ref/busy_timeout.html), and then fails with
+ * {@link LedgerBusy} and writes nothing. SQLite's documented behaviour is
+ * the evidence for the wait; no test observes it. The open itself takes
+ * the write lock briefly, so it can wait as long and fail with
+ * {@link LedgerBusy} too. A ledger at
  * format version 0 (written by v0.1.0) is stamped 1 and a new one is
  * created at 1. A ledger stamped by a newer release fails with
  * `StoreVersionNewer`, and one stamped below 0 with {@link LedgerError};
  * either is left as it was, read and written by nothing.
  */
-export const openLedger = (
+export const openLedger: (
   path: string,
   busyTimeoutMillis: number,
-): Effect.Effect<LedgerStore, LedgerError | LedgerBusy | StoreVersionNewer, Scope.Scope> =>
-  Effect.map(
-    Effect.acquireRelease(open(path, busyTimeoutMillis), (db) =>
-      Effect.sync(() => {
-        db.close()
-      }),
-    ),
-    (db) => storeOf(db, Semaphore.makeUnsafe(1)),
-  )
+) => Effect.Effect<LedgerStore, LedgerError | LedgerBusy | StoreVersionNewer, Scope.Scope> =
+  openLedgerWith(connectSqlite)

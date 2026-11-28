@@ -12,6 +12,25 @@
 // design, "Constraints"): an append holding an event that v0.1.1 does not
 // decode (`raisesLogFormat`) sets a log at 1 to 2 inside its own
 // transaction, so the raise commits and rolls back with the inserts.
+//
+// Domain's busy-wait contract (`ProjectLog`: a write that meets another
+// writer's lock waits up to the configured busy timeout, then fails with
+// `ProjectLogError` "project log busy" and writes nothing) is met by
+// setting `PRAGMA busy_timeout` to the configured value on every
+// connection the open makes, the read-only version check and the writer
+// alike. SQLite documents that behaviour: a statement that finds a table
+// locked sleeps and retries until at least that many milliseconds have
+// passed, then returns SQLITE_BUSY
+// (sqlite.org/pragma.html#pragma_busy_timeout,
+// sqlite.org/c3ref/busy_timeout.html), which this module maps to "project
+// log busy"; an append's `BEGIN IMMEDIATE` meets it before anything is
+// written. That documented behaviour is the evidence; no test observes the
+// wait, since `bun:sqlite` offers no way to see that a write met the lock.
+// The tests check that the connection the production open makes carries
+// the configured value (read with `busyTimeoutOf` through
+// `openProjectLogWith`). Another database would supply its own
+// evidence against the Domain contract (dogfood-6f, owner ruling of
+// 2026-11-28).
 import type { Database } from "bun:sqlite"
 import { Array as Arr, Effect, Match, Schema, Semaphore } from "effect"
 import type { Scope } from "effect"
@@ -29,6 +48,8 @@ import {
   type StoreVersionNewer,
 } from "../domain/store-version.ts"
 import {
+  type ConnectSqlite,
+  connectSqlite,
   isSqliteBusy,
   openWriter,
   readStoreVersion,
@@ -194,9 +215,10 @@ const logOf = (db: Database, lock: Semaphore.Semaphore): ProjectLog => ({
  * journal mode and a negative format version, and a newer version is
  * `StoreVersionNewer`.
  */
-const open = (path: string, busyTimeoutMillis: number) =>
+const open = (connect: ConnectSqlite, path: string, busyTimeoutMillis: number) =>
   openWriter<ProjectLogError>({
     path,
+    connect,
     knownVersion: knownLogVersion,
     busyTimeoutMillis,
     schemaSql,
@@ -206,8 +228,39 @@ const open = (path: string, busyTimeoutMillis: number) =>
   })
 
 /**
+ * {@link openProjectLog} with its read-write connection made by `connect`
+ * (`ConnectSqlite` in `sqlite.ts`) instead of the production
+ * `connectSqlite`; everything else, `busy_timeout` included, is set by the
+ * open as in {@link openProjectLog}. Production uses
+ * {@link openProjectLog}; a test passes a `connect` that records the
+ * connection, to read its busy timeout after the open (dogfood-6f, owner
+ * ruling of 2026-11-28).
+ */
+export const openProjectLogWith =
+  (connect: ConnectSqlite) =>
+  (
+    path: string,
+    busyTimeoutMillis: number,
+  ): Effect.Effect<ProjectLog, ProjectLogError | StoreVersionNewer, Scope.Scope> =>
+    Effect.map(
+      Effect.acquireRelease(open(connect, path, busyTimeoutMillis), (db) =>
+        Effect.sync(() => {
+          db.close()
+        }),
+      ),
+      (db) => logOf(db, Semaphore.makeUnsafe(1)),
+    )
+
+/**
  * Opens (creating if needed) the project log at `path` for the scope, in
- * WAL mode with `busy_timeout` set, and closes it when the scope ends.
+ * WAL mode with `busy_timeout` set to `busyTimeoutMillis` on every
+ * connection it makes, and closes it when the scope ends. That is how it
+ * meets Domain's busy-wait contract ({@link ProjectLog}): an append that
+ * meets another writer's lock waits up to `busyTimeoutMillis`, as SQLite
+ * documents for `busy_timeout` (sqlite.org/pragma.html#pragma_busy_timeout,
+ * sqlite.org/c3ref/busy_timeout.html), and then fails with
+ * `ProjectLogError` ("project log busy") and writes nothing. SQLite's
+ * documented behaviour is the evidence for the wait; no test observes it.
  * The open takes the write lock briefly, so it can wait up to
  * `busyTimeoutMillis` and then fail with "project log busy". A log at
  * format version 0 (written by v0.1.0) is stamped 1 and a new one is
@@ -219,15 +272,8 @@ const open = (path: string, busyTimeoutMillis: number) =>
  * fails with `ProjectLogError`, writing nothing, when its transaction
  * reads a version newer than 2 or below 0.
  */
-export const openProjectLog = (
+export const openProjectLog: (
   path: string,
   busyTimeoutMillis: number,
-): Effect.Effect<ProjectLog, ProjectLogError | StoreVersionNewer, Scope.Scope> =>
-  Effect.map(
-    Effect.acquireRelease(open(path, busyTimeoutMillis), (db) =>
-      Effect.sync(() => {
-        db.close()
-      }),
-    ),
-    (db) => logOf(db, Semaphore.makeUnsafe(1)),
-  )
+) => Effect.Effect<ProjectLog, ProjectLogError | StoreVersionNewer, Scope.Scope> =
+  openProjectLogWith(connectSqlite)

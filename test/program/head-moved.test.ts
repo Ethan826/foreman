@@ -24,7 +24,7 @@ import { status } from "../../src/program/status.ts"
 import { emptyCommit, git } from "../runtime/git-repo.ts"
 import { attestedClose } from "./handoff-commands.ts"
 import { afterClean, rejected } from "./handoff-steps.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 import { append, opened, quotaHold, refusedFor } from "./session-steps.ts"
 
 /** A HEAD that is not the harness's base. */
@@ -173,18 +173,20 @@ const statusOnBase = (harness: Harness) =>
 
 describe("a moved HEAD", () => {
   it.effect("refuses a launch and expires the armed waiver", () => withHarness({}, launchRefused))
-  it.effect("refuses close --finished from its own HEAD read", () => withHarness({ repository: true }, finishRefused))
+  it.effect("refuses close --finished from its own HEAD read", () =>
+    withHarness({ repository: true }, finishRefused), repositoryHarnessMillis)
   it.effect("refuses close --finished and leaves an armed waiver armed", () =>
-    withHarness({ repository: true }, finishRefusedKeepsWaiver),
+    withHarness({ repository: true }, finishRefusedKeepsWaiver), repositoryHarnessMillis,
   )
   it.effect("refuses a launch beside an unready worktree, with both reasons", () => withHarness({}, launchRefusedForBoth))
   it.effect("is a status finding beside an unready worktree", () => withHarness({}, statusShowsBoth))
-  it.effect("does not refuse reject or close --abandoned", () => withHarness({ repository: true }, exitsStillRun))
+  it.effect("does not refuse reject or close --abandoned", () =>
+    withHarness({ repository: true }, exitsStillRun), repositoryHarnessMillis)
   it.effect("is a status finding, and status writes nothing", () => withHarness({}, statusShowsFinding))
   it.effect("is no status finding while HEAD is the base", () => withHarness({}, statusOnBase))
 })
 
 describe("a HEAD read that fails keeps its own failure and the waiver", () => {
   it.effect("in a launch's startup check", () => withHarness({}, launchReadFails))
-  it.effect("in close --finished", () => withHarness({ repository: true }, finishReadFails))
+  it.effect("in close --finished", () => withHarness({ repository: true }, finishReadFails), repositoryHarnessMillis)
 })

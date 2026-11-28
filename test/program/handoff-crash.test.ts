@@ -27,7 +27,14 @@ import { CommandRefused } from "../../src/program/session-errors.ts"
 import { claudeSuccess } from "../fixtures/clients/claude-success.ts"
 import { codexReviewFindings } from "../fixtures/clients/codex-review-findings.ts"
 import { afterImplement, commandOfCall, ownerFindings, reviewed } from "./handoff-steps.ts"
-import { eventsOf, type Harness, ledgerRows, rowsOf, withHarness } from "./session-harness.ts"
+import {
+  eventsOf,
+  type Harness,
+  ledgerRows,
+  repositoryHarnessMillis,
+  rowsOf,
+  withHarness,
+} from "./session-harness.ts"
 import { append, quotaHold } from "./session-steps.ts"
 
 /** One handoff command under test: how to reach it, how to run it, and the failure right after staging. */
@@ -219,15 +226,15 @@ const afterBatchF = (testCase: Case) => (harness: Harness) =>
 
 describe.each([reviewCase, correctCase])("$name: crash points", (testCase) => {
   it.effect("after the snapshot is staged, nothing is recorded and the retry launches once", () =>
-    withHarness({ repository: true }, afterStaging(testCase)))
+    withHarness({ repository: true }, afterStaging(testCase)), repositoryHarnessMillis)
   it.effect("after batch W, a retry without --waive uses the armed waiver and writes no second Waived", () =>
-    withHarness({ repository: true }, afterBatchW(testCase)))
+    withHarness({ repository: true }, afterBatchW(testCase)), repositoryHarnessMillis)
   it.effect("after the grant, the next settle cancels it orphan and the retry launches once", () =>
-    withHarness({ repository: true }, afterGrant(testCase)))
+    withHarness({ repository: true }, afterGrant(testCase)), repositoryHarnessMillis)
   it.effect("after batch I, the attempt is incomplete: retry refused, step-ended and close --interrupted", () =>
-    withHarness({ repository: true }, afterBatchI(testCase)))
+    withHarness({ repository: true }, afterBatchI(testCase)), repositoryHarnessMillis)
   it.effect("after batch L, the attempt is incomplete and the retry never launches again", () =>
-    withHarness({ repository: true }, afterBatchL(testCase)))
+    withHarness({ repository: true }, afterBatchL(testCase)), repositoryHarnessMillis)
   it.effect("after batch F, the charge is pending and the next settle writes it", () =>
-    withHarness({ repository: true }, afterBatchF(testCase)))
+    withHarness({ repository: true }, afterBatchF(testCase)), repositoryHarnessMillis)
 })

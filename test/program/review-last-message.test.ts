@@ -11,7 +11,7 @@ import { StateFileFailed } from "../../src/runtime/state-files.ts"
 import { codexCompletedLines } from "../fixtures/clients/codex-events.ts"
 import { exitedWith, type ClientScript } from "../fixtures/clients/fake-client.ts"
 import { afterImplement, reviewed } from "./handoff-steps.ts"
-import { eventsOf, type Harness, withHarness } from "./session-harness.ts"
+import { eventsOf, type Harness, repositoryHarnessMillis, withHarness } from "./session-harness.ts"
 
 /** The flag after which Codex's argv names its final-message file. */
 const lastMessageFlag = "--output-last-message"
@@ -48,9 +48,9 @@ const unreadableFails = (harness: Harness) =>
 
 describe("review's final-message file", () => {
   it.effect("records an empty handoff when Codex wrote no file", () =>
-    withHarness({ repository: true }, missingIsEmpty),
+    withHarness({ repository: true }, missingIsEmpty), repositoryHarnessMillis,
   )
   it.effect("fails, writing no Finished, when the file is present but unreadable", () =>
-    withHarness({ repository: true }, unreadableFails),
+    withHarness({ repository: true }, unreadableFails), repositoryHarnessMillis,
   )
 })

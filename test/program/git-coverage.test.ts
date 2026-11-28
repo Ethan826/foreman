@@ -29,7 +29,7 @@ import { noAttributeAllowance } from "../../src/domain/attributes.ts"
 import { worktreeProgram, worktreeProgramWith } from "../../src/program/worktree.ts"
 import { startGit, type GitInvocation, type StartGit } from "../../src/runtime/git.ts"
 import ts from "typescript"
-import { emptyHome, git, withRepo } from "../runtime/git-repo.ts"
+import { emptyHome, git, repositoryMillis, withRepo } from "../runtime/git-repo.ts"
 
 /** The real process call, which first records each invocation in `calls`. */
 const recordingStart =
@@ -218,8 +218,8 @@ describe("Program's git commands", () => {
   })
 
   it.effect("every git command runs clean with the overrides first, and only the startup attribute reads are pinned", () =>
-    withRepo(createdAndIdentified))
+    withRepo(createdAndIdentified), repositoryMillis)
 
   it.effect("the production entry points run git with the same environment as the factory over startGit", () =>
-    withRepo(productionMatchesFactory))
+    withRepo(productionMatchesFactory), repositoryMillis)
 })
